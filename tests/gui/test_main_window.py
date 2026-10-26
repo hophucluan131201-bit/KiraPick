@@ -190,7 +190,7 @@ def test_window_fits_the_screen_and_remembers_its_size(qtbot, env: dict) -> None
     hint = w.minimumSizeHint()
     assert hint.width() <= 1280 and hint.height() <= 690
     w.showNormal()
-    w.resize(1000, 600)
+    w.resize(700, 500)  # smaller than the 800x800 offscreen screen
     w.close()
     w2 = _window(qtbot, env)
-    assert (w2.width(), w2.height()) == (1000, 600)
+    assert (w2.width(), w2.height()) == (700, 500)
