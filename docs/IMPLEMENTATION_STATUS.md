@@ -17,7 +17,7 @@ required — a listed provider does not prove inference works).
 
 | Milestone | Status | Notes |
 |---|---|---|
-| M0 Feasibility + safety | **partially done** | RAW feasibility done. AI runtime (offline-only providers, telemetry off, GPU→CPU fallback), model manifest + license table, fetch + `ai_check.py` benchmark script done and tested on CPU. **CUDA execution on the RTX 2080 not yet verified** (needs `ai_check.py` run on the laptop) |
+| M0 Feasibility + safety | **tested** | RAW feasibility; AI runtime (offline-only providers, telemetry off, GPU→CPU fallback); model manifest + licenses. **CUDA verified on the RTX 2080 Super Max-Q** (2026-10-27, see below). OSNet/DINOv2 not fetched yet |
 | M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
 | M2 Identity | not started | |
 | M3 Quality | not started | |
@@ -95,6 +95,22 @@ DSC_0198) score 0.34–0.43 → not used for identity (threshold 0.75); backgrou
 (0.5–0.64) and must be separated from the main subject in M2. Face similarities between apparently
 different cosplayers reached 0.49 (SFace's generic threshold is 0.363): identity thresholds must be
 calibrated on labelled photos of this user, and uncertain pairs go to review.
+
+### First GPU run on the owner's laptop (`scripts/ai_check.py`, 20 NEF from the Aki shoot, 2026-10-27)
+
+ONNX Runtime 1.31.1 (onnxruntime-gpu, CUDA 13 / cuDNN 9 from pip), providers listed:
+TensorRT, CUDA, CPU (TensorRT is not used). Person detector session ran on **CUDA**.
+
+| Stage | Device | Median | p95 | Found |
+|---|---|---|---|---|
+| Person detection YOLOX-M | CUDA | 119 ms | 134 ms | 32 persons |
+| Person detection YOLOX-S | CPU | 103 ms | 112 ms | 36 persons |
+| Face detection YuNet (2 scales) | CPU/OpenCV | 108 ms | 151 ms | 22 faces |
+| Face embedding SFace | CPU/OpenCV | 10 ms | 29 ms | |
+
+GPU memory: +337 MiB. Timings include pre/post-processing; YOLOX-M on CUDA is slower than
+expected for this GPU (to profile: FP16, IO binding, preprocessing share, power state). Estimated
+~0.25 s/photo → ~2 min for 439 photos (estimate from these medians, not a measured full run).
 
 ## Test run
 
