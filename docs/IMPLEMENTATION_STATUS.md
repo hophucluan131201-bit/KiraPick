@@ -60,6 +60,10 @@ $ .venv/bin/python -m pytest -q
 165 passed in 57.36s
 ```
 
+Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):
+`48 passed, 117 skipped in 3.15s` — all synthetic tests pass; the 117 skipped are RAW-sample tests
+(no `test_photos/` on that machine) plus POSIX-only symlink/SIGKILL tests.
+
 Synthetic-data tests always run; RAW sample tests skip when `test_photos/` is absent.
 Sample corpus: 5 user NEF (Nikon Z 5, private), 5 rawpy public samples, 22 multi-vendor samples
 from `drewnoakes/metadata-extractor-images` (no license stated → local testing only), 10
