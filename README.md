@@ -43,8 +43,9 @@ cache) is created under `Documents\Snorlu Projects\<folder name>`; photos are on
 | Ctrl+I / Ctrl+E / Ctrl+O | import folder / export / open project |
 
 Export copies the chosen photos (Kept, Favorites, ≥ N stars, or the selection), RAW+JPEG pairs
-together, never overwrites (adds " (1)"), refuses the shoot folder itself as destination, and writes
-a CSV/JSON list next to the copies. Logs: `%LOCALAPPDATA%\Snorlu\AI Culling\logs`.
+together, never overwrites (a different file with the same name gets " (1)"), skips photos already
+exported there (identical bytes), refuses the shoot folder itself as destination, and writes a
+CSV/JSON list into the `_snorlu_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\Snorlu\AI Culling\logs`.
 
 ## Check your own photo folder (read-only)
 

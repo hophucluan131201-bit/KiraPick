@@ -131,3 +131,28 @@ def test_raw_jpeg_pair_exported_together_with_shared_stem(tmp_path: Path, public
         assert sorted(i.dest_relative for i in plan.items) == ["ISS (1).JPG", "ISS (1).NEF"]
         assert all(i.flag == "keep" for i in plan.items)  # the RAW's decision applies to its JPEG
         assert [i.dest_relative for i in plan_export(p, [raw_id], tmp_path / "o2", include_pairs=False).items] == ["ISS.NEF"]
+
+
+def test_re_export_skips_identical_files_instead_of_duplicating(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
+    """User report: exporting 4x into one folder produced 'X (1)' copies of the same photos."""
+    p, _, _ = setup
+    all_ids = [r[0] for r in p.conn.execute("SELECT id FROM assets ORDER BY id")]
+    dest = tmp_path / "Test"
+    dest.mkdir()
+    (dest / "DSC_0001.jpg").write_bytes(b"a different photo with the same name")
+    first = run_export(plan_export(p, all_ids, dest))
+    assert sorted(first.copied) == ["DSC_0001 (1).jpg", "DSC_0001 (2).jpg", "DSC_0002.jpg"]
+
+    for _ in range(3):
+        again = plan_export(p, all_ids, dest)
+        assert again.items == []
+        assert sorted(again.already_present) == ["DSC_0001 (1).jpg", "DSC_0001 (2).jpg", "DSC_0002.jpg"]
+
+    photos = sorted(f.name for f in dest.iterdir() if f.is_file())
+    assert photos == ["DSC_0001 (1).jpg", "DSC_0001 (2).jpg", "DSC_0001.jpg", "DSC_0002.jpg"]  # no lists among photos
+    assert first.manifest_csv is not None and first.manifest_csv.parent.name == "_snorlu_danh_sach"
+
+    # A newly kept photo is still added; only it gets copied.
+    (dest / "DSC_0002.jpg").unlink()
+    partial = plan_export(p, all_ids, dest)
+    assert [i.dest_relative for i in partial.items] == ["DSC_0002.jpg"] and len(partial.already_present) == 2

@@ -163,13 +163,24 @@ class ExportDialog(QDialog):
                 dest_item.setForeground(Qt.GlobalColor.yellow)  # renamed to avoid overwriting
                 dest_item.setToolTip("Đã có file trùng tên ở đích → đặt tên mới, không ghi đè")
             self.table.setItem(r, 1, dest_item)
+        for name in plan.already_present[: max(0, _PREVIEW_ROWS - self.table.rowCount())]:
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            self.table.setItem(r, 0, QTableWidgetItem(Path(name).name))
+            skip = QTableWidgetItem(f"{name} — đã có sẵn, bỏ qua")
+            skip.setForeground(Qt.GlobalColor.gray)
+            self.table.setItem(r, 1, skip)
         free = free_space(plan.destination)
-        lines = [f"<b>{len(plan.items)} file</b> ({_gb(plan.total_bytes)}) → {plan.destination}",
+        lines = [f"<b>{len(plan.items)} file sẽ chép</b> ({_gb(plan.total_bytes)}) → {plan.destination}",
                  f"Dung lượng trống ở đích: {_gb(free)}"]
+        if plan.already_present:
+            lines.append(f"{len(plan.already_present)} file đã có sẵn ở đích (giống hệt) → bỏ qua, không tạo bản trùng.")
         if len(plan.items) > _PREVIEW_ROWS:
             lines.append(f"(bảng chỉ hiện {_PREVIEW_ROWS} file đầu)")
         if plan.missing:
             lines.append(f"<span style='color:{theme.ERROR}'>{len(plan.missing)} file không còn trên ổ đĩa sẽ bị bỏ qua.</span>")
+        if not plan.items and plan.already_present:
+            lines.append("<b>Tất cả ảnh đã chọn đều đã có ở thư mục này — không cần chép lại.</b>")
         enough = free > plan.total_bytes
         if not enough:
             lines.append(f"<span style='color:{theme.REJECT}'>Không đủ dung lượng trống.</span>")
@@ -219,7 +230,7 @@ class ExportDialog(QDialog):
         if result.cancelled:
             parts.append("Bạn đã dừng giữa chừng; các file đã chép vẫn còn nguyên.")
         if result.manifest_csv:
-            parts.append(f"Danh sách: {result.manifest_csv.name}")
+            parts.append(f"Danh sách ảnh đã chép: thư mục con {result.manifest_csv.parent.name}")
         if self.isVisible():
             QMessageBox.information(self, "Xuất ảnh xong", "\n".join(parts))
         self.refresh()

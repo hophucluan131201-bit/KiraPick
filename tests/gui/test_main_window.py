@@ -179,7 +179,9 @@ def test_export_dialog_previews_then_copies(qtbot, env: dict, tmp_path: Path) ->
     qtbot.waitUntil(lambda: dialog.result is not None, timeout=20000)
     thread.wait()
     assert sorted(p.name for p in dest.glob("*.jpg")) == ["DSC_0000.jpg", "DSC_0001.jpg"]
-    assert len(list(dest.glob("snorlu_export_*.csv"))) == 1
+    assert len(list((dest / "_snorlu_danh_sach").glob("snorlu_export_*.csv"))) == 1
+    dialog.refresh()  # exporting again: nothing new to copy
+    assert not dialog.copy_button.isEnabled() and "đã có ở thư mục này" in dialog.summary.text()
 
 
 def test_window_fits_the_screen_and_remembers_its_size(qtbot, env: dict) -> None:

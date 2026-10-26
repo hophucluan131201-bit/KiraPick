@@ -3,6 +3,8 @@
 Safety rules:
 - copies only; destination files are created with exclusive-create, so an
   existing file is never overwritten (a free " (n)" name is chosen instead);
+- a photo already present at the destination (same bytes, e.g. from an
+  earlier export) is skipped instead of being copied again as " (1)";
 - RAW+JPEG pairs are exported together and keep a common stem;
 - every copy is verified by size, a failed/cancelled partial copy is removed
   (only files this export created are ever removed);
@@ -23,9 +25,11 @@ from enum import Enum
 from pathlib import Path, PurePosixPath
 
 from app.core.errors import SnorluError
+from app.ingest.fingerprint import quick_fingerprint
 from app.storage.project import Project
 
 _CHUNK = 1024 * 1024
+MANIFEST_DIR = "_snorlu_danh_sach"  # export lists live here, not between the photos
 
 
 class ExportError(SnorluError):
@@ -57,6 +61,7 @@ class ExportPlan:
     destination: Path
     items: list[ExportItem]
     missing: list[str] = field(default_factory=list)  # selected files no longer on disk
+    already_present: list[str] = field(default_factory=list)  # identical copy already at the destination
 
     @property
     def total_bytes(self) -> int:
@@ -108,14 +113,44 @@ def _validate_destination(project: Project, destination: Path) -> Path:
     return dest
 
 
-def _free_stem(dest: Path, parent: str, stem: str, suffixes: list[str], taken: set[str]) -> str:
-    """Smallest 'stem', 'stem (1)', ... free for every suffix, on disk and in this plan."""
+def _same_content(src: Path, existing: Path) -> bool:
+    """True when ``existing`` is a copy of ``src`` (size + head/tail hash)."""
+    try:
+        if existing.is_symlink() or not existing.is_file() or existing.stat().st_size != src.stat().st_size:
+            return False
+        return quick_fingerprint(existing).content_key() == quick_fingerprint(src).content_key()
+    except OSError:
+        return False
+
+
+def _choose_stem(
+    dest: Path, parent: str, stem: str, members: list[tuple[str, Path]], taken: set[str]
+) -> tuple[str, set[int]]:
+    """Smallest 'stem', 'stem (1)', ... usable for every file of the group.
+
+    A name is usable when it is free (on disk and in this plan) or already holds
+    an identical copy of that very file. Returns the stem and the indexes of the
+    members that are already present (to be skipped).
+    """
     n = 0
     while True:
         candidate = stem if n == 0 else f"{stem} ({n})"
-        names = [str(PurePosixPath(parent, candidate + s)) for s in suffixes]
-        if all(nm.casefold() not in taken and not (dest / nm).exists() for nm in names):
-            return candidate
+        present: set[int] = set()
+        usable = True
+        for i, (suffix, src) in enumerate(members):
+            name = str(PurePosixPath(parent, candidate + suffix))
+            if name.casefold() in taken:
+                usable = False
+                break
+            target = dest / name
+            if target.exists() or target.is_symlink():
+                if _same_content(src, target):
+                    present.add(i)
+                else:
+                    usable = False
+                    break
+        if usable:
+            return candidate, present
         n += 1
 
 
@@ -168,10 +203,13 @@ def plan_export(
             parent = str(PurePosixPath(source_name, first_rel.parent))
         stem = first_rel.stem
         suffixes = [PurePosixPath(m[0]["relative_path"]).suffix for m in members]
-        free = _free_stem(dest, parent, stem, suffixes, taken)
-        for (r, src), suffix in zip(members, suffixes):
+        free, present = _choose_stem(dest, parent, stem, [(sfx, m[1]) for sfx, m in zip(suffixes, members)], taken)
+        for i, ((r, src), suffix) in enumerate(zip(members, suffixes)):
             rel = str(PurePosixPath(parent, free + suffix)) if parent else free + suffix
             taken.add(rel.casefold())
+            if i in present:
+                plan.already_present.append(rel)
+                continue
             camera = " ".join(filter(None, [r["make"], r["model"]])) or None
             plan.items.append(ExportItem(
                 r["id"], src, rel, src.stat().st_size, r["flag"], int(r["rating"]), bool(r["favorite"]),
@@ -245,8 +283,10 @@ def _write_manifests(dest: Path, done: list[tuple[ExportItem, str]]) -> tuple[Pa
         }
         for item, actual in done
     ]
-    csv_path = dest / f"snorlu_export_{stamp}.csv"
-    json_path = dest / f"snorlu_export_{stamp}.json"
+    folder = dest / MANIFEST_DIR
+    folder.mkdir(exist_ok=True)
+    csv_path = folder / f"snorlu_export_{stamp}.csv"
+    json_path = folder / f"snorlu_export_{stamp}.json"
     # utf-8-sig so Excel on Windows opens Vietnamese paths correctly
     with open(csv_path, "x", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
