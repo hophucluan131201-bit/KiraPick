@@ -6,6 +6,13 @@ Windows laptop" unless stated.
 
 Last update: 2026-10-27 — dev container: Linux x86-64, Python 3.13.17, no GPU, no display. First Windows field test received (see raw-support-matrix.md).
 
+## Target machine (from `scripts/diagnose_hardware.py`, 2026-10-27)
+
+Windows 11 (10.0.26300), Python 3.12.10, NVIDIA GeForce RTX 2080 Super with Max-Q Design,
+8192 MiB total / 7987 MiB free at idle, driver 617.14, 42 °C idle. PyTorch and ONNX Runtime not
+installed yet (installed in M0 GPU step; an ONNX `CUDAExecutionProvider` inference test is still
+required — a listed provider does not prove inference works).
+
 ## Milestones
 
 | Milestone | Status | Notes |

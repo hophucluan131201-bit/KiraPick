@@ -488,6 +488,30 @@
    "expect": "ok",
    "make": "NIKON CORPORATION",
    "model": "NIKON Z 5"
+  },
+  {
+   "file": "user_nikon_crop/DSC_0010.NEF",
+   "sha256": "ccc1c369d2091e7500776022e9b61adcd2848cf61a3051fccdd6bb5c29ec8d2a",
+   "size": 14652316,
+   "source": "user-provided, private (Z 5 crop modes: DX / 16:9): never commit or redistribute",
+   "url": null,
+   "orientation": 8,
+   "preview_source": "embedded_jpeg",
+   "expect": "ok",
+   "make": "NIKON CORPORATION",
+   "model": "NIKON Z 5"
+  },
+  {
+   "file": "user_nikon_crop/DSC_9792.NEF",
+   "sha256": "3cfdfff475597f73a61395a58c03fb7d9b07010dec733e0578946ae790ff8916",
+   "size": 25758858,
+   "source": "user-provided, private (Z 5 crop modes: DX / 16:9): never commit or redistribute",
+   "url": null,
+   "orientation": 8,
+   "preview_source": "embedded_jpeg",
+   "expect": "ok",
+   "make": "NIKON CORPORATION",
+   "model": "NIKON Z 5"
   }
  ]
 }

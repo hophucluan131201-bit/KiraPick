@@ -42,8 +42,10 @@ Windows 11, i7-10750H:
 | Analysis preview 1600 px | median 143 ms, p95 158 ms |
 
 Crop-mode frames have smaller embedded previews: 3936×2624 / 2624×3936 (DX crop, 11 files) and
-3384×6016 (16:9, 1 file). Their full-resolution path (`--full`) has not been run yet: whether
-LibRaw's demosaic matches the cropped preview for 16:9 NEFs is **unverified**.
+3384×6016 (16:9, 1 file). **Verified** with `DSC_0010.NEF` (DX) and `DSC_9792.NEF` (16:9): Nikon
+stores only the cropped sensor area (DX 3960×2640, 16:9 6040×3400), so LibRaw's demosaic has the
+same aspect as the embedded preview (edge similarity 0.71 / 0.85), orientation passes, and the
+embedded preview counts as full resolution for 100% zoom. Both are in the sample manifest.
 
 ## Failure handling (verified)
 
