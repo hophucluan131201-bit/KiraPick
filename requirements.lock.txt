@@ -5,6 +5,14 @@ packaging==26.3
 pillow==13.0.0
 pluggy==1.7.0
 Pygments==2.21.0
+PySide6==6.12.0
+PySide6_Addons==6.12.0
+PySide6_Essentials==6.12.0
+PySide6_Pdf==6.12.0.140
+PySide6_WebEngine==6.12.0.140
 pytest==9.1.1
+pytest-qt==4.5.0
 PyYAML==6.0.3
 rawpy==0.27.1
+shiboken6==6.12.0
+typing_extensions==4.16.0

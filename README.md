@@ -1,7 +1,8 @@
 # Snorlu AI Culling
 
 Offline, non-destructive photo culling for cosplay/street photographers (Windows desktop).
-**Status: early development** — only the RAW/JPEG ingest layer exists. See
+**Status: early development** — desktop culling app (import, grid, loupe with 100% zoom,
+keyboard culling, copy export) works; AI subject grouping and scoring are not built yet. See
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 Specification: [`docs/TECHNICAL_SPEC_v1.1.md`](docs/TECHNICAL_SPEC_v1.1.md).
@@ -24,6 +25,26 @@ The script picks a suitable Python, creates `.venv` inside the project, installs
 runs the tests. It changes nothing system-wide.
 (Linux/macOS: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"`.)
 Versions verified so far are in `requirements.lock.txt` (recorded on Linux).
+
+## Run the app
+
+Double-click **`Snorlu.cmd`** in the project folder (or the desktop shortcut the setup script can
+create). Then click **📂 Nhập thư mục ảnh** and pick a shoot folder. A project (database + thumbnail
+cache) is created under `Documents\Snorlu Projects\<folder name>`; photos are only read.
+
+| Key | Action |
+|---|---|
+| ← / → (↑ ↓ in grid) | previous / next photo |
+| Space / Enter, Esc | loupe ↔ grid, back to grid |
+| Z | true 100% zoom (full-resolution pixels) ↔ fit |
+| K / X / U | keep / reject / clear flag (applies to all selected photos in the grid) |
+| 1–5, 0 | star rating, clear rating |
+| F | favorite |
+| Ctrl+I / Ctrl+E / Ctrl+O | import folder / export / open project |
+
+Export copies the chosen photos (Kept, Favorites, ≥ N stars, or the selection), RAW+JPEG pairs
+together, never overwrites (adds " (1)"), refuses the shoot folder itself as destination, and writes
+a CSV/JSON list next to the copies. Logs: `%LOCALAPPDATA%\Snorlu\AI Culling\logs`.
 
 ## Check your own photo folder (read-only)
 

@@ -1,0 +1,133 @@
+from __future__ import annotations
+
+import csv
+import json
+import os
+import shutil
+from pathlib import Path
+
+import pytest
+
+from app.export.copy_export import ExportError, Selection, plan_export, run_export, select_assets
+from app.ingest.fingerprint import full_sha256
+from app.storage import decisions
+from app.storage.project import Project
+from app.workers.import_job import ImportJob
+from tests.integration.test_import_job import _photo
+
+
+def _ids(p: Project) -> dict[str, int]:
+    """relative_path -> id (only for names that are unique in the test)."""
+    return {r[1]: r[0] for r in p.conn.execute("SELECT id, relative_path FROM assets")}
+
+
+@pytest.fixture
+def setup(tmp_path: Path) -> tuple[Project, Path, Path]:
+    a = tmp_path / "Ngày 1"
+    b = tmp_path / "Ngày 2"
+    _photo(a / "DSC_0001.jpg", 1)
+    _photo(a / "sub" / "DSC_0002.jpg", 2)
+    _photo(b / "DSC_0001.jpg", 3)  # same name as in "Ngày 1", different photo
+    project = Project.create(tmp_path / "proj", "Export")
+    ImportJob(project, a).run()
+    ImportJob(project, b).run()
+    yield project, a, b
+    project.close()
+
+
+def test_select_by_keep_favorite_rating(setup: tuple[Project, Path, Path]) -> None:
+    p, _, _ = setup
+    ids = _ids(p)
+    decisions.set_flag(p.conn, ids["DSC_0001.jpg"], "keep")
+    decisions.set_favorite(p.conn, ids["sub/DSC_0002.jpg"], True)
+    decisions.set_rating(p.conn, ids["sub/DSC_0002.jpg"], 4)
+    assert len(select_assets(p, Selection.KEEP)) == 1
+    assert select_assets(p, Selection.FAVORITE) == [ids["sub/DSC_0002.jpg"]]
+    assert select_assets(p, Selection.RATED, min_rating=4) == [ids["sub/DSC_0002.jpg"]]
+    assert select_assets(p, Selection.RATED, min_rating=5) == []
+    assert select_assets(p, Selection.IDS, ids=[3, 3, 1]) == [3, 1]
+
+
+def test_export_copies_without_touching_or_overwriting(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
+    p, a, b = setup
+    all_ids = [r[0] for r in p.conn.execute("SELECT id FROM assets ORDER BY id")]
+    sources = {f: full_sha256(f) for root in (a, b) for f in root.rglob("*.jpg")}
+    dest = tmp_path / "Xuất ảnh"
+    dest.mkdir()
+    (dest / "DSC_0001.jpg").write_bytes(b"user's existing file")
+
+    plan = plan_export(p, all_ids, dest)
+    names = sorted(i.dest_relative for i in plan.items)
+    assert names == ["DSC_0001 (1).jpg", "DSC_0001 (2).jpg", "DSC_0002.jpg"]  # no collision, no overwrite
+
+    result = run_export(plan)
+    assert sorted(result.copied) == names and not result.failed
+    assert (dest / "DSC_0001.jpg").read_bytes() == b"user's existing file"
+    for item in plan.items:
+        assert full_sha256(dest / item.dest_relative) == full_sha256(item.source)
+        assert os.path.getmtime(dest / item.dest_relative) == pytest.approx(os.path.getmtime(item.source), abs=1)
+    assert sources == {f: full_sha256(f) for f in sources}, "originals changed"
+
+    rows = list(csv.DictReader(open(result.manifest_csv, encoding="utf-8-sig")))
+    assert sorted(r["exported_as"] for r in rows) == names
+    assert any("Ngày 1" in r["source_path"] for r in rows)  # Unicode survives
+    assert len(json.loads(result.manifest_json.read_text(encoding="utf-8"))["files"]) == 3
+
+
+def test_keep_folders_layout(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
+    p, _, _ = setup
+    plan = plan_export(p, [r[0] for r in p.conn.execute("SELECT id FROM assets")], tmp_path / "out", keep_folders=True)
+    assert sorted(i.dest_relative for i in plan.items) == [
+        "Ngày 1/DSC_0001.jpg", "Ngày 1/sub/DSC_0002.jpg", "Ngày 2/DSC_0001.jpg",
+    ]
+    run_export(plan)
+    assert (tmp_path / "out" / "Ngày 1" / "sub" / "DSC_0002.jpg").is_file()
+
+
+def test_file_created_after_planning_is_not_overwritten(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
+    p, _, _ = setup
+    ids = _ids(p)
+    dest = tmp_path / "out"
+    plan = plan_export(p, [ids["sub/DSC_0002.jpg"]], dest)
+    dest.mkdir()
+    (dest / "DSC_0002.jpg").write_bytes(b"appeared meanwhile")
+    result = run_export(plan)
+    assert result.renamed == {"DSC_0002.jpg": "DSC_0002 (1).jpg"}
+    assert (dest / "DSC_0002.jpg").read_bytes() == b"appeared meanwhile"
+
+
+def test_refuses_source_or_project_folder_as_destination(setup: tuple[Project, Path, Path]) -> None:
+    p, a, _ = setup
+    with pytest.raises(ExportError):
+        plan_export(p, [1], a)
+    with pytest.raises(ExportError):
+        plan_export(p, [1], p.folder / "exports")
+    plan_export(p, [1], a / "Đã chọn")  # a subfolder of the shoot is fine
+
+
+def test_cancel_and_missing_files(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
+    p, a, _ = setup
+    ids = [r[0] for r in p.conn.execute("SELECT id FROM assets")]
+    (a / "sub" / "DSC_0002.jpg").unlink()
+    plan = plan_export(p, ids, tmp_path / "out")
+    assert plan.missing == ["sub/DSC_0002.jpg"] and len(plan.items) == 2
+    result = run_export(plan, should_cancel=lambda: True)
+    assert result.cancelled and result.copied == [] and result.manifest_csv is None
+
+
+def test_raw_jpeg_pair_exported_together_with_shared_stem(tmp_path: Path, public_nef: Path) -> None:
+    root = tmp_path / "pairs"
+    root.mkdir()
+    shutil.copy2(public_nef, root / "ISS.NEF")
+    _photo(root / "ISS.JPG", 1, taken="2012:03:04 17:20:59")
+    with Project.create(tmp_path / "proj", "Pairs") as p:
+        ImportJob(p, root).run()
+        raw_id = _ids(p)["ISS.NEF"]
+        decisions.set_flag(p.conn, raw_id, "keep")
+        dest = tmp_path / "out"
+        dest.mkdir()
+        (dest / "ISS.JPG").write_bytes(b"x")  # forces a new stem for BOTH files of the pair
+        plan = plan_export(p, select_assets(p, Selection.KEEP), dest)
+        assert sorted(i.dest_relative for i in plan.items) == ["ISS (1).JPG", "ISS (1).NEF"]
+        assert all(i.flag == "keep" for i in plan.items)  # the RAW's decision applies to its JPEG
+        assert [i.dest_relative for i in plan_export(p, [raw_id], tmp_path / "o2", include_pairs=False).items] == ["ISS.NEF"]

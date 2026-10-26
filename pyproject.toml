@@ -14,13 +14,17 @@ dependencies = [
     "pillow>=10.3,<14",
     "exifread>=3.0,<4",
     "pyyaml>=6.0,<7",
+    "PySide6>=6.8,<6.13",      # LGPLv3: shipped as separate DLLs (PyInstaller onedir)
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10"]
+dev = ["pytest>=8,<10", "pytest-qt>=4.4,<5"]
 
 [project.scripts]
 snorlu-raw-probe = "app.ingest.cli:main"
+
+[project.gui-scripts]
+snorlu = "app.main:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
@@ -30,4 +34,5 @@ testpaths = ["tests"]
 markers = [
     "samples: needs real RAW samples under test_photos/ (skipped when absent)",
     "slow: full demosaic of real RAW files",
+    "gui: drives the Qt main window (offscreen)",
 ]

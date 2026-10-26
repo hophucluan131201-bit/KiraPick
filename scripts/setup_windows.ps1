@@ -63,6 +63,20 @@ Write-Host "Chạy kiểm thử ..."
 if ($LASTEXITCODE -ne 0) { Write-Host "Có test LỖI - chụp màn hình phần cuối gửi lại." -ForegroundColor Red; exit 1 }
 
 Write-Host ""
-Write-Host "XONG. Bước tiếp theo (thay đường dẫn thư mục ảnh của bạn):" -ForegroundColor Green
-Write-Host '  .\.venv\Scripts\python -m app.ingest.cli "D:\Thu muc anh" --verify --verify-untouched --json report.json'
-Write-Host '  .\.venv\Scripts\python .\scripts\diagnose_hardware.py'
+Write-Host "XONG." -ForegroundColor Green
+
+# 5) Lối tắt trên Desktop (chỉ khi bạn đồng ý).
+$answer = Read-Host "Tạo biểu tượng 'Snorlu AI Culling' trên Desktop? (Y/N)"
+if ($answer -match '^[YyCc]') {
+    $desktop = [Environment]::GetFolderPath('Desktop')
+    $shell = New-Object -ComObject WScript.Shell
+    $lnk = $shell.CreateShortcut((Join-Path $desktop 'Snorlu AI Culling.lnk'))
+    $lnk.TargetPath = (Join-Path $root '.venv\Scripts\pythonw.exe')
+    $lnk.Arguments = '-m app'
+    $lnk.WorkingDirectory = $root
+    $lnk.Description = 'Snorlu AI Culling'
+    $lnk.Save()
+    Write-Host "Đã tạo biểu tượng trên Desktop." -ForegroundColor Green
+}
+Write-Host ""
+Write-Host "Mở ứng dụng: bấm đúp Snorlu.cmd trong thư mục dự án (hoặc biểu tượng trên Desktop)."
