@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
 
 from app import __version__
 from app.storage import decisions
-from app.storage.project import DB_NAME, Project, ProjectError
+from app.storage.project import Project
+from app.storage.sessions import delete_session, open_session, purge_old_sessions
 from app.selection.client_list import delete_collection, list_collections
 from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter
 from app.ui.client_list_dialog import ClientListDialog
@@ -53,9 +54,10 @@ _FILTERS = [
 _RELOAD_DURING_IMPORT_MS = 1500
 
 
-def default_projects_dir() -> Path:
-    docs = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
-    return Path(docs or Path.home()) / "Snorlu Projects"
+def sessions_dir() -> Path:
+    """Hidden per-folder session data (database + thumbnails), never shown as 'projects'."""
+    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
+    return Path(base or Path.home() / ".snorlu") / "sessions"
 
 
 class MainWindow(QMainWindow):
@@ -64,6 +66,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"Snorlu AI Culling {__version__}")
         self.settings = settings or QSettings("Snorlu", "AI Culling")
         self.project: Project | None = None
+        self._session_root: Path | None = None
+        self._restored_note = ""
         self.import_thread: ImportThread | None = None
         self._last_import_root: Path | None = None
         self.model = AssetListModel(self)
@@ -79,12 +83,13 @@ class MainWindow(QMainWindow):
         self._reload_timer.setInterval(_RELOAD_DURING_IMPORT_MS)
         self._reload_timer.timeout.connect(self.reload_preserving_view)
 
-        last = self.settings.value("last_project", "", str)
-        if last and (Path(last) / DB_NAME).is_file():
-            try:
-                self.open_project(Path(last))
-            except Exception:  # noqa: BLE001 - a broken last project must not block startup
-                log.exception("could not reopen last project")
+        # Every start is a fresh, empty session; old remembered folders expire.
+        try:
+            removed = purge_old_sessions(sessions_dir())
+            if removed:
+                log.info("purged %d expired sessions", len(removed))
+        except OSError:
+            log.exception("session purge failed")
         self._update_empty_state()
 
     # ------------------------------------------------------------ layout
@@ -117,10 +122,9 @@ class MainWindow(QMainWindow):
         self.act_import.setToolTip("Nhập một thư mục ảnh (Ctrl+I)")
         self.act_import.setShortcut(QKeySequence("Ctrl+I"))
         self.act_import.triggered.connect(self.choose_and_import)
-        self.act_open = QAction("Mở dự án", self)
-        self.act_open.setToolTip("Mở một dự án đã có (Ctrl+O)")
-        self.act_open.setShortcut(QKeySequence("Ctrl+O"))
-        self.act_open.triggered.connect(self.choose_and_open_project)
+        self.act_reset = QAction("↺ Làm lại", self)
+        self.act_reset.setToolTip("Quên các dấu Giữ/Loại/sao và danh sách khách của thư mục này, nhập lại từ đầu")
+        self.act_reset.triggered.connect(self.reset_current_folder)
         self.act_export = QAction("⤴ Xuất ảnh", self)
         self.act_export.setToolTip("Sao chép ảnh đã chọn sang thư mục khác (Ctrl+E)")
         self.act_export.setShortcut(QKeySequence("Ctrl+E"))
@@ -139,7 +143,7 @@ class MainWindow(QMainWindow):
         self.act_client_list.setToolTip("Dán danh sách ảnh khách chọn, app tự chọn ảnh theo tên (Ctrl+L)")
         self.act_client_list.setShortcut(QKeySequence("Ctrl+L"))
         self.act_client_list.triggered.connect(self.open_client_list_dialog)
-        for act in (self.act_import, self.act_open, self.act_client_list, self.act_export, self.act_loupe):
+        for act in (self.act_import, self.act_client_list, self.act_export, self.act_loupe, self.act_reset):
             tb.addAction(act)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
@@ -258,42 +262,63 @@ class MainWindow(QMainWindow):
         sc("Z", self.toggle_zoom)
         sc("F1", self.show_shortcuts)
 
-    # ---------------------------------------------------------- projects
-    def choose_and_open_project(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Chọn thư mục dự án", str(default_projects_dir()))
-        if folder:
-            try:
-                self.open_project(Path(folder))
-            except ProjectError as exc:
-                QMessageBox.warning(self, "Không mở được dự án", str(exc))
-
-    def open_project(self, folder: Path) -> None:
-        project = Project.open(folder)
-        self._set_project(project)
-
-    def _set_project(self, project: Project) -> None:
+    # ---------------------------------------------------------- sessions
+    def _set_project(self, project: Project, photo_root: Path) -> None:
         if self.project is not None:
             self.project.close()
         self.project = project
-        self.settings.setValue("last_project", str(project.folder))
-        self.setWindowTitle(f"{project.name} — Snorlu AI Culling {__version__}")
+        self._session_root = photo_root
+        self.setWindowTitle(f"{photo_root.name or photo_root} — Snorlu AI Culling {__version__}")
+        self.search.clear()
+        self.model.set_search("")
         self.model.set_project(project)
         self._fill_filters()
         self._refresh_sidebar()
         self._update_empty_state()
-        self._offer_resume()
         if self.model.rowCount():
             self.select_row(0)
 
-    def _new_project_for(self, photo_root: Path) -> Project:
-        base = default_projects_dir()
-        name = photo_root.name or "Du an"
-        folder = base / name
-        n = 1
-        while (folder / DB_NAME).exists():
-            n += 1
-            folder = base / f"{name} ({n})"
-        return Project.create(folder, name)
+    def _close_session(self) -> None:
+        for dialog in self.findChildren(QDialog):
+            dialog.close()
+        self.viewer.show_photo(None)
+        self.viewer.wait_idle(10000)
+        self.model.wait_for_thumbnails(10000)  # Windows cannot delete files still being read
+        self.model.set_project(None)
+        if self.project is not None:
+            self.project.close()
+        self.project = None
+        self._session_root = None
+
+    def _remembered_summary(self) -> str:
+        assert self.project is not None
+        c = self.project.conn.execute(
+            """SELECT SUM(flag = 'keep') AS k, SUM(flag = 'reject') AS x, SUM(rating > 0) AS r
+               FROM decisions WHERE subject_id IS NULL"""
+        ).fetchone()
+        lists = len(list_collections(self.project.conn))
+        parts = [f"{c['k'] or 0} Giữ", f"{c['x'] or 0} Loại", f"{c['r'] or 0} có sao"]
+        if lists:
+            parts.append(f"{lists} danh sách khách")
+        return ", ".join(parts)
+
+    def reset_current_folder(self) -> None:
+        if self.project is None or self._session_root is None or self.import_thread is not None:
+            return
+        root = self._session_root
+        answer = QMessageBox.question(
+            self, "Làm lại từ đầu",
+            f"Quên mọi dấu Giữ/Loại, sao, yêu thích và danh sách khách của thư mục\n{root}\n"
+            "rồi nhập lại từ đầu?\n\nẢnh gốc không bị ảnh hưởng. Ảnh đã xuất ra thư mục khác vẫn còn nguyên.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._close_session()
+        try:
+            delete_session(sessions_dir(), root)
+        except OSError as exc:
+            QMessageBox.warning(self, "Làm lại từ đầu", f"Chưa xoá được dữ liệu cũ ({exc}). Hãy thử lại.")
+        self.start_import(root)
 
     # ------------------------------------------------------------ import
     def choose_and_import(self) -> None:
@@ -308,9 +333,15 @@ class MainWindow(QMainWindow):
     def start_import(self, root: Path) -> ImportThread | None:
         if self.import_thread is not None:
             return None
-        if self.project is None:
-            self._set_project(self._new_project_for(root))
-            self.status.setText(f"Đã tạo dự án mới tại {self.project.folder}")  # type: ignore[union-attr]
+        root = root.resolve()
+        if self.project is None or self._session_root != root:
+            # One session per photo folder: switching folders closes the current one.
+            self._close_session()
+            project, restored = open_session(sessions_dir(), root)
+            self._set_project(project, root)
+            self._restored_note = (
+                f"Đã nhớ từ lần trước: {self._remembered_summary()}." if restored else ""
+            )
         assert self.project is not None
         self._last_import_root = root
         thread = ImportThread(self.project.folder, root)
@@ -355,7 +386,7 @@ class MainWindow(QMainWindow):
                 parts.append(f"{summary['missing']} không còn trên ổ đĩa")
             if summary["pairs"]:
                 parts.append(f"{summary['pairs']} cặp RAW+JPEG")
-            self.status.setText(", ".join(parts) + ".")
+            self.status.setText(", ".join(parts) + ". " + self._restored_note)
 
     def _on_import_failed(self, message: str) -> None:
         QMessageBox.critical(self, "Lỗi khi nhập ảnh", message)
@@ -384,22 +415,6 @@ class MainWindow(QMainWindow):
             self.status.setText("Đang tạm dừng…")
         elif self._last_import_root is not None:
             self.start_import(self._last_import_root)
-
-    def _offer_resume(self) -> None:
-        """After a crash/close mid-import, offer to finish the remaining files."""
-        assert self.project is not None
-        row = self.project.conn.execute(
-            """SELECT s.root_path, COUNT(*) AS n FROM stage_status st JOIN assets a ON a.id = st.asset_id
-               JOIN sources s ON s.id = a.source_id
-               WHERE st.state = 'pending' AND a.status = 'pending' GROUP BY s.id ORDER BY n DESC LIMIT 1"""
-        ).fetchone()
-        if row and Path(row["root_path"]).is_dir():
-            self._last_import_root = Path(row["root_path"])
-            self.pause_button.setText(f"Tiếp tục nhập ({row['n']} ảnh còn lại)")
-            self.pause_button.setVisible(True)
-            self.pause_button.setEnabled(True)
-        else:
-            self.pause_button.setVisible(False)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
         self.settings.setValue("geometry", self.saveGeometry())
@@ -669,7 +684,7 @@ class MainWindow(QMainWindow):
             "K   Giữ      X   Loại      U   bỏ đánh dấu\n"
             "1 – 5   chấm sao,  0   xoá sao\n"
             "F   Yêu thích\n"
-            "Ctrl+I   nhập thư mục,  Ctrl+E   xuất ảnh,  Ctrl+O   mở dự án\n"
+            "Ctrl+I   nhập thư mục ảnh,  Ctrl+E   xuất ảnh\n"
             "Ctrl+F   tìm tên file,  Ctrl+L   danh sách khách chọn\n\n"
             "Trong lưới có thể chọn nhiều ảnh (Ctrl/Shift + click) rồi bấm K/X/số để áp dụng cho tất cả.",
         )

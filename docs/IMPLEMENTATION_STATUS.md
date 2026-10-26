@@ -77,6 +77,7 @@ Real-data smoke run: 42 sample files imported in 0.6 s (33 ok, 9 damaged files r
 | File-name search (sidebar, Ctrl+F, multi-token OR) | tested | typing digits never triggers rating shortcuts |
 | Client pick lists: paste text + `DSC_####` pattern → parsed (numbers, ranges, shorthand `9645-50`, full names), unmatched/ambiguous report, saved as collection (schema v2), filter + export by list | tested | `tests/unit/test_client_list.py`, GUI test; requested by the user 2026-10-27 |
 | Schema v2 migration (collections) upgrades existing v1 projects in place | tested | |
+| **Session-per-folder** (user decision 2026-10-27): app always starts empty, no visible projects; hidden per-folder session in AppData restores work on re-import; 30-day purge removes only app-created session dirs; "↺ Làm lại" forgets a folder | tested | `tests/unit/test_sessions.py`, GUI tests. Replaces Documents\Snorlu Projects (old folder is not deleted automatically) |
 
 Known gaps (M1 polish): no undo for decisions, no compare view (2–4 photos, planned with M4),
 no thumbnail-size slider, no "clear cache" button, shortcuts not user-configurable yet.
@@ -85,7 +86,7 @@ no thumbnail-size slider, no "clear cache" button, shortcuts not user-configurab
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-185 passed in 67.56s
+210 passed in 72.95s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):

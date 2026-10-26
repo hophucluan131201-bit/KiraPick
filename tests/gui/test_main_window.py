@@ -21,7 +21,7 @@ pytestmark = pytest.mark.gui
 
 @pytest.fixture
 def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
-    monkeypatch.setattr(mw, "default_projects_dir", lambda: tmp_path / "projects")
+    monkeypatch.setattr(mw, "sessions_dir", lambda: tmp_path / "sessions")
     photos = tmp_path / "Ảnh buổi chụp"
     for i in range(6):
         _photo(photos / f"DSC_{i:04d}.jpg", i, orientation=6 if i == 2 else None,
@@ -62,12 +62,12 @@ def test_empty_state_then_import_without_freezing(qtbot, env: dict) -> None:
     assert len(ticks) >= 3, "UI event loop must keep running during import"
     assert w.model.rowCount() == 7 and w.center.currentIndex() == 1
     assert "Nhập xong" in w.status.text() and "1 lỗi" in w.status.text()
-    assert w.project is not None and w.project.folder.parent.name == "projects"
+    assert w.project is not None and w.project.folder.parent.name == "sessions"
     errors = [r for r in w.model.records() if r.status == "error"]
     assert [r.name for r in errors] == ["hong.jpg"]
 
 
-def test_keyboard_culling_persists_and_survives_restart(qtbot, env: dict) -> None:
+def test_keyboard_culling_and_new_session_on_restart(qtbot, env: dict) -> None:
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
     w.select_row(0)
@@ -87,10 +87,34 @@ def test_keyboard_culling_persists_and_survives_restart(qtbot, env: dict) -> Non
     assert "Giữ 1" in w.counts.text()
     w.close()
 
-    w2 = _window(qtbot, env)  # reopens the last project automatically
-    assert w2.project is not None and w2.model.rowCount() == 7
+    w2 = _window(qtbot, env)  # every start is an empty session ...
+    assert w2.project is None and w2.model.rowCount() == 0 and w2.center.currentIndex() == 0
+    _import(qtbot, w2, env["photos"])  # ... and re-importing the same folder remembers the work
     rec = w2.model.record(w2.model.index_of(first.id))
     assert (rec.flag, rec.rating, rec.favorite) == ("keep", 4, True)
+    assert "Đã nhớ từ lần trước: 1 Giữ" in w2.status.text()
+
+
+def test_reset_forgets_folder_and_switching_folders(qtbot, env: dict, tmp_path: Path, monkeypatch) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    other = tmp_path / "Buổi khác"
+    _photo(other / "IMG_0001.jpg", 77)
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.select_row(0)
+    _key(qtbot, w, Qt.Key.Key_K)
+    _import(qtbot, w, other)  # switching folder = switching session
+    assert [r.name for r in w.model.records()] == ["IMG_0001.jpg"] and "Giữ 0" in w.counts.text()
+    _import(qtbot, w, env["photos"])
+    assert "Giữ 1" in w.counts.text()
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    w.reset_current_folder()
+    qtbot.waitUntil(lambda: w.import_thread is None, timeout=30000)
+    assert w.model.rowCount() == 7 and "Giữ 0" in w.counts.text()
+    assert "Đã nhớ" not in w.status.text()
+    assert sorted(p.name for p in env["photos"].iterdir())[:2] == ["DSC_0000.jpg", "DSC_0001.jpg"]  # photos untouched
 
 
 def test_multi_select_and_filters(qtbot, env: dict) -> None:

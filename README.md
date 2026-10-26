@@ -29,8 +29,12 @@ Versions verified so far are in `requirements.lock.txt` (recorded on Linux).
 ## Run the app
 
 Double-click **`Snorlu.cmd`** in the project folder (or the desktop shortcut the setup script can
-create). Then click **📂 Nhập thư mục ảnh** and pick a shoot folder. A project (database + thumbnail
-cache) is created under `Documents\Snorlu Projects\<folder name>`; photos are only read.
+create). Every start is an empty session: click **📂 Nhập ảnh** and pick a shoot folder; photos are
+only read. There are no projects to manage. Work is remembered per photo folder in hidden app data
+(`%LOCALAPPDATA%\Snorlu\AI Culling\sessions`): importing the same folder again brings back its
+Keep/Reject/stars and client lists. A folder not opened for 30 days is forgotten automatically;
+**↺ Làm lại** forgets the current folder immediately (asks first). Importing another folder switches
+to that folder's session.
 
 | Key | Action |
 |---|---|
@@ -40,7 +44,7 @@ cache) is created under `Documents\Snorlu Projects\<folder name>`; photos are on
 | K / X / U | keep / reject / clear flag (applies to all selected photos in the grid) |
 | 1–5, 0 | star rating, clear rating |
 | F | favorite |
-| Ctrl+I / Ctrl+E / Ctrl+O | import folder / export / open project |
+| Ctrl+I / Ctrl+E | import folder / export |
 | Ctrl+F | search file names (several numbers separated by spaces: `9645 9650`) |
 | Ctrl+L | client pick list: paste the client's message, e.g. `9645, 9657-9660, DSC_9665.jpg` |
 
