@@ -32,3 +32,4 @@ test_photos/
 .DS_Store
 Thumbs.db
 desktop.ini
+backup/

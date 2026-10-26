@@ -49,11 +49,17 @@ def scan_folder(
     *,
     should_cancel: Callable[[], bool] | None = None,
     on_progress: Callable[[int], None] | None = None,
+    exclude_dirs: tuple[Path, ...] = (),
 ) -> ScanReport:
-    """List importable files under ``root`` (sorted, deterministic)."""
+    """List importable files under ``root`` (sorted, deterministic).
+
+    ``exclude_dirs`` are skipped entirely (e.g. a project folder that the user
+    placed inside the photo folder, so its cache is not imported).
+    """
     root = root.resolve(strict=True)
     if not root.is_dir():
         raise NotADirectoryError(str(root))
+    excluded = {str(d.resolve()).casefold() for d in exclude_dirs}
     report = ScanReport(root)
     stack = [root]
     while stack:
@@ -76,7 +82,7 @@ def scan_folder(
                     report.skipped_links += 1
                     continue
                 if entry.is_dir(follow_symlinks=False):
-                    if entry.name.lower() not in _SKIPPED_DIR_NAMES:
+                    if entry.name.lower() not in _SKIPPED_DIR_NAMES and entry.path.casefold() not in excluded:
                         subdirs.append(Path(entry.path))
                     continue
                 if not entry.is_file(follow_symlinks=False):
