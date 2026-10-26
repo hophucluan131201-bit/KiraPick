@@ -4,7 +4,7 @@ Statuses: **not started** / **implemented** (code exists, not fully tested) / **
 tests pass in the dev container) / **blocked**. "Tested" here never means "verified on the target
 Windows laptop" unless stated.
 
-Last update: 2026-10-26 — dev container: Linux x86-64, Python 3.13.17, no GPU, no display.
+Last update: 2026-10-27 — dev container: Linux x86-64, Python 3.13.17, no GPU, no display. First Windows field test received (see raw-support-matrix.md).
 
 ## Milestones
 
@@ -33,7 +33,7 @@ Last update: 2026-10-26 — dev container: Linux x86-64, Python 3.13.17, no GPU,
 | RAW+JPEG pairing by folder+stem, confirmed by capture time | tested | unit tests; wired into the import job (below) |
 | Quick fingerprint (size + edge hashes) and full SHA-256 | tested | |
 | `snorlu-raw-probe` CLI (read-only report, proves files untouched) | tested | integration test |
-| Windows Unicode paths for RAW | implemented | file-object path for non-ASCII on Windows; **needs Windows test** |
+| Windows Unicode paths for RAW | tested | **on the user's Windows laptop**: 439 NEF in a Vietnamese path with `&`, 0 errors, sources unchanged |
 
 Details and measurements: [`raw-support-matrix.md`](raw-support-matrix.md).
 

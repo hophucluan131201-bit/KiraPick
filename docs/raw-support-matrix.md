@@ -26,6 +26,25 @@ full-resolution load, and unchanged SHA-256 afterwards (`tests/integration/test_
 Grid thumbnail (320 px incl. metadata): median 30 ms, max 103 ms over 31 files on the dev container.
 Analysis preview (1600 px): 50–335 ms. Full NEF demosaic (24 MP Z 5): ~2.2 s; half-size ~0.4 s.
 
+## Windows field test (user's laptop, 2026-10-27)
+
+`snorlu-raw-probe --verify --verify-untouched` on a real shoot folder
+`D:\Snorlu Fes & Photo\Hình ảnh Cosplay\20261025 - Aki\RAW` (non-ASCII + `&` in path),
+Windows 11, i7-10750H:
+
+| Check | Result |
+|---|---|
+| Files | 439 NEF, Nikon Z 5, 0 errors, 0 unsupported |
+| Orientation cross-check | 439/439 pass (339 portrait, 88 landscape, 12 crop-mode frames) |
+| Metadata complete | 439/439 |
+| Source files unchanged (SHA-256 before/after) | yes |
+| Grid thumbnail (single thread, incl. metadata) | median 42 ms, p95 49 ms, max 68 ms |
+| Analysis preview 1600 px | median 143 ms, p95 158 ms |
+
+Crop-mode frames have smaller embedded previews: 3936×2624 / 2624×3936 (DX crop, 11 files) and
+3384×6016 (16:9, 1 file). Their full-resolution path (`--full`) has not been run yet: whether
+LibRaw's demosaic matches the cropped preview for 16:9 NEFs is **unverified**.
+
 ## Failure handling (verified)
 
 | Situation | Behaviour |
@@ -51,7 +70,8 @@ same process — LibRaw left a stale/uninitialised buffer. Regression test:
 ## Known limits / to verify on Windows
 
 - **Unicode paths on Windows**: LibRaw takes a narrow `char*` path; for non-ASCII paths we pass a
-  file object (reads the whole file into RAM). Tested with Vietnamese paths on Linux only.
+  file object (reads the whole file into RAM). **Verified on Windows** with 439 NEFs in a Vietnamese
+  path containing `&` (see above).
 - Embedded JPEG colour: assumed sRGB. Nikon reports no `ColorSpace` tag in the samples; a camera set
   to AdobeRGB would render slightly desaturated until ICC handling lands (M1 follow-up).
 - Full-res via embedded JPEG includes in-camera sharpening; focus scoring (M3) must record
