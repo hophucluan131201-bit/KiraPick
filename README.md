@@ -9,11 +9,19 @@ RAW support evidence: [`docs/raw-support-matrix.md`](docs/raw-support-matrix.md)
 
 ## Setup (Windows, PowerShell)
 
+Requirements: Git and Python 3.11–3.14 (`winget install --id Git.Git -e`,
+`winget install --id Python.Python.3.12 -e`). Use a normal (non-Administrator) PowerShell and a
+work folder such as `D:\Dev` — not `C:\Windows\System32`.
+
 ```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python -m pip install -e ".[dev]"
+cd D:\Dev
+git clone https://github.com/hophucluan131201-bit/snorlu-ai-culling.git
+cd snorlu-ai-culling
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 ```
 
+The script picks a suitable Python, creates `.venv` inside the project, installs dependencies and
+runs the tests. It changes nothing system-wide.
 (Linux/macOS: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"`.)
 Versions verified so far are in `requirements.lock.txt` (recorded on Linux).
 

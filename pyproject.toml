@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "snorlu-ai-culling"
 version = "0.1.0.dev0"
 description = "Offline, non-destructive AI photo culling for cosplay/street photographers (Windows desktop)."
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 # Supported ranges; exact versions verified so far are recorded in requirements.lock.txt.
 dependencies = [
     "rawpy>=0.25,<0.28",       # LibRaw >= 0.21 needed for CR3 / recent Nikon Z bodies
