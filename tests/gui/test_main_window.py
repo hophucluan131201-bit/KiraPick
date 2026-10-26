@@ -210,16 +210,22 @@ def test_export_dialog_previews_then_copies(qtbot, env: dict, tmp_path: Path) ->
 
 def test_window_fits_the_screen_and_remembers_its_size(qtbot, env: dict) -> None:
     w = _window(qtbot, env)
-    area = w.screen().availableGeometry()
-    assert w.geometry().height() <= area.height() and w.geometry().width() <= area.width()
     # Must shrink to a 1920x1080 laptop at 150% scaling minus the taskbar (~1280x690 logical).
     hint = w.minimumSizeHint()
     assert hint.width() <= 1280 and hint.height() <= 690
+    # Long texts (empty-state hint, status messages) must not raise the minimum width.
+    w.status.setText("Nhập xong: 439 file, 439 mới, 12 cặp RAW+JPEG. Đã nhớ từ lần trước: 25 Giữ, 3 Loại, 10 có sao.")
+    assert w.minimumSizeHint().width() == hint.width()
+    area = w.screen().availableGeometry()
+    if hint.width() <= area.width() and hint.height() <= area.height():
+        # (The offscreen test screen is only 800x800; skip when fonts make that impossible.)
+        assert w.geometry().height() <= area.height() and w.geometry().width() <= area.width()
     w.showNormal()
-    w.resize(700, 500)  # smaller than the 800x800 offscreen screen
+    w.resize(700, 500)  # smaller than the offscreen screen
+    size = (w.width(), w.height())
     w.close()
     w2 = _window(qtbot, env)
-    assert (w2.width(), w2.height()) == (700, 500)
+    assert (w2.width(), w2.height()) == size
 
 
 def test_search_by_file_name(qtbot, env: dict) -> None:

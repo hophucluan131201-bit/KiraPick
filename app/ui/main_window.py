@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QToolBar,
@@ -195,6 +196,7 @@ class MainWindow(QMainWindow):
         )
         self.empty_hint.setObjectName("emptyHint")
         self.empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_hint.setWordWrap(True)  # long text must never set the window's minimum width
         self.grid = make_grid(self, 220)
         self.grid.setModel(self.model)
         self.grid.selectionModel().currentChanged.connect(self._on_current_changed)
@@ -232,6 +234,8 @@ class MainWindow(QMainWindow):
     def _build_statusbar(self) -> None:
         sb = self.statusBar()
         self.status = QLabel("Sẵn sàng")
+        # Status messages can be long; let them be cut instead of widening the window.
+        self.status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.counts = QLabel("")
         self.progress = QProgressBar()
         self.progress.setMaximumWidth(260)
