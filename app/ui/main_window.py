@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QItemSelectionModel, QModelIndex, QSettings, QStandardPaths, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
     QToolBar,
@@ -56,7 +57,6 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: QSettings | None = None) -> None:
         super().__init__()
         self.setWindowTitle(f"Snorlu AI Culling {__version__}")
-        self.resize(1500, 900)
         self.settings = settings or QSettings("Snorlu", "AI Culling")
         self.project: Project | None = None
         self.import_thread: ImportThread | None = None
@@ -67,6 +67,8 @@ class MainWindow(QMainWindow):
         self._build_body()
         self._build_statusbar()
         self._build_shortcuts()
+
+        self._restore_geometry()
 
         self._reload_timer = QTimer(self)
         self._reload_timer.setInterval(_RELOAD_DURING_IMPORT_MS)
@@ -81,6 +83,27 @@ class MainWindow(QMainWindow):
         self._update_empty_state()
 
     # ------------------------------------------------------------ layout
+    def _restore_geometry(self) -> None:
+        """Reuse the user's last window size; otherwise fit the screen's usable area.
+
+        A fixed size can exceed the usable height on scaled laptop displays
+        (e.g. 1920x1080 at 125-150%), hiding the status bar behind the taskbar.
+        """
+        saved = self.settings.value("geometry")
+        if saved is not None and self.restoreGeometry(saved):
+            return
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is not None:
+            area = screen.availableGeometry()
+            self.resize(min(1500, area.width()), min(900, area.height()))
+        self._maximize_on_show = True
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        if getattr(self, "_maximize_on_show", False):
+            self._maximize_on_show = False
+            self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
+
     def _build_toolbar(self) -> None:
         tb = QToolBar("Chính", self)
         tb.setMovable(False)
@@ -118,6 +141,7 @@ class MainWindow(QMainWindow):
         t1.setObjectName("sectionTitle")
         self.sources = QListWidget()
         self.sources.setMaximumHeight(180)
+        self.sources.setMinimumHeight(60)
         self.sources.currentRowChanged.connect(self._on_source_changed)
         t2 = QLabel("LỌC")
         t2.setObjectName("sectionTitle")
@@ -161,9 +185,15 @@ class MainWindow(QMainWindow):
         self.center.addWidget(loupe)  # 2
 
         self.inspector = Inspector()
+        # Scrollable so the window can shrink to small/scaled screens (e.g. 1080p at 150%).
+        inspector_scroll = QScrollArea()
+        inspector_scroll.setWidget(self.inspector)
+        inspector_scroll.setWidgetResizable(True)
+        inspector_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        inspector_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         splitter.addWidget(side)
         splitter.addWidget(self.center)
-        splitter.addWidget(self.inspector)
+        splitter.addWidget(inspector_scroll)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([210, 1000, 290])
         self.setCentralWidget(splitter)
@@ -344,6 +374,7 @@ class MainWindow(QMainWindow):
             self.pause_button.setVisible(False)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
+        self.settings.setValue("geometry", self.saveGeometry())
         if self.import_thread is not None:
             self.import_thread.cancel()
             self.import_thread.wait(15000)  # resumable: unfinished files continue next time

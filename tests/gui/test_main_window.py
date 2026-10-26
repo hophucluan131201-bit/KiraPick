@@ -180,3 +180,17 @@ def test_export_dialog_previews_then_copies(qtbot, env: dict, tmp_path: Path) ->
     thread.wait()
     assert sorted(p.name for p in dest.glob("*.jpg")) == ["DSC_0000.jpg", "DSC_0001.jpg"]
     assert len(list(dest.glob("snorlu_export_*.csv"))) == 1
+
+
+def test_window_fits_the_screen_and_remembers_its_size(qtbot, env: dict) -> None:
+    w = _window(qtbot, env)
+    area = w.screen().availableGeometry()
+    assert w.geometry().height() <= area.height() and w.geometry().width() <= area.width()
+    # Must shrink to a 1920x1080 laptop at 150% scaling minus the taskbar (~1280x690 logical).
+    hint = w.minimumSizeHint()
+    assert hint.width() <= 1280 and hint.height() <= 690
+    w.showNormal()
+    w.resize(1000, 600)
+    w.close()
+    w2 = _window(qtbot, env)
+    assert (w2.width(), w2.height()) == (1000, 600)
