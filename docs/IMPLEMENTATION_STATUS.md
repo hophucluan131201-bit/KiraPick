@@ -18,7 +18,7 @@ required — a listed provider does not prove inference works).
 | Milestone | Status | Notes |
 |---|---|---|
 | M0 Feasibility + safety | **partially done** | RAW feasibility done (see below). GPU/CUDA probe, model manifest, license matrix: not started — need the Windows laptop for CUDA |
-| M1 Desktop MVP | **implemented + tested offscreen** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export. **Not yet confirmed by the user on the real Windows display** |
+| M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
 | M2 Identity | not started | |
 | M3 Quality | not started | |
 | M4 Best shot | not started | |
