@@ -17,7 +17,7 @@ required — a listed provider does not prove inference works).
 
 | Milestone | Status | Notes |
 |---|---|---|
-| M0 Feasibility + safety | **partially done** | RAW feasibility done (see below). GPU/CUDA probe, model manifest, license matrix: not started — need the Windows laptop for CUDA |
+| M0 Feasibility + safety | **partially done** | RAW feasibility done. AI runtime (offline-only providers, telemetry off, GPU→CPU fallback), model manifest + license table, fetch + `ai_check.py` benchmark script done and tested on CPU. **CUDA execution on the RTX 2080 not yet verified** (needs `ai_check.py` run on the laptop) |
 | M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
 | M2 Identity | not started | |
 | M3 Quality | not started | |
@@ -81,6 +81,20 @@ Real-data smoke run: 42 sample files imported in 0.6 s (33 ok, 9 damaged files r
 
 Known gaps (M1 polish): no undo for decisions, no compare view (2–4 photos, planned with M4),
 no thumbnail-size slider, no "clear cache" button, shortcuts not user-configurable yet.
+
+## Done — AI foundation (`app/ai/`, M0/M2 groundwork)
+
+| Feature | Status | Evidence |
+|---|---|---|
+| Model registry: SHA-256 pinned manifest, missing/corrupt detection, never downloads at runtime | tested | `tests/unit/test_ai.py` |
+| ONNX Runtime: explicit CUDA/CPU allow-list (Azure cloud EP never used), telemetry events disabled, `preload_dlls` for pip CUDA, device read back from the session | tested on CPU | GPU path untested until run on the laptop |
+| Person detection YOLOX (M on GPU, S on CPU), face detection YuNet at 640+1600 px, SFace 128-d embeddings, face→person association | tested on real photos | portrait, group booth (DSC_0010), no-people (ISS) |
+
+Observed on the owner's photos (dev container, CPU): occluded/tilted faces (hands over face,
+DSC_0198) score 0.34–0.43 → not used for identity (threshold 0.75); background people are detected
+(0.5–0.64) and must be separated from the main subject in M2. Face similarities between apparently
+different cosplayers reached 0.49 (SFace's generic threshold is 0.363): identity thresholds must be
+calibrated on labelled photos of this user, and uncertain pairs go to review.
 
 ## Test run
 

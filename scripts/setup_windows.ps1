@@ -57,7 +57,12 @@ Write-Host "Cài thư viện (vài phút lần đầu) ..."
 & $venvPy -m pip install -e ".[dev]"
 if ($LASTEXITCODE -ne 0) { Write-Host "Cài thư viện thất bại - chụp màn hình lỗi phía trên gửi lại." -ForegroundColor Red; exit 1 }
 
-# 4) Chạy kiểm thử.
+# 4) Tải các mô hình AI (một lần, có kiểm tra SHA-256; ứng dụng không tự tải khi chạy).
+Write-Host "Tải mô hình AI (lần đầu khoảng 180 MB) ..."
+& $venvPy .\scripts\fetch_models.py
+if ($LASTEXITCODE -ne 0) { Write-Host "Tải mô hình chưa xong - chụp màn hình gửi lại. Phần chọn ảnh thủ công vẫn dùng được." -ForegroundColor Yellow }
+
+# 5) Chạy kiểm thử.
 Write-Host "Chạy kiểm thử ..."
 & $venvPy -m pytest -q
 if ($LASTEXITCODE -ne 0) { Write-Host "Có test LỖI - chụp màn hình phần cuối gửi lại." -ForegroundColor Red; exit 1 }
@@ -65,7 +70,7 @@ if ($LASTEXITCODE -ne 0) { Write-Host "Có test LỖI - chụp màn hình phần
 Write-Host ""
 Write-Host "XONG." -ForegroundColor Green
 
-# 5) Lối tắt trên Desktop (chỉ khi bạn đồng ý).
+# 6) Lối tắt trên Desktop (chỉ khi bạn đồng ý).
 $answer = Read-Host "Tạo biểu tượng 'Snorlu AI Culling' trên Desktop? (Y/N)"
 if ($answer -match '^[YyCc]') {
     $desktop = [Environment]::GetFolderPath('Desktop')
