@@ -48,6 +48,7 @@ def apply_dark_theme(app: QApplication) -> None:
         QStatusBar {{ background: {PANEL}; }}
         QListView, QListWidget, QTableWidget {{ border: none; }}
         QListWidget::item {{ padding: 5px 6px; border-radius: 4px; }}
+        QListWidget::item:selected {{ background: #2d4a78; color: #ffffff; }}
         QSplitter::handle {{ background: {BG}; }}
         QLabel#sectionTitle {{ color: {MUTED}; font-weight: 600; padding: 8px 4px 2px 4px; }}
         QLabel#emptyHint {{ color: {MUTED}; font-size: 15px; }}

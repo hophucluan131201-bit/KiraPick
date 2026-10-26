@@ -8,11 +8,14 @@ from pathlib import Path
 from PySide6.QtCore import QItemSelectionModel, QModelIndex, QSettings, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
+    QDialog,
     QFileDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -27,7 +30,9 @@ from PySide6.QtWidgets import (
 from app import __version__
 from app.storage import decisions
 from app.storage.project import DB_NAME, Project, ProjectError
+from app.selection.client_list import delete_collection, list_collections
 from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter
+from app.ui.client_list_dialog import ClientListDialog
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
 from app.ui.inspector import Inspector
@@ -108,28 +113,51 @@ class MainWindow(QMainWindow):
         tb = QToolBar("Chính", self)
         tb.setMovable(False)
         self.addToolBar(tb)
-        self.act_import = QAction("📂  Nhập thư mục ảnh", self)
+        self.act_import = QAction("📂 Nhập ảnh", self)
+        self.act_import.setToolTip("Nhập một thư mục ảnh (Ctrl+I)")
         self.act_import.setShortcut(QKeySequence("Ctrl+I"))
         self.act_import.triggered.connect(self.choose_and_import)
-        self.act_open = QAction("Mở dự án…", self)
+        self.act_open = QAction("Mở dự án", self)
+        self.act_open.setToolTip("Mở một dự án đã có (Ctrl+O)")
         self.act_open.setShortcut(QKeySequence("Ctrl+O"))
         self.act_open.triggered.connect(self.choose_and_open_project)
-        self.act_export = QAction("⤴  Xuất ảnh…", self)
+        self.act_export = QAction("⤴ Xuất ảnh", self)
+        self.act_export.setToolTip("Sao chép ảnh đã chọn sang thư mục khác (Ctrl+E)")
         self.act_export.setShortcut(QKeySequence("Ctrl+E"))
         self.act_export.triggered.connect(self.open_export_dialog)
-        self.act_loupe = QAction("🔍  Xem lớn (Space)", self)
+        self.act_loupe = QAction("🔍 Xem lớn", self)
+        self.act_loupe.setToolTip("Xem ảnh lớn ↔ lưới (Space)")
         self.act_loupe.triggered.connect(self.toggle_loupe)
-        self.act_auto_advance = QAction("Tự chuyển ảnh sau khi Giữ/Loại", self)
+        self.act_auto_advance = QAction("Tự chuyển ảnh", self)
+        self.act_auto_advance.setToolTip("Bật: bấm K/X xong tự sang ảnh kế tiếp")
         self.act_auto_advance.setCheckable(True)
         self.act_auto_advance.setChecked(self.settings.value("auto_advance", False, bool))
         self.act_auto_advance.toggled.connect(lambda on: self.settings.setValue("auto_advance", on))
         self.act_help = QAction("Phím tắt", self)
         self.act_help.triggered.connect(self.show_shortcuts)
-        for act in (self.act_import, self.act_open, self.act_export, self.act_loupe):
+        self.act_client_list = QAction("📋 Khách chọn", self)
+        self.act_client_list.setToolTip("Dán danh sách ảnh khách chọn, app tự chọn ảnh theo tên (Ctrl+L)")
+        self.act_client_list.setShortcut(QKeySequence("Ctrl+L"))
+        self.act_client_list.triggered.connect(self.open_client_list_dialog)
+        for act in (self.act_import, self.act_open, self.act_client_list, self.act_export, self.act_loupe):
             tb.addAction(act)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
         tb.addAction(self.act_help)
+        # The search box lives at the top of the sidebar (always visible; a toolbar
+        # would hide it in its overflow menu on narrow or scaled screens).
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("🔎 Tìm tên file (Ctrl+F)")
+        self.search.setToolTip("Gõ một phần tên file. Nhiều số cách nhau bằng dấu cách, vd: 9645 9650")
+        self.search.setClearButtonEnabled(True)
+        self._search_timer = QTimer(self, singleShot=True, interval=200)
+        self._search_timer.timeout.connect(self._apply_search)
+        self.search.textChanged.connect(self._search_timer.start)
+        self.search.returnPressed.connect(self._leave_search)
+        focus_search = QAction(self)
+        focus_search.setShortcut(QKeySequence("Ctrl+F"))
+        focus_search.triggered.connect(lambda: (self.search.setFocus(), self.search.selectAll()))
+        self.addAction(focus_search)
 
     def _build_body(self) -> None:
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
@@ -137,6 +165,7 @@ class MainWindow(QMainWindow):
         side = QWidget()
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(6, 6, 6, 6)
+        side_layout.addWidget(self.search)
         t1 = QLabel("THƯ MỤC")
         t1.setObjectName("sectionTitle")
         self.sources = QListWidget()
@@ -146,12 +175,10 @@ class MainWindow(QMainWindow):
         t2 = QLabel("LỌC")
         t2.setObjectName("sectionTitle")
         self.filters = QListWidget()
-        for flt, text in _FILTERS:
-            item = QListWidgetItem(text)
-            item.setData(Qt.ItemDataRole.UserRole, flt)
-            self.filters.addItem(item)
-        self.filters.setCurrentRow(0)
         self.filters.currentRowChanged.connect(self._on_filter_changed)
+        self.filters.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.filters.customContextMenuRequested.connect(self._filter_context_menu)
+        self._fill_filters()
         for w in (t1, self.sources, t2, self.filters):
             side_layout.addWidget(w)
         side_layout.addStretch(1)
@@ -159,7 +186,7 @@ class MainWindow(QMainWindow):
 
         self.center = QStackedWidget()
         self.empty_hint = QLabel(
-            "Chưa có ảnh.\n\nBấm  “📂 Nhập thư mục ảnh”  (Ctrl+I) để bắt đầu.\n"
+            "Chưa có ảnh.\n\nBấm  “📂 Nhập ảnh”  (Ctrl+I) để bắt đầu.\n"
             "Ảnh gốc chỉ được đọc, không bao giờ bị sửa hay xoá."
         )
         self.empty_hint.setObjectName("emptyHint")
@@ -251,6 +278,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("last_project", str(project.folder))
         self.setWindowTitle(f"{project.name} — Snorlu AI Culling {__version__}")
         self.model.set_project(project)
+        self._fill_filters()
         self._refresh_sidebar()
         self._update_empty_state()
         self._offer_resume()
@@ -375,6 +403,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
         self.settings.setValue("geometry", self.saveGeometry())
+        for dialog in self.findChildren(QDialog):  # they use the project database
+            dialog.close()
         if self.import_thread is not None:
             self.import_thread.cancel()
             self.import_thread.wait(15000)  # resumable: unfinished files continue next time
@@ -434,11 +464,84 @@ class MainWindow(QMainWindow):
             self.model.set_filter(self.model.current_filter, source_id=item.data(Qt.ItemDataRole.UserRole))
             self._after_filter()
 
+    def _fill_filters(self, select_collection: int | None = None) -> None:
+        """Fixed filters, then one entry per client list (UserRole = (Filter, collection id))."""
+        self.filters.blockSignals(True)
+        self.filters.clear()
+        for flt, text in _FILTERS:
+            item = QListWidgetItem(text)
+            item.setData(Qt.ItemDataRole.UserRole, (flt, None))
+            self.filters.addItem(item)
+        current = 0
+        if self.project is not None:
+            collections = list_collections(self.project.conn)
+            if collections:
+                header = QListWidgetItem("DANH SÁCH KHÁCH")
+                header.setFlags(Qt.ItemFlag.NoItemFlags)
+                self.filters.addItem(header)
+            for c in collections:
+                item = QListWidgetItem(f"📋 {c['name']} ({c['n']})")
+                item.setToolTip("Chuột phải để xoá danh sách (ảnh không bị ảnh hưởng)")
+                item.setData(Qt.ItemDataRole.UserRole, (Filter.COLLECTION, c["id"]))
+                self.filters.addItem(item)
+                if c["id"] == select_collection:
+                    current = self.filters.count() - 1
+        self.filters.setCurrentRow(current)
+        self.filters.blockSignals(False)
+
     def _on_filter_changed(self, row: int) -> None:
         item = self.filters.item(row)
-        if item is not None:
-            self.model.set_filter(item.data(Qt.ItemDataRole.UserRole), min_rating=3)
+        data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if data is not None:
+            flt, collection_id = data
+            self.model.set_filter(flt, min_rating=3, collection_id=collection_id)
             self._after_filter()
+
+    def _filter_context_menu(self, pos: object) -> None:
+        item = self.filters.itemAt(pos)  # type: ignore[arg-type]
+        data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if self.project is None or data is None or data[0] is not Filter.COLLECTION:
+            return
+        menu = QMenu(self)
+        delete = menu.addAction("Xoá danh sách này (ảnh không bị ảnh hưởng)")
+        if menu.exec(self.filters.mapToGlobal(pos)) is delete:  # type: ignore[arg-type]
+            delete_collection(self.project.conn, data[1])
+            self._fill_filters()
+            self._on_filter_changed(0)
+
+    def _apply_search(self) -> None:
+        self.model.set_search(self.search.text())
+        self._after_filter()
+
+    def _leave_search(self) -> None:
+        self.grid.setFocus()
+        if self.center.currentIndex() == 0:
+            return
+        if not self.grid.currentIndex().isValid() and self.model.rowCount():
+            self.select_row(0)
+
+    def open_client_list_dialog(self) -> ClientListDialog | None:
+        if self.project is None:
+            QMessageBox.information(self, "Danh sách khách", "Hãy nhập một thư mục ảnh trước.")
+            return None
+        source = self.sources.currentItem()
+        dialog = ClientListDialog(
+            self.project, self, source_id=source.data(Qt.ItemDataRole.UserRole) if source else None
+        )
+        dialog.accepted.connect(lambda: self._show_collection(dialog.collection_id))
+        dialog.show()
+        return dialog
+
+    def _show_collection(self, collection_id: int | None) -> None:
+        """After creating a client list: show it and select all its photos (ready for export)."""
+        if collection_id is None:
+            return
+        self.search.clear()
+        self.model.set_search("")
+        self._fill_filters(select_collection=collection_id)
+        self._on_filter_changed(self.filters.currentRow())
+        self.grid.selectAll()
+        self.status.setText(f"Đã tạo danh sách khách: {self.model.rowCount()} ảnh. Bấm “Xuất ảnh” để chép.")
 
     def _after_filter(self) -> None:
         self._update_counts()
@@ -482,7 +585,7 @@ class MainWindow(QMainWindow):
         )
 
     def _update_empty_state(self) -> None:
-        has_rows = self.model.rowCount() > 0 or (self.project is not None and self.model.current_filter is not Filter.ALL)
+        has_rows = self.model.rowCount() > 0 or (self.project is not None and self.model.is_filtered)
         if not has_rows:
             self.center.setCurrentIndex(0)
         elif self.center.currentIndex() == 0:
@@ -550,7 +653,10 @@ class MainWindow(QMainWindow):
         if self.project is None:
             QMessageBox.information(self, "Xuất ảnh", "Hãy nhập một thư mục ảnh trước.")
             return None
-        dialog = ExportDialog(self.project, [r.id for r in self.selected_records()], self)
+        item = self.filters.currentItem()
+        data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        collection_id = data[1] if data and data[0] is Filter.COLLECTION else None
+        dialog = ExportDialog(self.project, [r.id for r in self.selected_records()], self, collection_id=collection_id)
         dialog.show()
         return dialog
 
@@ -563,6 +669,7 @@ class MainWindow(QMainWindow):
             "K   Giữ      X   Loại      U   bỏ đánh dấu\n"
             "1 – 5   chấm sao,  0   xoá sao\n"
             "F   Yêu thích\n"
-            "Ctrl+I   nhập thư mục,  Ctrl+E   xuất ảnh,  Ctrl+O   mở dự án\n\n"
+            "Ctrl+I   nhập thư mục,  Ctrl+E   xuất ảnh,  Ctrl+O   mở dự án\n"
+            "Ctrl+F   tìm tên file,  Ctrl+L   danh sách khách chọn\n\n"
             "Trong lưới có thể chọn nhiều ảnh (Ctrl/Shift + click) rồi bấm K/X/số để áp dụng cho tất cả.",
         )

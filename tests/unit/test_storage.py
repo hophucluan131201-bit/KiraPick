@@ -52,6 +52,7 @@ def test_newer_schema_is_refused_untouched(tmp_path: Path) -> None:
 
 
 def test_failed_migration_rolls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    released = db.SCHEMA_VERSION
     broken = db.MIGRATIONS + [(db.SCHEMA_VERSION + 1, "CREATE TABLE extra (x INTEGER); SELECT * FROM no_such_table;")]
     monkeypatch.setattr(db, "MIGRATIONS", broken)
     monkeypatch.setattr(db, "SCHEMA_VERSION", db.SCHEMA_VERSION + 1)
@@ -59,7 +60,7 @@ def test_failed_migration_rolls_back(tmp_path: Path, monkeypatch: pytest.MonkeyP
     with pytest.raises(sqlite3.Error):
         db.connect(path)
     conn = sqlite3.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 1  # v1 kept, v2 not half-applied
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == released  # broken one not half-applied
     assert conn.execute("SELECT count(*) FROM sqlite_master WHERE name = 'extra'").fetchone()[0] == 0
 
 

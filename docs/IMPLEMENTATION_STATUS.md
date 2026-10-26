@@ -74,6 +74,10 @@ Real-data smoke run: 42 sample files imported in 0.6 s (33 ok, 9 damaged files r
 | Export: keep/favorite/≥N★/selection, preview table, free-space check, confirm, exclusive-create copies, pairs share stem, size verify, CSV (Excel-friendly UTF-8) + JSON | tested | `tests/integration/test_export.py` |
 | Windows launcher `Snorlu.cmd`, optional desktop shortcut from setup script | implemented | not run on Windows yet |
 
+| File-name search (sidebar, Ctrl+F, multi-token OR) | tested | typing digits never triggers rating shortcuts |
+| Client pick lists: paste text + `DSC_####` pattern → parsed (numbers, ranges, shorthand `9645-50`, full names), unmatched/ambiguous report, saved as collection (schema v2), filter + export by list | tested | `tests/unit/test_client_list.py`, GUI test; requested by the user 2026-10-27 |
+| Schema v2 migration (collections) upgrades existing v1 projects in place | tested | |
+
 Known gaps (M1 polish): no undo for decisions, no compare view (2–4 photos, planned with M4),
 no thumbnail-size slider, no "clear cache" button, shortcuts not user-configurable yet.
 

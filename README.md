@@ -41,6 +41,14 @@ cache) is created under `Documents\Snorlu Projects\<folder name>`; photos are on
 | 1–5, 0 | star rating, clear rating |
 | F | favorite |
 | Ctrl+I / Ctrl+E / Ctrl+O | import folder / export / open project |
+| Ctrl+F | search file names (several numbers separated by spaces: `9645 9650`) |
+| Ctrl+L | client pick list: paste the client's message, e.g. `9645, 9657-9660, DSC_9665.jpg` |
+
+**Client pick lists** (📋 Khách chọn): paste what the client sent and the file-name pattern
+(`DSC_####`, detected automatically). Numbers, ranges (`9657-9660`, `9657 đến 9660`, `9645-50`) and
+full names are understood. The preview lists names that match no photo and names found in several
+folders before anything is saved. The list appears under **Lọc → Danh sách khách** and in the export
+dialog; it does not change your own Keep/Reject flags unless you tick that option.
 
 Export copies the chosen photos (Kept, Favorites, ≥ N stars, or the selection), RAW+JPEG pairs
 together, never overwrites (a different file with the same name gets " (1)"), skips photos already

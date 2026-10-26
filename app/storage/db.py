@@ -159,6 +159,28 @@ CREATE TABLE model_registry (
 );
 """,
     ),
+    (
+        2,
+        """
+-- Named photo lists, e.g. the photos a client picked from a gallery.
+CREATE TABLE collections (
+    id              INTEGER PRIMARY KEY,
+    name            TEXT NOT NULL,
+    kind            TEXT NOT NULL DEFAULT 'client',
+    source_text     TEXT,               -- what the client sent, kept for reference
+    pattern         TEXT,               -- file-name pattern used to read it, e.g. DSC_####
+    unmatched_json  TEXT NOT NULL DEFAULT '[]',
+    created_at      TEXT NOT NULL
+);
+CREATE TABLE collection_items (
+    collection_id  INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    asset_id       INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    token          TEXT,
+    PRIMARY KEY (collection_id, asset_id)
+);
+CREATE INDEX collection_items_asset ON collection_items (asset_id);
+""",
+    ),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

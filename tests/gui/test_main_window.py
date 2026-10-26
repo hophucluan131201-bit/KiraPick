@@ -196,3 +196,54 @@ def test_window_fits_the_screen_and_remembers_its_size(qtbot, env: dict) -> None
     w.close()
     w2 = _window(qtbot, env)
     assert (w2.width(), w2.height()) == (700, 500)
+
+
+def test_search_by_file_name(qtbot, env: dict) -> None:
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.activateWindow()
+    qtbot.waitUntil(w.isActiveWindow, timeout=3000)
+    qtbot.keyClick(w, Qt.Key.Key_F, Qt.KeyboardModifier.ControlModifier)
+    qtbot.waitUntil(w.search.hasFocus, timeout=3000)
+    qtbot.keyClicks(w.search, "0003 0005")  # typing into the box must not trigger K/X/1-5 shortcuts
+    qtbot.waitUntil(lambda: w.model.rowCount() == 2, timeout=3000)
+    assert sorted(r.name for r in w.model.records()) == ["DSC_0003.jpg", "DSC_0005.jpg"]
+    assert all(decisions.get(w.project.conn, r.id) == decisions.Decision() for r in w.model.records())
+    w.search.clear()
+    qtbot.waitUntil(lambda: w.model.rowCount() == 7, timeout=3000)
+
+
+def test_client_list_creates_list_selects_and_exports(qtbot, env: dict, tmp_path: Path) -> None:
+    from app.ui.client_list_dialog import ClientListDialog
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    dialog = w.open_client_list_dialog()
+    assert isinstance(dialog, ClientListDialog)
+    assert dialog.pattern.text() == "DSC_####"  # detected from the imported names
+    dialog.text.setPlainText("Em chọn: 1-2 tấm nha, 0001, 0003-0004, DSC_0009.jpg")
+    dialog.name.setText("Khách Aki")
+    dialog.refresh()
+    assert "Tìm thấy 3/4" in dialog.report.text() and "DSC_0009" in dialog.report.text()
+    dialog.create()
+    assert dialog.collection_id is not None
+    assert w.model.rowCount() == 3 and len(w.selected_records()) == 3
+    assert "Khách Aki (3)" in w.filters.currentItem().text()
+    assert all(r.flag is None for r in w.model.records())  # photographer's own flags untouched
+
+    export = w.open_export_dialog()
+    qtbot.addWidget(export)
+    assert export.radios[export._selection()].text() == "Danh sách khách:"
+    export.dest.setText(str(tmp_path / "Giao khách"))
+    export.refresh()
+    assert export.table.rowCount() == 3
+
+
+def test_closing_window_with_open_dialog_is_safe(qtbot, env: dict) -> None:
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    dialog = w.open_client_list_dialog()
+    dialog.text.setPlainText("0001")  # starts the debounce timer
+    w.close()  # closes the dialog and then the database
+    qtbot.wait(400)  # the timer would have fired here
+    assert not dialog.isVisible()

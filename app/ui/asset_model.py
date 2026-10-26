@@ -8,10 +8,11 @@ into QPixmaps on the UI thread.
 from __future__ import annotations
 
 import json
+import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from PySide6.QtCore import (
@@ -43,6 +44,7 @@ class Filter(str, Enum):
     FAVORITE = "favorite"
     RATED = "rated"  # rating >= min_rating
     ERRORS = "errors"
+    COLLECTION = "collection"  # photos of one client list
 
 
 @dataclass(slots=True)
@@ -95,7 +97,13 @@ _FILTER_SQL = {
     Filter.FAVORITE: " AND d.favorite = 1",
     Filter.RATED: " AND COALESCE(d.rating, 0) >= :min_rating",
     Filter.ERRORS: " AND a.status = 'error'",
+    Filter.COLLECTION: " AND a.id IN (SELECT asset_id FROM collection_items WHERE collection_id = :collection_id)",
 }
+
+
+def search_tokens(text: str) -> list[str]:
+    """'9645 9650' or '9645, DSC_97' -> case-insensitive substrings, any of which may match."""
+    return [t for t in re.split(r"[\s,;]+", text.casefold()) if t]
 
 
 def _camera(make: str | None, model: str | None) -> str | None:
@@ -136,6 +144,8 @@ class AssetListModel(QAbstractListModel):
         self._filter = Filter.ALL
         self._min_rating = 1
         self._source_id: int | None = None
+        self._collection_id: int | None = None
+        self._search: list[str] = []
         self._pixmaps: OrderedDict[int, QPixmap] = OrderedDict()
         self._pending: set[int] = set()
         self._pool = QThreadPool(self)
@@ -150,23 +160,40 @@ class AssetListModel(QAbstractListModel):
         self._pending.clear()
         self.reload()
 
-    def set_filter(self, flt: Filter, *, min_rating: int | None = None, source_id: int | None = -1) -> None:
+    def set_filter(
+        self, flt: Filter, *, min_rating: int | None = None, source_id: int | None = -1,
+        collection_id: int | None = None,
+    ) -> None:
         self._filter = flt
+        if flt is not Filter.COLLECTION:
+            self._collection_id = None
+        elif collection_id is not None:
+            self._collection_id = collection_id  # otherwise keep (e.g. only the folder changed)
         if min_rating is not None:
             self._min_rating = min_rating
         if source_id != -1:
             self._source_id = source_id
         self.reload()
 
+    def set_search(self, text: str) -> None:
+        tokens = search_tokens(text)
+        if tokens != self._search:
+            self._search = tokens
+            self.reload()
+
     @property
     def current_filter(self) -> Filter:
         return self._filter
+
+    @property
+    def is_filtered(self) -> bool:
+        return self._filter is not Filter.ALL or bool(self._search) or self._source_id is not None
 
     def reload(self) -> None:
         rows: list[AssetRecord] = []
         if self._project is not None:
             sql = _QUERY + _FILTER_SQL[self._filter]
-            params: dict[str, Any] = {"min_rating": self._min_rating}
+            params: dict[str, Any] = {"min_rating": self._min_rating, "collection_id": self._collection_id}
             if self._source_id is not None:
                 sql += " AND a.source_id = :source_id"
                 params["source_id"] = self._source_id
@@ -175,6 +202,10 @@ class AssetListModel(QAbstractListModel):
             pairs = self._pair_names(conn)
             cache = self._project.cache_dir
             for r in conn.execute(sql, params):
+                if self._search:
+                    name = PurePosixPath(r["relative_path"]).name.casefold()
+                    if not any(t in name for t in self._search):
+                        continue
                 rows.append(
                     AssetRecord(
                         id=r["id"], source_id=r["source_id"],

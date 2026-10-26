@@ -41,6 +41,7 @@ class Selection(str, Enum):
     FAVORITE = "favorite"
     RATED = "rated"
     IDS = "ids"
+    COLLECTION = "collection"  # a client's pick list
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +79,10 @@ class ExportResult:
     manifest_json: Path | None = None
 
 
-def select_assets(project: Project, selection: Selection, *, min_rating: int = 1, ids: list[int] | None = None) -> list[int]:
+def select_assets(
+    project: Project, selection: Selection, *, min_rating: int = 1, ids: list[int] | None = None,
+    collection_id: int | None = None,
+) -> list[int]:
     """Photo-level selection (RAW of a pair stands for the pair)."""
     base = """SELECT a.id FROM assets a LEFT JOIN decisions d ON d.asset_id = a.id AND d.subject_id IS NULL
               WHERE a.status = 'ok'"""
@@ -88,6 +92,11 @@ def select_assets(project: Project, selection: Selection, *, min_rating: int = 1
         rows = project.conn.execute(base + " AND d.favorite = 1")
     elif selection is Selection.RATED:
         rows = project.conn.execute(base + " AND COALESCE(d.rating, 0) >= ?", (min_rating,))
+    elif selection is Selection.COLLECTION:
+        rows = project.conn.execute(
+            base + " AND a.id IN (SELECT asset_id FROM collection_items WHERE collection_id = ?) ORDER BY a.id",
+            (collection_id,),
+        )
     else:
         return list(dict.fromkeys(ids or []))
     return [int(r[0]) for r in rows]

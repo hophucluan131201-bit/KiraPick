@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -35,6 +36,7 @@ from app.export.copy_export import (
     plan_export,
     select_assets,
 )
+from app.selection.client_list import list_collections
 from app.storage.project import Project
 from app.ui import theme
 from app.ui.jobs import ExportThread
@@ -48,7 +50,7 @@ def _gb(n: int) -> str:
 
 class ExportDialog(QDialog):
     def __init__(self, project: Project, selected_ids: list[int], parent: QWidget | None = None,
-                 default_destination: Path | None = None) -> None:
+                 default_destination: Path | None = None, collection_id: int | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Xuất ảnh đã chọn (sao chép)")
         self.resize(820, 620)
@@ -65,7 +67,8 @@ class ExportDialog(QDialog):
         self.radios: dict[Selection, QRadioButton] = {}
         row = QHBoxLayout()
         for sel, text in ((Selection.KEEP, "Ảnh đã Giữ (K)"), (Selection.FAVORITE, "Ảnh Yêu thích (F)"),
-                          (Selection.RATED, "Ảnh có từ"), (Selection.IDS, "Ảnh đang chọn")):
+                          (Selection.RATED, "Ảnh có từ"), (Selection.IDS, "Ảnh đang chọn"),
+                          (Selection.COLLECTION, "Danh sách khách:")):
             rb = QRadioButton(text)
             self.mode.addButton(rb)
             self.radios[sel] = rb
@@ -76,6 +79,11 @@ class ExportDialog(QDialog):
                 self.min_rating.setValue(3)
                 self.min_rating.setSuffix(" sao")
                 row.addWidget(self.min_rating)
+            if sel is Selection.COLLECTION:
+                self.collection = QComboBox()
+                for c in list_collections(project.conn):
+                    self.collection.addItem(f"{c['name']} ({c['n']} ảnh)", c["id"])
+                row.addWidget(self.collection)
         row.addStretch(1)
         layout.addLayout(row)
         self.radios[Selection.KEEP].setChecked(True)
@@ -122,9 +130,16 @@ class ExportDialog(QDialog):
         for widget in (self.include_pairs, self.keep_folders):
             widget.toggled.connect(self.refresh)
         self.min_rating.valueChanged.connect(self.refresh)
+        self.collection.currentIndexChanged.connect(self.refresh)
+        if not self.collection.count():
+            self.radios[Selection.COLLECTION].setEnabled(False)
+            self.collection.setEnabled(False)
         self.dest.editingFinished.connect(self.refresh)
         if not selected_ids:
             self.radios[Selection.IDS].setEnabled(False)
+        if collection_id is not None and self.collection.findData(collection_id) >= 0:
+            self.collection.setCurrentIndex(self.collection.findData(collection_id))
+            self.radios[Selection.COLLECTION].setChecked(True)
         self.refresh()
 
     def _selection(self) -> Selection:
@@ -139,7 +154,8 @@ class ExportDialog(QDialog):
     def refresh(self) -> None:
         self.plan = None
         self.table.setRowCount(0)
-        ids = select_assets(self.project, self._selection(), min_rating=self.min_rating.value(), ids=self.selected_ids)
+        ids = select_assets(self.project, self._selection(), min_rating=self.min_rating.value(), ids=self.selected_ids,
+                            collection_id=self.collection.currentData())
         dest_text = self.dest.text().strip()
         if not ids:
             self._set_summary("Không có ảnh nào khớp lựa chọn này.", error=True)
