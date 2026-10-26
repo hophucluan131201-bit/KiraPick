@@ -30,7 +30,7 @@ Last update: 2026-10-26 — dev container: Linux x86-64, Python 3.13.17, no GPU,
 | Damaged/stripped/truncated file detection (typed errors) | tested | size + consistency guards; stale-buffer regression test |
 | Raster JPEG/PNG/TIFF (EXIF orientation, 16-bit) | tested | unit tests (synthetic) |
 | Recursive scan: no symlink/junction following, hidden/system dirs skipped, cancel | tested | Linux; junctions untested (Windows only) |
-| RAW+JPEG pairing by folder+stem, confirmed by capture time | tested | unit tests; not yet wired to a DB |
+| RAW+JPEG pairing by folder+stem, confirmed by capture time | tested | unit tests; wired into the import job (below) |
 | Quick fingerprint (size + edge hashes) and full SHA-256 | tested | |
 | `snorlu-raw-probe` CLI (read-only report, proves files untouched) | tested | integration test |
 | Windows Unicode paths for RAW | implemented | file-object path for non-ASCII on Windows; **needs Windows test** |
