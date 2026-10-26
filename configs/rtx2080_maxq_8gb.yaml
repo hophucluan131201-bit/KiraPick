@@ -1,0 +1,60 @@
+# Snorlu AI Culling - GPU profile v1.1
+# Values are conservative STARTING POINTS, not measured benchmarks.
+profile: rtx2080super_maxq_8gb
+platform:
+  os: windows
+  cpu: intel_i7_10750h
+  ram_gb: 32
+  gpu: nvidia_rtx_2080_super_max_q
+  vram_gb: 8
+  compute_capability: "7.5"
+privacy:
+  offline_only: true
+  require_prebundled_weights: true
+  block_telemetry: true
+  no_cloud_fallback: true
+safety:
+  never_modify_originals: true
+  never_delete_originals: true
+  uncertain_identity_to_review: true
+compute:
+  preferred_provider: cuda
+  fallback_provider: cpu
+  preferred_fp_type: fp16
+  avoid_bf16: true
+  heavy_gpu_jobs_in_parallel: 1
+  target_max_app_vram_mb: 6144
+  vram_margin_mb: 1536
+  adaptive_batching: true
+  unload_heavy_models_between_stages: true
+  raw_decode_workers: 3
+  cache_disk_quota_gb: 20
+stages:
+  person_face_detection:
+    long_side_px: 960
+    batch_size: 4
+    min_batch_size: 1
+  person_reid:
+    crop_size: 224
+    batch_size: 8
+  dinov2_small:
+    enabled: true
+    batch_size: 8
+  quality:
+    preview_long_side_px: 1600
+    recheck_subject_focus_on_original: true
+  aesthetic:
+    batch_size: 8
+  local_vlm:
+    enabled: false   # enable after M0 GPU/VRAM validation
+    model: Qwen3-VL-2B-Instruct-GGUF-Q4_K_M
+    inference: llama.cpp
+    concurrent_requests: 1
+    max_image_side_px: 896
+    max_output_tokens: 250
+    candidate_only: true
+ranking:
+  top_n_per_subject: 15
+  primary_per_burst: 1
+  keep_runner_up: true
+  diversity_lambda: 0.75

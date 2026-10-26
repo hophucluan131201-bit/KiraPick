@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snorlu-ai-culling"
+version = "0.1.0.dev0"
+description = "Offline, non-destructive AI photo culling for cosplay/street photographers (Windows desktop)."
+requires-python = ">=3.11,<3.14"
+# Supported ranges; exact versions verified so far are recorded in requirements.lock.txt.
+dependencies = [
+    "rawpy>=0.25,<0.28",       # LibRaw >= 0.21 needed for CR3 / recent Nikon Z bodies
+    "numpy>=1.26,<3",
+    "pillow>=10.3,<14",
+    "exifread>=3.0,<4",
+    "pyyaml>=6.0,<7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+snorlu-raw-probe = "app.ingest.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "samples: needs real RAW samples under test_photos/ (skipped when absent)",
+    "slow: full demosaic of real RAW files",
+]
