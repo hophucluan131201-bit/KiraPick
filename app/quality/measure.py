@@ -25,7 +25,7 @@ import numpy as np
 
 from app.ai.detect import Box
 
-QUALITY_VERSION = "q1"
+QUALITY_VERSION = "q2"  # q2: + eyes (blink_left/right, ear_left/right, blink)
 LAYOUT_VERSION = "hog32x64-v1"
 EDGE_PERCENTILE = 99.5
 MIN_CONTRAST = 12.0  # grey levels; flatter regions cannot show focus

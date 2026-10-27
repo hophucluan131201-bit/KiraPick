@@ -21,7 +21,9 @@ def test_manifest_pins_every_model_with_license_and_hash() -> None:
     specs = load_manifest()
     assert {"face_detector", "face_embedder", "person_detector_s", "person_detector_m"} <= set(specs)
     for spec in specs.values():
-        assert len(spec.sha256) == 64 and spec.size > 0 and spec.license and spec.url.startswith("https://")
+        assert len(spec.sha256) == 64 and spec.size > 0 and spec.license
+        assert spec.url.startswith("https://") or (spec.url.startswith("repo:") and
+                                                   (Path(__file__).parents[2] / spec.url[5:]).is_file())
 
 
 def test_registry_reports_missing_and_tampered_files(tmp_path: Path) -> None:

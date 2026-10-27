@@ -60,6 +60,30 @@
    "provenance": "opencv/opencv_zoo@48b10fa models/face_image_quality_assessment_ediffiqa (LICENSE: CC BY 4.0; Babnik et al., eDifFIQA, IEEE T-BIOM 2024). MobileFaceNet backbone + quality head; input 112x112 face aligned like SFace, RGB normalised to [-1, 1]; higher = better face image (sharpness, pose, occlusion).",
    "runtime": "opencv",
    "purpose": "quality"
+  },
+  {
+   "id": "face_mesh",
+   "name": "MediaPipe Face Landmarker v2: 478 face landmarks (ONNX)",
+   "file": "mediapipe_face_landmarks_v2.onnx",
+   "sha256": "a044fec26cd90125566eb8703258dd7a211cca60423801462663af8f13636f56",
+   "size": 4921000,
+   "license": "Apache-2.0",
+   "url": "repo:models/converted/mediapipe_face_landmarks_v2.onnx",
+   "provenance": "Converted to ONNX (opset 17) with tf2onnx 1.16.1 from face_landmarker.task v1 float16 (https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task, Apache-2.0, model card 'MediaPipe Face Mesh V2' / 'Blendshape V2'); reproduce with scripts/convert_mediapipe.py; outputs checked against the TFLite interpreter (landmarks max diff 4e-4 px, blendshapes 1e-6).",
+   "runtime": "onnxruntime",
+   "purpose": "quality"
+  },
+  {
+   "id": "face_blendshapes",
+   "name": "MediaPipe face blendshapes v2: 52 expression scores incl. eye blink (ONNX)",
+   "file": "mediapipe_face_blendshapes_v2.onnx",
+   "sha256": "ce56bc10f1b0306701b8bdb5cd05661a37a380f62638db7102bb61d6bc0d1a77",
+   "size": 1883551,
+   "license": "Apache-2.0",
+   "url": "repo:models/converted/mediapipe_face_blendshapes_v2.onnx",
+   "provenance": "Converted to ONNX (opset 17) with tf2onnx 1.16.1 from face_landmarker.task v1 float16 (https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task, Apache-2.0, model card 'MediaPipe Face Mesh V2' / 'Blendshape V2'); reproduce with scripts/convert_mediapipe.py; outputs checked against the TFLite interpreter (landmarks max diff 4e-4 px, blendshapes 1e-6).",
+   "runtime": "onnxruntime",
+   "purpose": "quality"
   }
  ]
 }

@@ -23,6 +23,7 @@ models/weights/
 test_photos/
 *.part
 *.onnx
+!models/converted/*.onnx
 *.safetensors
 *.gguf
 *.pt

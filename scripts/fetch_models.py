@@ -45,17 +45,27 @@ def main() -> int:
             print(f"{status.state.value.upper():8} {spec.file}")
             failures += 1
             continue
-        print(f"Đang tải {spec.file} ({spec.size / 1e6:.0f} MB) …", flush=True)
         part = status.path.with_suffix(status.path.suffix + ".part")
-        try:
-            with urllib.request.urlopen(spec.url, timeout=120) as resp, open(part, "wb") as out:  # noqa: S310
-                while chunk := resp.read(1 << 20):
-                    out.write(chunk)
-        except OSError as exc:
-            part.unlink(missing_ok=True)
-            print(f"  LỖI tải: {exc}")
-            failures += 1
-            continue
+        if spec.url.startswith("repo:"):  # converted by us, kept in the repository (see its provenance)
+            src = Path(__file__).resolve().parents[1] / spec.url[len("repo:"):]
+            print(f"Chép {spec.file} từ {src.parent.name}/ …", flush=True)
+            try:
+                part.write_bytes(src.read_bytes())
+            except OSError as exc:
+                print(f"  LỖI: {exc}")
+                failures += 1
+                continue
+        else:
+            print(f"Đang tải {spec.file} ({spec.size / 1e6:.0f} MB) …", flush=True)
+            try:
+                with urllib.request.urlopen(spec.url, timeout=120) as resp, open(part, "wb") as out:  # noqa: S310
+                    while chunk := resp.read(1 << 20):
+                        out.write(chunk)
+            except OSError as exc:
+                part.unlink(missing_ok=True)
+                print(f"  LỖI tải: {exc}")
+                failures += 1
+                continue
         if sha256_of(part) != spec.sha256:
             part.unlink()
             print("  LỖI: SHA-256 không khớp, đã bỏ file tải về")

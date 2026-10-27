@@ -7,7 +7,9 @@ weight is spread over the others and the confidence drops — never a fake 0.
 Mappings are starting values checked on the owner's sample NEFs (sharp eyes
 measured 0.5-0.8, a defocused background face 0.08, a 2 px Gaussian blur
 ~0.2); they are NOT calibrated against the owner's choices yet.
-Not measured at all (no model yet): eyes closed, aesthetics/artistry.
+Eyes: MediaPipe eyeBlink (0 open .. 1 closed); on the owner's shoot open eyes measured ~0.06 and
+every face >= 0.5 had closed or downcast eyes. Closed eyes are not scored 0: they can be intended.
+Not measured at all (no model yet): aesthetics/artistry.
 """
 
 from __future__ import annotations
@@ -16,10 +18,11 @@ import json
 import sqlite3
 from dataclasses import dataclass, field
 
-PROFILE_VERSION = "cosplay-tech-v1"
-WEIGHTS = {"focus": 35, "face": 25, "exposure": 20, "framing": 20}
-LABELS = {"focus": "nét", "face": "mặt", "exposure": "sáng", "framing": "bố cục"}
-NOT_MEASURED = ("mắt nhắm/mở", "thẩm mỹ tổng thể")
+PROFILE_VERSION = "cosplay-tech-v2"
+WEIGHTS = {"focus": 30, "eyes": 20, "face": 20, "exposure": 15, "framing": 15}
+LABELS = {"focus": "nét", "eyes": "mắt", "face": "mặt", "exposure": "sáng", "framing": "bố cục"}
+NOT_MEASURED = ("thẩm mỹ tổng thể",)
+BLINK_OPEN, BLINK_CLOSED = 0.30, 0.50  # MediaPipe eyeBlink: below = open, at/above = closed or looking down
 GOOD, POOR = 75.0, 45.0  # a criterion at/above GOOD is a strength, at/below POOR a weakness
 
 
@@ -53,6 +56,15 @@ def score(v: dict) -> Score:
         parts["focus"] = _ramp(sharp, 0.15, 0.75)
         if sharp < 0.25:
             warnings.append("lệch nét / rung" if v.get("eye_sharp") is not None else "người không nét")
+    blink = v.get("blink")
+    if blink is not None:
+        if blink < BLINK_OPEN:
+            parts["eyes"] = 100.0
+        elif blink < BLINK_CLOSED:
+            parts["eyes"] = 100.0 - (blink - BLINK_OPEN) / (BLINK_CLOSED - BLINK_OPEN) * 60.0  # 100 -> 40
+        else:
+            parts["eyes"] = 15.0  # closed: a weakness, but may be intended, so never 0
+            warnings.append("mắt nhắm hoặc nhìn xuống (nếu cố ý thì bỏ qua)")
     fq = v.get("face_quality")
     if fq is not None:
         parts["face"] = _ramp(fq, 0.25, 0.75)
@@ -96,8 +108,15 @@ def _explain(v: dict, parts: dict[str, float | None], warnings: list[str]) -> tu
     good: list[str] = []
     bad: list[str] = list(warnings)
     todo: list[str] = []
-    eyes = v.get("eye_sharp") is not None
+    eyes = v.get("eye_sharp") is not None  # focus was measured at the eyes
     focus, face, light, frame = parts["focus"], parts["face"], parts["exposure"], parts["framing"]
+    lids = parts["eyes"]
+    if lids is None:
+        todo.append("mắt nhắm/mở (không thấy rõ mắt)")
+    elif lids >= 100.0:
+        good.append("mắt mở")
+    elif lids > 15.0:
+        bad.append("mắt hơi khép / lim dim")
     if focus is None:
         todo.append("độ nét (vùng đo quá nhỏ hoặc quá phẳng)")
     elif focus >= GOOD:

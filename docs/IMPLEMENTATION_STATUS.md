@@ -20,7 +20,7 @@ required — a listed provider does not prove inference works).
 | M0 Feasibility + safety | **tested** | RAW feasibility; AI runtime (offline-only providers, telemetry off, GPU→CPU fallback); model manifest + licenses. **CUDA verified on the RTX 2080 Super Max-Q** (2026-10-27, see below). OSNet/DINOv2 not fetched yet |
 | M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
 | M2 Identity | **implemented + tested (synthetic + 7 real photos)** | Detection, face embeddings, look-first grouping (face + outfit within 5 min), people panel, review queue, manual corrections that survive re-analysis. **Calibrated on one labelled shoot only** (precision 1.00 / recall 0.76, thin margin); no body re-ID model yet (OSNet/DINOv2 blocked from dev container) |
-| M3 Quality | **implemented + tested (synthetic + 7 real NEF)** | Per-person technical score: eye/face/body sharpness on the full-resolution image, eDifFIQA face quality, face/person exposure, framing; N/A redistribution + confidence; warnings. **Not measured: eyes closed, aesthetics** (no suitable offline model yet). Rubric mappings are starting values, not calibrated on the owner's choices |
+| M3 Quality | **implemented + tested (synthetic + 7 real NEF)** | Per-person technical score: eye/face/body sharpness on the full-resolution image, eDifFIQA face quality, face/person exposure, framing; N/A redistribution + confidence; warnings. **Eyes open/closed measured since 0.2.0b4** (MediaPipe blendshapes); **aesthetics not measured** (no suitable offline model yet). Rubric mappings are starting values, not calibrated on the owner's choices |
 | M4 Best shot | **implemented + tested (synthetic)** | ⭐ Chọn ảnh: N per person or N in the current view, greedy MMR (λ 0.75) over score vs near-copy redundancy (layout similarity rescaled 0.85→0.97, same burst = copy), picks first then by score, optional Keep marks (never overrides user flags). No compare view yet; no burst table (bursts = same person ≤ 1.5 s apart) |
 | M5 Local VLM | not started | |
 | M6 Release | **implemented; Windows build not yet run** | DirectML/CPU installer: PyInstaller onedir + Inno Setup per-user, verified models (YuNet, SFace, YOLOX-S, eDifFIQA; YOLOX-M GPU-only not shipped), `--self-test` with network blocked, portable zip, CI workflow. Verified here: Linux PyInstaller build launches and passes the self-test offline. **Not verified: the Windows build/installer itself** (no Windows machine in this environment); unsigned (SmartScreen warning); no GPU variant yet. Release flow: a push to main with `[release]` in the commit message (or a `v*` tag) makes GitHub Actions build on Windows, self-test and publish a (pre)release with `…-BoCai.zip` (Setup.exe + Vietnamese click-by-click guide), portable zip and Setup.exe. License: PolyForm Noncommercial 1.0.0 (owner: personal, non-commercial) |
@@ -178,6 +178,16 @@ to CPU with a reason when no GPU works (`app/ai/runtime.py`, fake-provider unit 
 now shipped and used on any GPU. The status bar shows "GPU NVIDIA / GPU DirectML / CPU" and the
 duration; the self-test reports the GPU device and a YOLOX-M timing. **Not measured yet:** DirectML
 speed and correctness on a real GPU (needs the owner's PC). Development installs keep CUDA.
+
+**Eyes open/closed (0.2.0b4):** MediaPipe Face Landmarker v2 (Apache-2.0) — face mesh + blendshapes —
+converted to ONNX (`scripts/convert_mediapipe.py`, outputs match TFLite within 4e-4 px / 1e-6), kept in
+`models/converted/` (6.8 MB) and run on the full-resolution face crop (MediaPipe ROI: 1.5× box, eyes
+level, one refinement). Measured `blink` = max(eyeBlinkLeft, eyeBlinkRight). On the owner's full
+shoot (thumbnails, 315 faces): open eyes ~0.06; every face ≥ 0.5 (15) had closed or downcast eyes;
+27 in 0.3–0.5. Rubric `cosplay-tech-v2`: eyes weight 20 (focus 30, face 20, exposure 15, framing 15);
+< 0.3 open (100), 0.3–0.5 half-closed (100→40), ≥ 0.5 closed/looking down (15, warning “nếu cố ý thì
+bỏ qua” — never 0 because it can be intended). Quality stage v2 re-measures existing sessions.
+Not calibrated on labelled closed-eye photos yet.
 
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +

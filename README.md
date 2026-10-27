@@ -9,13 +9,13 @@
 ## 🇻🇳 Tiếng Việt
 
 KiraPick là ứng dụng Windows giúp **lọc ảnh cosplay và chân dung bằng AI, chạy hoàn toàn offline**:
-gom ảnh theo từng người, chấm điểm kỹ thuật (nét ở mắt, mặt, ánh sáng, bố cục) và tự chọn ra
+gom ảnh theo từng người, chấm điểm kỹ thuật (nét ở mắt, mắt nhắm/mở, mặt, ánh sáng, bố cục) và tự chọn ra
 những tấm đẹp, khác dáng nhau để bạn duyệt lại.
 
 - **Không cần Internet** sau khi cài; không gửi ảnh hay dữ liệu đi đâu.
 - **Không bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc.** Xuất ảnh = sao chép.
 - Đọc RAW (Nikon NEF ưu tiên, Canon CR2/CR3, Sony ARW, …) và JPEG.
-- Tình trạng: **bản thử nghiệm (beta)**. Chưa đánh giá được mắt nhắm/mở và độ đẹp nghệ thuật.
+- Tình trạng: **bản thử nghiệm (beta)**. Có phát hiện mắt nhắm / nhìn xuống; chưa đánh giá được độ đẹp nghệ thuật.
   Chi tiết: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) (tiếng Anh).
 
 ### Cài đặt (không cần biết lập trình)
@@ -93,13 +93,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\make_shortcut.ps1   # biểu 
 ## 🇬🇧 English
 
 KiraPick is a Windows app that **culls cosplay and portrait photos with AI, fully offline**: it
-groups photos by person, gives each person a technical score (sharpness at the eyes, face,
-exposure, framing) and picks the best, varied shots for you to review.
+groups photos by person, gives each person a technical score (sharpness at the eyes, eyes
+open/closed, face, exposure, framing) and picks the best, varied shots for you to review.
 
 - **No Internet needed** after installation; no photo or data ever leaves the computer.
 - **Never edits, deletes, renames or moves original photos.** Export = copy.
 - Reads RAW (Nikon NEF first, Canon CR2/CR3, Sony ARW, …) and JPEG.
-- Status: **beta**. Eyes closed and artistic quality are not judged yet.
+- Status: **beta**. Detects closed / downcast eyes; artistic quality is not judged yet.
   Details: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 ### Install (no programming needed)

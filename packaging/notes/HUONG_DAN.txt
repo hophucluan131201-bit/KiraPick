@@ -28,7 +28,7 @@ LƯU Ý CỦA BẢN THỬ NGHIỆM
 - Có card đồ hoạ (NVIDIA, AMD hay Intel) thì AI tự dùng card qua DirectML, không thì dùng CPU.
   Thanh trạng thái ghi "GPU DirectML" hoặc "CPU". Nhận diện + phân tích khoảng
   vài phút cho 400-500 ảnh, tuỳ máy.
-- Chưa đánh giá được: mắt nhắm/mở và độ đẹp nghệ thuật. Điểm chỉ là điểm kỹ thuật.
+- Có đánh giá mắt nhắm/mở. Chưa đánh giá được độ đẹp nghệ thuật: điểm chỉ là điểm kỹ thuật.
 - Mỗi máy có "bộ nhớ học" riêng (các lần bạn sửa nhóm người, giữ/loại ảnh) - chỉ là
   các con số, lưu trên máy bạn, không chia sẻ với ai.
 

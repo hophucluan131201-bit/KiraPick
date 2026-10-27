@@ -62,10 +62,10 @@ def test_layout_tells_poses_apart() -> None:
 def test_rubric_spreads_missing_weight_and_warns() -> None:
     full = score({"eye_sharp": 0.8, "face_quality": 0.8, "face_clip": 0.0, "face_luma": 55, "area": 0.4,
                   "offcentre": 0.1, "cut_head": 0.0, "cut_side": 0.0})
-    assert full.total == 100 and full.confidence == 1.0 and not full.warnings
+    assert full.total == 100 and full.confidence == pytest.approx(1 - WEIGHTS["eyes"] / 100) and not full.warnings
     no_face = score({"body_sharp": 0.8, "body_clip": 0.0, "body_luma": 55, "area": 0.4, "offcentre": 0.1})
     assert no_face.parts["face"] is None and no_face.total == 100  # N/A is not a zero
-    assert no_face.confidence == pytest.approx(1 - WEIGHTS["face"] / 100)
+    assert no_face.confidence == pytest.approx(1 - (WEIGHTS["face"] + WEIGHTS["eyes"]) / 100)
     bad = score({"eye_sharp": 0.1, "face_quality": 0.2, "face_clip": 0.3, "face_luma": 95, "area": 0.4,
                  "cut_head": 1.0})
     assert bad.total < 25 and len(bad.warnings) == 4
@@ -139,15 +139,20 @@ def test_per_person_selection_and_saved_run(project: Project) -> None:
 
 def test_explanation_lists_strengths_weaknesses_and_not_judged() -> None:
     good = score({"eye_sharp": 0.8, "face_quality": 0.8, "face_clip": 0.0, "face_luma": 55, "area": 0.4,
-                  "offcentre": 0.1, "cut_head": 0.0, "cut_side": 0.0, "face_sharp": 0.7})
-    assert good.strengths == ["nét ở mắt", "mặt rõ, dễ nhìn", "sáng tốt, mặt không cháy", "bố cục gọn, đủ người"]
-    assert not good.weaknesses and good.not_rated == ["mắt nhắm/mở (chưa có mô hình)",
-                                                      "thẩm mỹ tổng thể (chưa có mô hình)"]
+                  "offcentre": 0.1, "cut_head": 0.0, "cut_side": 0.0, "face_sharp": 0.7, "blink": 0.05})
+    assert good.strengths == ["mắt mở", "nét ở mắt", "mặt rõ, dễ nhìn", "sáng tốt, mặt không cháy",
+                              "bố cục gọn, đủ người"]
+    assert not good.weaknesses and good.not_rated == ["thẩm mỹ tổng thể (chưa có mô hình)"]
+    closed = score({"eye_sharp": 0.8, "blink": 0.7, "area": 0.4})
+    assert "mắt nhắm hoặc nhìn xuống (nếu cố ý thì bỏ qua)" in closed.weaknesses and closed.parts["eyes"] == 15
+    sleepy = score({"eye_sharp": 0.8, "blink": 0.4, "area": 0.4})
+    assert "mắt hơi khép / lim dim" in sleepy.weaknesses and 40 < sleepy.parts["eyes"] < 100
     back_view = score({"body_sharp": 0.5, "body_clip": 0.0, "body_luma": 12, "area": 0.03, "cut_side": 1.0})
     assert "nét chưa tới, hơi mềm" in back_view.weaknesses
     assert "tối (nếu chụp low-key có chủ ý thì bỏ qua)" in back_view.weaknesses
     assert {"người bị cắt ở mép ảnh", "người quá nhỏ trong khung"} <= set(back_view.weaknesses)
-    assert back_view.not_rated[0].startswith("khuôn mặt (không thấy rõ mặt")
+    assert any(t.startswith("khuôn mặt (không thấy rõ mặt") for t in back_view.not_rated)
+    assert "mắt nhắm/mở (không thấy rõ mắt)" in back_view.not_rated
     burnt = score({"eye_sharp": 0.1, "face_quality": 0.2, "face_clip": 0.3, "face_luma": 70, "area": 0.4})
     assert burnt.weaknesses.count("mặt bị cháy sáng") == 1 and "lệch nét / rung" in burnt.weaknesses
 

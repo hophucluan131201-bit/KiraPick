@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 
 from app.ai.detect import pil_to_bgr
+from app.ai.eyes import EyeState
 from app.ai.face_quality import FaceQuality, FaceRefiner
 from app.ai.models import ModelRegistry, ModelUnavailableError
 from app.core.errors import ImageReadError
@@ -36,7 +37,7 @@ from app.storage.project import Project, utc_now
 log = logging.getLogger(__name__)
 
 STAGE = "quality"
-STAGE_VERSION = 1
+STAGE_VERSION = 2  # 2: eyes open/closed (MediaPipe blendshapes)
 EXTRACTOR = "quality"
 WORK_LONG_SIDE = 1600  # exposure / layout are measured at this size
 FACE_FOR_FOCUS = 0.6  # detection score needed to look for the eyes
@@ -71,7 +72,8 @@ def queue(project: Project) -> list[tuple[int, Path]]:
 
 def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None, face: tuple | None,
                        face_score: float | None, refiner: FaceRefiner | None,
-                       face_quality: FaceQuality | None) -> tuple[dict, np.ndarray | None]:
+                       face_quality: FaceQuality | None,
+                       eyes: EyeState | None = None) -> tuple[dict, np.ndarray | None]:
     h, w = full.shape[:2]
     values: dict = {"eye_sharp": None, "face_sharp": None, "body_sharp": None, "face_quality": None,
                     "face_luma": None, "face_clip": None, "eyes_found": 0.0}
@@ -80,9 +82,9 @@ def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None
         geo = refiner.refine(full, face)
         if geo is not None:
             gray = cv2.cvtColor(full, cv2.COLOR_BGR2GRAY)
-            eyes = eye_region(geo, w, h)
-            if eyes is not None:
-                x0, y0, x1, y1 = eyes
+            eye_box = eye_region(geo, w, h)
+            if eye_box is not None:
+                x0, y0, x1, y1 = eye_box
                 values["eye_sharp"] = edge_sharpness(gray[y0:y1, x0:x1])
                 values["eyes_found"] = 1.0
             fx, fy, fw, fh = geo.box
@@ -94,6 +96,11 @@ def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None
                 values["face_luma"], values["face_clip"] = exp["luma"], exp["clip"]
             if face_quality is not None:
                 values["face_quality"] = face_quality.score(full, geo)
+            if eyes is not None:
+                state = eyes.measure(full, geo)
+                if state is not None:
+                    values.update(state)
+                    values["blink"] = max(state["blink_left"], state["blink_right"])
     if person is not None:
         px, py, pw, ph = person[0] * w, person[1] * h, person[2] * w, person[3] * h
         bx0, by0 = max(0, int(px + pw * 0.25)), max(0, int(py + ph * 0.15))
@@ -126,6 +133,10 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
         face_quality: FaceQuality | None = FaceQuality(registry)
     except ModelUnavailableError:
         face_quality = None  # honest: face quality stays "not available"
+    try:
+        eyes: EyeState | None = EyeState(registry)
+    except ModelUnavailableError:
+        eyes = None  # honest: eyes stay "not judged"
     done = failed = 0
     total = len(todo)
     progress(STAGE, 0, total)
@@ -152,7 +163,7 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
             asset_id, fut = pending.pop(0)
             try:
                 full, source = fut.result()
-                _store(project, asset_id, full, source, refiner, face_quality)
+                _store(project, asset_id, full, source, refiner, face_quality, eyes)
                 done += 1
             except (ImageReadError, cv2.error, OSError, MemoryError) as exc:
                 _mark(project, asset_id, "failed", f"{type(exc).__name__}: {exc}"[:300])
@@ -166,7 +177,7 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
 
 
 def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refiner: FaceRefiner | None,
-           face_quality: FaceQuality | None) -> None:
+           face_quality: FaceQuality | None, eyes: EyeState | None = None) -> None:
     h, w = full.shape[:2]
     scale = min(1.0, WORK_LONG_SIDE / max(h, w))
     small = cv2.resize(full, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else full
@@ -178,7 +189,7 @@ def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refin
     for r in rows:
         person = tuple(json.loads(r["person_box"])) if r["person_box"] else None
         face = tuple(json.loads(r["face_box"])) if r["face_box"] else None
-        values, layout = measure_occurrence(full, small, person, face, r["face_score"], refiner, face_quality)
+        values, layout = measure_occurrence(full, small, person, face, r["face_score"], refiner, face_quality, eyes)
         values["full_long_side"] = float(max(h, w))
         results.append((r["id"], values, layout))
     now = utc_now()
