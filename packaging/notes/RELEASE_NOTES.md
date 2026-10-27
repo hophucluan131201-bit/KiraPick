@@ -1,6 +1,9 @@
-## KiraPick 2.1.0b1 – bản thử nghiệm (beta)
+## KiraPick 2.1.0b3 – bản thử nghiệm (beta)
 
 > **Bản beta, chưa phải bản chính thức.** Bản chính thức mới nhất vẫn là 2.0.6.
+> - **2.1.0b3 – chọn đúng card đồ hoạ:** laptop có 2 card (Intel + NVIDIA) thì DirectML từng chạy trên card
+>   Intel nên chậm hơn CPU. Giờ app thử từng card, dùng card nhanh nhất và ghi tên card + thời gian đo lên thanh
+>   trạng thái. Tự kiểm tra không còn lỗi khi thư mục Desktop nằm trong OneDrive (báo cáo vào thư mục logs).
 > - **2.1.0b2 – bộ cài mở ngay:** file Setup.exe chỉ còn vài MB (dữ liệu nằm ở file `…-1.bin` đi kèm trong
 >   `…-BoCai.zip`), vì Windows quét toàn bộ file .exe trước khi mở nên file 400 MB làm bấm vào rất lâu.
 >   Giải nén cả file zip rồi chạy Setup.exe như cũ.

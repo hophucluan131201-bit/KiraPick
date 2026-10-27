@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kirapick"
-version = "2.1.0b2"
+version = "2.1.0b3"
 description = "Offline, non-destructive AI photo culling for cosplay/street photographers (Windows desktop)."
 requires-python = ">=3.11,<3.15"
 # Supported ranges; exact versions verified so far are recorded in requirements.lock.txt.

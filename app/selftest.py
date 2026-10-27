@@ -114,6 +114,9 @@ def run(report_path: Path, photos: Path | None = None) -> int:
 
             use, note = gpu_speed_check(registry.require("person_detector_s"))
             report["gpu"]["faster_than_cpu"], report["gpu"]["speed_check"] = use, note
+            from app.ai.runtime import list_gpus
+
+            report["gpu"]["adapters"] = list_gpus()  # DXGI order = DirectML device_id
             report["steps"].append(f"graphics card: {probe.device}")
 
         from app.storage.project import Project
@@ -160,8 +163,28 @@ def run(report_path: Path, photos: Path | None = None) -> int:
         report["error"] = f"{type(exc).__name__}: {exc}"
         report["traceback"] = traceback.format_exc()[-4000:]
     report["seconds"] = round(time.time() - started, 1)
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    _write_report(report_path, report)
     return 0 if report["ok"] else 1
+
+
+def _fallback_report_dir() -> Path:
+    from app.branding import data_dir
+
+    return data_dir() / "logs"
+
+
+def _write_report(path: Path, report: dict) -> Path:
+    """Write the report; if that folder is missing or not writable (e.g. a Desktop moved to
+    OneDrive), use the app's logs folder instead of losing the result. Returns where it went."""
+    text = json.dumps(report, ensure_ascii=False, indent=1)
+    try:
+        path.write_text(text, encoding="utf-8")
+        return path
+    except OSError:
+        fallback = _fallback_report_dir() / path.name
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        fallback.write_text(text, encoding="utf-8")
+        return fallback
 
 
 if __name__ == "__main__":

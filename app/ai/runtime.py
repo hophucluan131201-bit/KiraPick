@@ -110,9 +110,65 @@ def _gpu_attempts(available: list[str], gpu_mem_limit_mb: int) -> list[tuple[str
             "cudnn_conv_algo_search": "HEURISTIC",
         }), "CPUExecutionProvider"]))
     if "DmlExecutionProvider" in available:
+        if _dml_device is not None:  # the graphics card measured fastest (gpu_speed_check)
+            attempts.append(("directml", [("DmlExecutionProvider", {"device_id": _dml_device}), "CPUExecutionProvider"]))
+            return attempts
         attempts.append(("directml", [("DmlExecutionProvider", dict(_DML_PREFERRED_OPTIONS)), "CPUExecutionProvider"]))
         attempts.append(("directml", [("DmlExecutionProvider", {"device_id": 0}), "CPUExecutionProvider"]))
     return attempts
+
+
+_dml_device: int | None = None  # DXGI adapter index DirectML uses, once measured
+
+
+def list_gpus() -> list[dict]:
+    """Graphics adapters in DXGI order (= DirectML device_id), Windows only; [] elsewhere or on error.
+
+    Laptops usually list the integrated GPU (which also draws the screen) first.
+    """
+    import sys
+
+    if sys.platform != "win32":
+        return []
+    try:
+        import ctypes
+        from ctypes import POINTER, WINFUNCTYPE, byref, c_long, c_uint, c_void_p
+
+        class Guid(ctypes.Structure):
+            _fields_ = [("a", ctypes.c_uint32), ("b", ctypes.c_uint16), ("c", ctypes.c_uint16), ("d", ctypes.c_ubyte * 8)]
+
+        class AdapterDesc1(ctypes.Structure):
+            _fields_ = [("Description", ctypes.c_wchar * 128), ("VendorId", c_uint), ("DeviceId", c_uint),
+                        ("SubSysId", c_uint), ("Revision", c_uint), ("DedicatedVideoMemory", ctypes.c_size_t),
+                        ("DedicatedSystemMemory", ctypes.c_size_t), ("SharedSystemMemory", ctypes.c_size_t),
+                        ("LuidLow", ctypes.c_uint32), ("LuidHigh", ctypes.c_int32), ("Flags", c_uint)]
+
+        iid = Guid(0x770AAE78, 0xF26F, 0x4DBA, (ctypes.c_ubyte * 8)(0xA8, 0x29, 0x25, 0x3C, 0x83, 0xD1, 0xB3, 0x87))
+        factory = c_void_p()
+        if ctypes.windll.dxgi.CreateDXGIFactory1(byref(iid), byref(factory)) != 0:
+            return []
+
+        def method(obj: c_void_p, index: int, *argtypes):  # noqa: ANN002, ANN202 - COM vtable call
+            vtable = ctypes.cast(obj, POINTER(POINTER(c_void_p)))[0]
+            return WINFUNCTYPE(c_long, c_void_p, *argtypes)(vtable[index])
+
+        out = []
+        try:
+            for i in range(16):
+                adapter = c_void_p()
+                if method(factory, 12, c_uint, POINTER(c_void_p))(factory, i, byref(adapter)) != 0:
+                    break  # DXGI_ERROR_NOT_FOUND: no more adapters
+                desc = AdapterDesc1()
+                method(adapter, 10, POINTER(AdapterDesc1))(adapter, byref(desc))
+                method(adapter, 2)(adapter)  # Release
+                out.append({"index": i, "name": desc.Description, "vram_mb": desc.DedicatedVideoMemory // 2**20,
+                            "software": bool(desc.Flags & 2)})
+        finally:
+            method(factory, 2)(factory)
+        return out
+    except Exception:  # noqa: BLE001 - informative only
+        log.warning("could not list graphics adapters", exc_info=True)
+        return []
 
 
 def create_session(model: Path, *, prefer_gpu: bool = True, gpu_mem_limit_mb: int = DEFAULT_GPU_MEM_LIMIT_MB,
@@ -151,15 +207,18 @@ _speed_cache: dict[str, tuple[bool, str]] = {}
 
 
 def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
-    """Is the graphics card really faster than the CPU here? (cached per model for this process)
+    """Is a graphics card really faster than the CPU here? Picks the fastest one for DirectML.
 
-    A laptop has two GPUs; DirectML can land on the integrated one (which also draws the screen):
-    slower than the CPU and the whole PC stutters. Returns (use the GPU, note for the user / log).
+    A laptop has two GPUs and DirectML used to land on the integrated one (which also draws the
+    screen): slower than the CPU and the whole PC stutters. Every hardware adapter is timed and the
+    fastest is kept for this process (create_session then uses it). Cached per model.
+    Returns (use the GPU, note for the user / log).
     """
     import time
 
     import numpy as np
 
+    global _dml_device
     key = str(model)
     if key in _speed_cache:
         return _speed_cache[key]
@@ -174,18 +233,38 @@ def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
         return (time.perf_counter() - start) / runs * 1000
 
     try:
-        gpu = create_session(model, prefer_gpu=True)
-        if gpu.device == "cpu":
-            result = (False, gpu.fallback_reason or "Không có card đồ hoạ dùng được; dùng CPU")
+        info = configure()
+        cpu_ms = timed(create_session(model, prefer_gpu=False))
+        candidates: list[tuple[float, str, int | None]] = []  # (ms, label, DirectML device id)
+        if "CUDAExecutionProvider" in info.available:
+            cuda = create_session(model, prefer_gpu=True, allow_directml=False)
+            if cuda.device == "cuda":
+                candidates.append((timed(cuda), "GPU NVIDIA (CUDA)", None))
+        if not candidates and "DmlExecutionProvider" in info.available:
+            gpus = [g for g in list_gpus() if not g["software"]] or [{"index": i, "name": f"card {i}"} for i in (0, 1)]
+            for gpu in gpus:
+                try:
+                    sess = ort.InferenceSession(str(model), sess_options=_options(True),
+                                                providers=[("DmlExecutionProvider", {"device_id": gpu["index"]}),
+                                                           "CPUExecutionProvider"])
+                except Exception:  # noqa: BLE001 - that adapter cannot run it
+                    continue
+                if sess.get_providers()[0] != "DmlExecutionProvider":
+                    continue
+                ms = timed(Session(sess, "directml", None, Path(model)))
+                candidates.append((ms, f"GPU DirectML: {gpu['name'].strip()}", gpu["index"]))
+        if not candidates:
+            result = (False, "Không có card đồ hoạ dùng được; dùng CPU")
         else:
-            gpu_ms, cpu_ms = timed(gpu), timed(create_session(model, prefer_gpu=False))
-            label = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(gpu.device, gpu.device)
-            if gpu_ms <= cpu_ms * GPU_MUST_BE_FASTER:
-                result = (True, f"{label} {gpu_ms:.0f} ms, CPU {cpu_ms:.0f} ms")
+            measured = "; ".join(f"{label} {ms:.0f} ms" for ms, label, _ in sorted(candidates)) + f"; CPU {cpu_ms:.0f} ms"
+            best_ms, best_label, best_index = min(candidates)
+            if best_ms <= cpu_ms * GPU_MUST_BE_FASTER:
+                _dml_device = best_index
+                result = (True, f"Dùng {best_label} ({measured})")
             else:
-                result = (False, f"{label} chậm hơn CPU trên máy này ({gpu_ms:.0f} ms so với {cpu_ms:.0f} ms); dùng CPU")
+                result = (False, f"Card đồ hoạ chậm hơn CPU trên máy này ({measured}); dùng CPU")
     except Exception as exc:  # noqa: BLE001 - the CPU always works
         result = (False, f"Kiểm tra card đồ hoạ lỗi ({type(exc).__name__}); dùng CPU")
-    log.info("GPU speed check %s: %s", model.name, result)
+    log.info("GPU speed check %s: %s", Path(model).name, result)
     _speed_cache[key] = result
     return result

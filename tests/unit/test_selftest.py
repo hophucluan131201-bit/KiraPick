@@ -27,3 +27,16 @@ def test_self_test_passes_offline(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert data["ok"] and data["network_attempts"] == [] and "selection ran" in data["steps"]
     with pytest.raises(OSError):  # the block is real: any connection attempt fails and is recorded
         socket.create_connection(("example.com", 443), timeout=1)
+
+
+def test_report_in_a_missing_folder_is_not_lost(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Owner, 2.1.0b2: "%USERPROFILE%\\Desktop" did not exist (Desktop moved to OneDrive), the report
+    write crashed the exe with FileNotFoundError and the whole self-test result was lost."""
+    from app import selftest
+
+    monkeypatch.setattr(selftest, "_fallback_report_dir", lambda: tmp_path / "logs")
+    target = tmp_path / "no-such-desktop" / "r.json"
+    written = selftest._write_report(target, {"ok": True})
+    assert written == tmp_path / "logs" / "r.json" and json.loads(written.read_text(encoding="utf-8"))["ok"]
+    assert not target.parent.exists()  # no stray "Desktop" folder is created
+    assert selftest._write_report(tmp_path / "r2.json", {"ok": False}) == tmp_path / "r2.json"

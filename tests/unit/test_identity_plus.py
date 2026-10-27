@@ -542,26 +542,49 @@ def test_gpu_failure_at_run_time_switches_the_model_to_cpu(tmp_path: Path, monke
         cpu_only.run(None, {})
 
 
-def test_gpu_slower_than_cpu_is_not_used(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Laptop with two GPUs: DirectML on the integrated one is slower than the CPU -> use the CPU."""
+def test_fastest_graphics_card_is_chosen_and_slow_ones_are_not_used(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Owner's laptop: Intel UHD (adapter 0, draws the screen) + RTX 2080 (adapter 1). DirectML on
+    adapter 0 was slower than the CPU; the fastest adapter must be found and used."""
+    import time
     from types import SimpleNamespace
 
     from app.ai import runtime
 
-    def fake_session(delay_ms: float, device: str) -> SimpleNamespace:
-        import time
-
+    def slow(ms: float):  # noqa: ANN202
         def run(*_a):  # noqa: ANN002, ANN202
-            time.sleep(delay_ms / 1000)
+            time.sleep(ms / 1000)
             return [None]
-        inner = SimpleNamespace(get_inputs=lambda: [SimpleNamespace(name="x", shape=[1, 3, 8, 8])])
-        return SimpleNamespace(session=inner, run=run, device=device, fallback_reason=None)
+        return run
 
-    for gpu_ms, expected in ((40, False), (2, True)):
+    def fake_ort_session(path, sess_options=None, providers=None):  # noqa: ANN001, ANN202
+        device = providers[0][1]["device_id"]
+        return SimpleNamespace(run=slow(timings[device]), get_providers=lambda: ["DmlExecutionProvider"],
+                               get_inputs=lambda: [SimpleNamespace(name="x", shape=[1, 3, 8, 8])])
+
+    def fake_create_session(model, prefer_gpu=True, **_k):  # noqa: ANN001, ANN202 - the CPU
+        inner = SimpleNamespace(get_inputs=lambda: [SimpleNamespace(name="x", shape=[1, 3, 8, 8])])
+        return SimpleNamespace(session=inner, run=slow(10), device="cpu", fallback_reason=None)
+
+    monkeypatch.setattr(runtime, "configure", lambda: SimpleNamespace(available=["DmlExecutionProvider", "CPUExecutionProvider"]))
+    monkeypatch.setattr(runtime, "list_gpus", lambda: [
+        {"index": 0, "name": "Intel(R) UHD Graphics", "software": False},
+        {"index": 1, "name": "NVIDIA GeForce RTX 2080 Super with Max-Q Design", "software": False},
+        {"index": 2, "name": "Microsoft Basic Render Driver", "software": True}])
+    monkeypatch.setattr(runtime.ort, "InferenceSession", fake_ort_session)
+    monkeypatch.setattr(runtime, "create_session", fake_create_session)
+    try:
+        timings = {0: 40, 1: 2}
         runtime._speed_cache.clear()
-        monkeypatch.setattr(runtime, "create_session", lambda model, prefer_gpu=True, **k: (
-            fake_session(gpu_ms, "directml") if prefer_gpu else fake_session(10, "cpu")))
         use, note = runtime.gpu_speed_check(Path("m.onnx"), runs=2)
-        assert use is expected, note
-        assert ("chậm hơn CPU" in note) is (not expected)
-    runtime._speed_cache.clear()
+        assert use and runtime._dml_device == 1 and "RTX 2080" in note and "Intel" in note, note
+        assert runtime._gpu_attempts(["DmlExecutionProvider"], 1024) == [
+            ("directml", [("DmlExecutionProvider", {"device_id": 1}), "CPUExecutionProvider"])]
+
+        timings = {0: 40, 1: 30}  # every card slower than the CPU (10 ms): CPU
+        runtime._speed_cache.clear()
+        runtime._dml_device = None
+        use, note = runtime.gpu_speed_check(Path("m.onnx"), runs=2)
+        assert not use and "chậm hơn CPU" in note and runtime._dml_device is None, note
+    finally:
+        runtime._speed_cache.clear()
+        runtime._dml_device = None
