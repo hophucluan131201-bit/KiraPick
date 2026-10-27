@@ -150,3 +150,24 @@ def test_explanation_lists_strengths_weaknesses_and_not_judged() -> None:
     assert back_view.not_rated[0].startswith("khuôn mặt (không thấy rõ mặt")
     burnt = score({"eye_sharp": 0.1, "face_quality": 0.2, "face_clip": 0.3, "face_luma": 70, "area": 0.4})
     assert burnt.weaknesses.count("mặt bị cháy sáng") == 1 and "lệch nét / rung" in burnt.weaknesses
+
+
+def _with_cosine(base: np.ndarray, cos: float, seed: int) -> np.ndarray:
+    other = np.random.default_rng(seed).normal(size=base.shape).astype(np.float32)
+    other -= (other @ base) * base
+    other /= np.linalg.norm(other)
+    return (cos * base + (1 - cos**2) ** 0.5 * other).astype(np.float32)
+
+
+def test_owner_case_a_better_different_pose_beats_a_mere_landscape_crop() -> None:
+    """Owner's report (DSC_9928/9929/9939): 74-point landscape crop chosen over a 79-point new pose."""
+    base = np.random.default_rng(3).normal(size=64).astype(np.float32)
+    base /= np.linalg.norm(base)
+    hands_on_head = _cand(9928, 80, base, 0)
+    landscape = _cand(9929, 74, _with_cosine(base, 0.74, 1), 13)
+    arms_crossed = _cand(9939, 79, _with_cosine(base, 0.79, 2), 120)
+    picked = [c.asset_id for c, _ in choose([hands_on_head, landscape, arms_crossed], 2)]
+    assert picked == [9928, 9939]
+    burst_copy = _cand(9930, 85, _with_cosine(base, 0.99, 4), 1.0)  # better score but a near-copy of the first
+    picked = [c.asset_id for c, _ in choose([hands_on_head, burst_copy, arms_crossed], 2)]
+    assert picked == [9930, 9939]  # the best of the burst, then the other pose — not two copies

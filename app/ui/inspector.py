@@ -35,7 +35,7 @@ def _exposure(exif: dict) -> str:
     return "  ".join(parts) or "—"
 
 
-def explain_html(score: Score, pick_rank: int | None = None) -> str:
+def explain_html(score: Score, pick_rank: int | None = None, selection: str | None = None) -> str:
     """Score as strengths / weaknesses / not judged (rich text for a QLabel)."""
     def block(title: str, items: list[str], color: str) -> str:
         if not items:
@@ -46,6 +46,8 @@ def explain_html(score: Score, pick_rank: int | None = None) -> str:
     head = f"<b>{score.total:.0f}/100</b> điểm kỹ thuật" if score.total is not None else "<b>chưa chấm được</b>"
     if pick_rank is not None:
         head += f" · ⭐ AI chọn (thứ {pick_rank})"
+    if selection:
+        head += f"<br><i>{escape(selection)}</i>"
     return (head + block("Điểm mạnh", score.strengths, theme.KEEP)
             + block("Điểm yếu", score.weaknesses, theme.REJECT)
             + block("Chưa đánh giá", score.not_rated, theme.MUTED))
@@ -84,7 +86,9 @@ class Inspector(QWidget):
         outer.addStretch(1)
         self.show_record(None)
 
-    def show_record(self, rec: AssetRecord | None, view_source: str | None = None, people: str | None = None) -> None:
+    def show_record(self, rec: AssetRecord | None, view_source: str | None = None, people: str | None = None,
+                    selection: str | None = None) -> None:
+        """selection: why the AI picked (or did not pick) this photo, if a selection was made."""
         f = self.fields
         if rec is None:
             for label in f.values():
@@ -108,7 +112,7 @@ class Inspector(QWidget):
         if rec.score is None:
             f["Điểm chất lượng"].setText("chưa chấm — bấm 📊 Phân tích ảnh")
         else:
-            f["Điểm chất lượng"].setText(explain_html(rec.score, rec.pick_rank))
+            f["Điểm chất lượng"].setText(explain_html(rec.score, rec.pick_rank, selection))
         source = view_source or rec.preview_source
         f["Nguồn ảnh"].setText(_SOURCE_VI.get(source or "", source or "—"))
         self.error.setText(f"Lỗi: {rec.error}" if rec.error else "")

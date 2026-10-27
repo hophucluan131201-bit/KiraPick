@@ -1,10 +1,15 @@
 """Best-shot selection: N good photos that are not near-copies of each other.
 
 Greedy maximal marginal relevance (spec 4.6): at each step take the photo with
-the best ``LAMBDA * quality - (1 - LAMBDA) * similarity to what is already
-chosen``. Similarity = silhouette/framing layout (HOG of the person's box) and
-burst membership (same person a moment apart). This never changes the quality
-score itself; it only decides the order of picking.
+the best ``LAMBDA * quality - (1 - LAMBDA) * redundancy with what is already
+chosen``. Redundancy comes from the silhouette/framing layout (HOG of the
+person's box) and burst membership (same person a moment apart), rescaled so
+that only near-copies count: on the owner's shoot, burst frames ≤ 1.5 s apart
+had layout similarity median 0.98 (p5 0.89), while different poses of one look
+were already at median 0.87 — a raw similarity would punish real pose changes
+and over-reward a mere portrait/landscape change. A near-copy costs about 33
+points, so a clearly better photo still wins over a different but much worse
+one. This never changes the quality score itself; it only decides the order.
 
 Per person: every person gets their own N (a crowded look cannot crowd out a
 person with few photos); a photo with two people can be chosen for each.
@@ -22,9 +27,10 @@ import numpy as np
 from app.quality.score import Score, photo_scores
 from app.storage.project import utc_now
 
-LAMBDA = 0.5
+LAMBDA = 0.75
 BURST_S = 1.5  # photos of one person closer than this are one burst
-BURST_SIMILARITY = 0.95
+SIMILAR_FROM = 0.85  # layout similarity at/below this: different enough, no penalty
+SIMILAR_FULL = 0.97  # at/above this: a near-copy (full penalty)
 MIN_SCORE = 0.0  # every scored photo can be picked; the order does the work
 
 
@@ -47,11 +53,13 @@ class Pick:
 
 
 def similarity(a: Candidate, b: Candidate) -> float:
+    """Redundancy 0..1: 0 = clearly another pose/framing, 1 = near-copy or same burst."""
     sim = 0.0
     if a.layout is not None and b.layout is not None and len(a.layout) == len(b.layout):
-        sim = max(0.0, float(a.layout @ b.layout))
+        raw = float(a.layout @ b.layout)
+        sim = max(0.0, min(1.0, (raw - SIMILAR_FROM) / (SIMILAR_FULL - SIMILAR_FROM)))
     if a.time is not None and b.time is not None and abs(a.time - b.time) <= BURST_S:
-        sim = max(sim, BURST_SIMILARITY)
+        sim = 1.0
     return sim
 
 
@@ -125,3 +133,39 @@ def save_run(conn: sqlite3.Connection, picks: list[Pick], params: dict) -> int:
 
 def clear_picks(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM pick_runs")
+
+
+def why_not_picked(conn: sqlite3.Connection, asset_id: int) -> str | None:
+    """For a scored photo the last selection did not choose: the most likely reason, in plain words."""
+    run = conn.execute("SELECT params_json FROM pick_runs").fetchone()
+    if run is None or conn.execute("SELECT 1 FROM picks WHERE asset_id = ?", (asset_id,)).fetchone():
+        return None
+    params = json.loads(run[0])
+    subjects = [r[0] for r in conn.execute(
+        "SELECT DISTINCT subject_id FROM occurrences WHERE asset_id = ? AND subject_id IS NOT NULL", (asset_id,))]
+    subject = params.get("subject_id") if params.get("mode") == "in_view" else (subjects[0] if subjects else None)
+    if params.get("mode") == "per_person" and subject is None:
+        return "Không được chọn: chưa thuộc người nào (Chưa xác định)."
+    picked = [r[0] for r in conn.execute(
+        "SELECT asset_id FROM picks WHERE subject_id IS ?" if subject is None else
+        "SELECT asset_id FROM picks WHERE subject_id = ?", (subject,))]
+    cands = {c.asset_id: c for c in _candidates(conn, subject, set(picked) | {asset_id})}
+    me = cands.get(asset_id)
+    if me is None or me.score.total is None:
+        return None
+    nearest = max((c for a, c in cands.items() if a != asset_id), key=lambda c: similarity(me, c), default=None)
+    if nearest is not None and similarity(me, nearest) >= 0.5:
+        name = conn.execute("SELECT relative_path FROM assets WHERE id = ?", (nearest.asset_id,)).fetchone()[0]
+        better = "điểm cao hơn" if (nearest.score.total or 0) >= me.score.total else "đã được chọn trước"
+        return (f"Không được chọn: gần giống {name.rsplit('/', 1)[-1]} ({better}) — "
+                "cùng dáng/khung hoặc chụp liên tiếp.")
+    return (f"Không được chọn: đã đủ {params.get('n')} ảnh"
+            + (" cho người này" if params.get("mode") == "per_person" else "")
+            + ", các ảnh được chọn có điểm cao hơn hoặc khác dáng hơn.")
+
+
+def pick_reason(reason_json: str | None, rank: int) -> str:
+    if rank == 1:
+        return "điểm cao nhất"
+    sim = json.loads(reason_json or "{}").get("similar_to_earlier", 0) or 0
+    return "điểm cao và khác dáng với các ảnh đã chọn" if sim < 0.5 else "điểm cao (dáng hơi giống một ảnh đã chọn)"

@@ -497,6 +497,10 @@ def test_per_person_selection_covers_everyone_even_from_a_person_view(qtbot, env
     assert "cho 3 người" in w.status.text()
     first = [r.id for r in w.model.records()][:5]
     assert set(first) == set(chosen)
+    w.select_row(0)
+    assert "Được chọn vì: điểm cao nhất" in w.inspector.fields["Điểm chất lượng"].text()
+    w.select_row(5)  # the photo of person 1 that was left out
+    assert "Không được chọn" in w.inspector.fields["Điểm chất lượng"].text()
 
 
 def test_ctrl_and_shift_click_select_several_in_grid_and_filmstrip(qtbot, env: dict) -> None:

@@ -894,6 +894,19 @@ class MainWindow(QMainWindow):
                 self.teacher.assigned(conn, targets[chosen], assets)
         self._after_people_change()
 
+    def _selection_text(self, rec: AssetRecord | None) -> str | None:
+        """Why the last ⭐ selection chose this photo, or did not."""
+        if rec is None or self.project is None or rec.score is None:
+            return None
+        try:
+            if rec.pick_rank is not None:
+                row = self.project.conn.execute("SELECT reason_json FROM picks WHERE asset_id = ?", (rec.id,)).fetchone()
+                return "Được chọn vì: " + select.pick_reason(row[0] if row else None, rec.pick_rank)
+            return select.why_not_picked(self.project.conn, rec.id)
+        except Exception:  # noqa: BLE001 - an explanation must never break browsing
+            log.exception("selection explanation failed")
+            return None
+
     def _people_text(self, asset_id: int) -> str | None:
         if self.project is None:
             return None
@@ -913,7 +926,8 @@ class MainWindow(QMainWindow):
         return ", ".join(parts) if parts else "không thấy người"
 
     def _show_inspector(self, rec: AssetRecord | None) -> None:
-        self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None)
+        self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None,
+                                   selection=self._selection_text(rec))
 
     # ------------------------------------------------------- navigation
     def reload_preserving_view(self) -> None:
@@ -956,7 +970,8 @@ class MainWindow(QMainWindow):
 
     def _on_current_changed(self, current: QModelIndex, _prev: QModelIndex) -> None:
         rec = self.model.record(current)
-        self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None)
+        self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None,
+                                   selection=self._selection_text(rec))
         if rec is not None and self.center.currentIndex() == 2:
             self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec))
 

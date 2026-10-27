@@ -21,7 +21,7 @@ required — a listed provider does not prove inference works).
 | M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
 | M2 Identity | **implemented + tested (synthetic + 7 real photos)** | Detection, face embeddings, look-first grouping (face + outfit within 5 min), people panel, review queue, manual corrections that survive re-analysis. **Calibrated on one labelled shoot only** (precision 1.00 / recall 0.76, thin margin); no body re-ID model yet (OSNet/DINOv2 blocked from dev container) |
 | M3 Quality | **implemented + tested (synthetic + 7 real NEF)** | Per-person technical score: eye/face/body sharpness on the full-resolution image, eDifFIQA face quality, face/person exposure, framing; N/A redistribution + confidence; warnings. **Not measured: eyes closed, aesthetics** (no suitable offline model yet). Rubric mappings are starting values, not calibrated on the owner's choices |
-| M4 Best shot | **implemented + tested (synthetic)** | ⭐ Chọn ảnh: N per person or N in the current view, greedy MMR (λ 0.5) over score vs layout/burst similarity, picks first then by score, optional Keep marks (never overrides user flags). No compare view yet; no burst table (bursts = same person ≤ 1.5 s apart) |
+| M4 Best shot | **implemented + tested (synthetic)** | ⭐ Chọn ảnh: N per person or N in the current view, greedy MMR (λ 0.75) over score vs near-copy redundancy (layout similarity rescaled 0.85→0.97, same burst = copy), picks first then by score, optional Keep marks (never overrides user flags). No compare view yet; no burst table (bursts = same person ≤ 1.5 s apart) |
 | M5 Local VLM | not started | |
 | M6 Release | not started | |
 
@@ -150,6 +150,12 @@ Owner feedback 2026-10-27 (UI): no obvious way back from the large view. Added a
 large view, and a small cheat sheet of keys under the photos that follows the current view
 (toggle "⌨ Phím tắt", remembered; F1 = full list).
 
+Owner question 2026-10-27: why a 74-point photo was picked over 79/78-point ones (DSC_9929 vs
+9939/9933). The raw HOG layout similarity rewarded a portrait→landscape crop and punished real pose
+changes (measured on the full shoot: bursts ≤ 1.5 s median 0.98, different poses of one look 0.87).
+Fixed: only near-copies are penalised (rescaled 0.85→0.97), quality weight 0.75; the right panel
+says why each photo was picked or left out.
+
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
 quality 5.8 s for 7 photos (quality ≈ 0.1–0.3 s/photo + full-res JPEG decode 0.1–0.7 s).
@@ -211,7 +217,7 @@ stragglers (profile, motion blur, hands over face) that the owner can merge with
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-252 passed in 60.72s
+253 passed in 55.34s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):
