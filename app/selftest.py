@@ -1,6 +1,7 @@
 """Offline self-test of an installed/packaged app: ``Snorlu.exe --self-test report.json``.
 
-Proves on the target machine, with every outgoing network connection blocked,
+Proves on the target machine, with every outgoing Python network connection blocked
+(native libraries are covered by switching their telemetry off: see app/__init__.py),
 that the bundled models are present and verified, ONNX Runtime and OpenCV load,
 and the full pipeline (import -> people -> quality -> grouping -> selection)
 runs on two synthetic photos. Never touches the user's photos or sessions:
@@ -53,6 +54,11 @@ def run(report_path: Path) -> int:
         from app.ai.runtime import configure
 
         report["version"] = __version__
+        import os
+
+        if os.environ.get("ORT_DISABLE_TELEMETRY") != "1":
+            raise RuntimeError("ONNX Runtime telemetry is not disabled")
+        report["steps"].append("ONNX Runtime telemetry disabled (ORT_DISABLE_TELEMETRY=1)")
         registry = ModelRegistry()
         report["models_dir"] = str(registry.models_dir)
         report["models"] = {s.spec.id: s.state.value for s in registry.all_status()}

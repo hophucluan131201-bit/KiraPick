@@ -23,7 +23,7 @@ required — a listed provider does not prove inference works).
 | M3 Quality | **implemented + tested (synthetic + 7 real NEF)** | Per-person technical score: eye/face/body sharpness on the full-resolution image, eDifFIQA face quality, face/person exposure, framing; N/A redistribution + confidence; warnings. **Not measured: eyes closed, aesthetics** (no suitable offline model yet). Rubric mappings are starting values, not calibrated on the owner's choices |
 | M4 Best shot | **implemented + tested (synthetic)** | ⭐ Chọn ảnh: N per person or N in the current view, greedy MMR (λ 0.75) over score vs near-copy redundancy (layout similarity rescaled 0.85→0.97, same burst = copy), picks first then by score, optional Keep marks (never overrides user flags). No compare view yet; no burst table (bursts = same person ≤ 1.5 s apart) |
 | M5 Local VLM | not started | |
-| M6 Release | **implemented; Windows build not yet run** | CPU installer: PyInstaller onedir + Inno Setup per-user, verified models (YuNet, SFace, YOLOX-S, eDifFIQA; YOLOX-M GPU-only not shipped), `--self-test` with network blocked, portable zip, CI workflow. Verified here: Linux PyInstaller build launches and passes the self-test offline. **Not verified: the Windows build/installer itself** (no Windows machine in this environment); unsigned (SmartScreen warning); no GPU variant yet. Release flow: pushing tag `v*` makes GitHub Actions build on Windows, self-test and publish a (pre)release with `…-BoCai.zip` (Setup.exe + Vietnamese click-by-click guide), portable zip and Setup.exe. License: PolyForm Noncommercial 1.0.0 (owner: personal, non-commercial) |
+| M6 Release | **implemented; Windows build not yet run** | CPU installer: PyInstaller onedir + Inno Setup per-user, verified models (YuNet, SFace, YOLOX-S, eDifFIQA; YOLOX-M GPU-only not shipped), `--self-test` with network blocked, portable zip, CI workflow. Verified here: Linux PyInstaller build launches and passes the self-test offline. **Not verified: the Windows build/installer itself** (no Windows machine in this environment); unsigned (SmartScreen warning); no GPU variant yet. Release flow: a push to main with `[release]` in the commit message (or a `v*` tag) makes GitHub Actions build on Windows, self-test and publish a (pre)release with `…-BoCai.zip` (Setup.exe + Vietnamese click-by-click guide), portable zip and Setup.exe. License: PolyForm Noncommercial 1.0.0 (owner: personal, non-commercial) |
 
 ## Done in this session — RAW/JPEG ingest (`app/ingest/`)
 
@@ -155,6 +155,14 @@ Owner question 2026-10-27: why a 74-point photo was picked over 79/78-point ones
 changes (measured on the full shoot: bursts ≤ 1.5 s median 0.98, different poses of one look 0.87).
 Fixed: only near-copies are penalised (rescaled 0.85→0.97), quality weight 0.75; the right panel
 says why each photo was picked or left out.
+
+**Offline finding 2026-10-27:** ONNX Runtime 1.31 starts Microsoft 1DS telemetry on `import`
+(HTTPS to mobile.events.data.microsoft.com, retried 4× per process, plus a local store in
+`~/.cache/Microsoft/DeveloperTools/.onnxruntime`); `disable_telemetry_events()` came too late. Seen
+as refused connections in the dev container's egress proxy log during test runs. Fixed by setting
+`ORT_DISABLE_TELEMETRY=1` in `app/__init__.py` (before any import of onnxruntime): no attempt and
+no store afterwards (full suite + self-test re-run, proxy log clean). The self-test now checks the
+switch; its socket block only covers Python code, not native libraries.
 
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
