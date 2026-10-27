@@ -126,6 +126,7 @@ def make_filmstrip(parent: QWidget, cell: int) -> QListView:
     view.setMovement(QListView.Movement.Static)
     view.setUniformItemSizes(True)
     view.setHorizontalScrollMode(QListView.ScrollMode.ScrollPerPixel)
+    view.setSelectionMode(QListView.SelectionMode.ExtendedSelection)  # Ctrl/Shift+click also under the loupe
     view.setItemDelegate(ThumbnailDelegate(cell, view, caption=False))
     view.setFixedHeight(cell + 24)
     return view

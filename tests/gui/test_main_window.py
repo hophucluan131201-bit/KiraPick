@@ -497,3 +497,30 @@ def test_per_person_selection_covers_everyone_even_from_a_person_view(qtbot, env
     assert "cho 3 người" in w.status.text()
     first = [r.id for r in w.model.records()][:5]
     assert set(first) == set(chosen)
+
+
+def test_ctrl_and_shift_click_select_several_in_grid_and_filmstrip(qtbot, env: dict) -> None:
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+
+    def click(view, row: int, modifier=Qt.KeyboardModifier.NoModifier) -> None:  # noqa: ANN001
+        rect = view.visualRect(w.model.index(row))
+        view.scrollTo(w.model.index(row))
+        rect = view.visualRect(w.model.index(row))
+        qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, modifier, rect.center())
+
+    click(w.grid, 0)
+    click(w.grid, 2, Qt.KeyboardModifier.ControlModifier)
+    assert sorted(r.name for r in w.selected_records()) == ["DSC_0000.jpg", "DSC_0002.jpg"]
+    _key(qtbot, w, Qt.Key.Key_K)
+    assert [r.flag for r in w.model.records()][:3] == ["keep", None, "keep"]
+
+    _key(qtbot, w, Qt.Key.Key_Space)  # loupe + filmstrip, like the owner's screen
+    assert w.center.currentIndex() == 2
+    click(w.filmstrip, 0)
+    click(w.filmstrip, 2, Qt.KeyboardModifier.ShiftModifier)
+    assert len(w.selected_records()) == 3
+    _key(qtbot, w, Qt.Key.Key_U)  # clears all three ticks
+    assert [r.flag for r in w.model.records()][:3] == [None, None, None]
+    _key(qtbot, w, Qt.Key.Key_Right)  # moving on selects a single photo again
+    assert len(w.selected_records()) == 1

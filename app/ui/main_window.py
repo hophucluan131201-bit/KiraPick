@@ -1088,10 +1088,12 @@ class MainWindow(QMainWindow):
 
     # --------------------------------------------------------- culling
     def _targets(self) -> list[AssetRecord]:
-        if self.center.currentIndex() == 2:
-            rec = self.current_record()
-            return [rec] if rec else []
-        return self.selected_records() or ([self.current_record()] if self.current_record() else [])
+        """Photos a K/X/U/stars key applies to: every selected photo (grid or filmstrip), else the current one."""
+        selected = self.selected_records()
+        current = self.current_record()
+        if len(selected) > 1:
+            return selected
+        return [current] if current else selected
 
     def _apply(self, fn: object, *, advance: bool = False) -> None:
         if self.project is None:
