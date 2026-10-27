@@ -71,15 +71,16 @@ class ExportThread(QThread):
 
 
 class AnalyzeThread(QThread):
-    """Runs AnalyzeJob (people/faces + grouping) with its own database connection."""
+    """Runs AnalyzeJob ('people': detection + grouping, or 'quality': scoring) with its own connection."""
 
     progress = Signal(str, int, int)
     succeeded = Signal(dict)
     failed = Signal(str)
 
-    def __init__(self, project_folder: Path) -> None:
+    def __init__(self, project_folder: Path, mode: str = "people") -> None:
         super().__init__()
         self.project_folder = project_folder
+        self.mode = mode
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
@@ -98,8 +99,8 @@ class AnalyzeThread(QThread):
 
         try:
             with Project.open(self.project_folder) as project:
-                summary = AnalyzeJob(project).run(progress=emit, should_cancel=self._cancel.is_set)
-            self.succeeded.emit(asdict(summary))
+                summary = AnalyzeJob(project).run(progress=emit, should_cancel=self._cancel.is_set, mode=self.mode)
+            self.succeeded.emit(asdict(summary) | {"mode": self.mode})
         except ModelUnavailableError as exc:
             self.failed.emit(f"{exc}\n\nChạy lệnh sau một lần (cần Internet):\n"
                              ".\\.venv\\Scripts\\python .\\scripts\\fetch_models.py")

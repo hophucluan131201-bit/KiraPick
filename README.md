@@ -61,8 +61,14 @@ together, never overwrites (a different file with the same name gets " (1)"), sk
 exported there (identical bytes), refuses the shoot folder itself as destination, and writes a
 CSV/JSON list into the `_snorlu_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\logs`.
 
-**People (🧠 Phân tích ảnh)** runs automatically after an import (GPU if available, CPU otherwise),
-in the background. The **NGƯỜI** list shows each recognised person with a face thumbnail; click to
+**Step by step.** Nothing runs on its own; each button becomes available when the previous step is
+done, so you can correct the result in between:
+1. **📂 Nhập ảnh** — import only.
+2. **🧠 Nhận diện người** — find and group people (GPU if available), then stop so you can fix groups.
+3. **📊 Phân tích ảnh** — technical score of every person in every photo.
+4. **⭐ Chọn ảnh** — pick N varied best shots; review with K/X; **⤴ Xuất ảnh**.
+
+**People (🧠 Nhận diện người)** runs in the background. The **NGƯỜI** list shows each recognised person with a face thumbnail; click to
 filter, double-click to name; tick the boxes of several people and press **🔗 Gộp người** in the
 toolbar to merge them (or select several + right-click). Photos where the face is not
 clearly visible are only *suggested* (a "?" badge) or listed under **Chưa xác định**. **Cần xem lại**
@@ -72,9 +78,10 @@ gap, your answer) in `%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\learning` — per 
 in the installer, so friends who install the app teach it their own way. Models: see
 `docs/model-licenses.md`; fetch once with `python scripts/fetch_models.py`.
 
-**Best shots (⭐ Chọn ảnh)**: 🧠 Phân tích ảnh also scores each person in each photo (sharpness at
-the eyes measured on the full-resolution image, face quality, exposure, framing — shown in the right
-panel with warnings). ⭐ Chọn ảnh asks for N (per person, or in the current view) and picks the best
+**Best shots (⭐ Chọn ảnh)**: 📊 Phân tích ảnh scores each person in each photo (sharpness at
+the eyes measured on the full-resolution image, face quality, exposure, framing). The right panel
+lists **Điểm mạnh** (strengths), **Điểm yếu** (weaknesses) and **Chưa đánh giá** (what could not be
+judged, e.g. eyes closed and aesthetics — no model yet). ⭐ Chọn ảnh asks for N (per person, or in the current view) and picks the best
 photos while skipping near-copies (same pose, same burst). Picked photos get an “AI” badge, go to
 the top of the list (sorting box under the search field) and can be marked Keep automatically
 (your own Keep/Reject is never changed). Review with K/X, then ⤴ Xuất ảnh → “Ảnh đã Giữ”.

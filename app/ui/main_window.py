@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
         self._restored_note = ""
         self.import_thread: ImportThread | None = None
         self.analyze_thread: AnalyzeThread | None = None
-        self._paused_job: str | None = None  # "import" | "analyze"
+        self._paused_job: str | None = None  # "import" | "people" | "quality"
         self._registry: ModelRegistry | None = None
         self._last_import_root: Path | None = None
         self.model = AssetListModel(self)
@@ -91,6 +91,7 @@ class MainWindow(QMainWindow):
         self._build_body()
         self._build_statusbar()
         self._build_shortcuts()
+        self._update_steps()
 
         self._restore_geometry()
 
@@ -137,9 +138,13 @@ class MainWindow(QMainWindow):
         self.act_import.setToolTip("Nhập một thư mục ảnh (Ctrl+I)")
         self.act_import.setShortcut(QKeySequence("Ctrl+I"))
         self.act_import.triggered.connect(self.choose_and_import)
-        self.act_analyze = QAction("🧠 Phân tích ảnh", self)
-        self.act_analyze.setToolTip("AI tìm người, gom ảnh theo từng người và chấm điểm kỹ thuật (chạy nền, offline)")
-        self.act_analyze.triggered.connect(self.start_analysis)
+        # The workflow goes step by step; each step waits for the user (and their corrections).
+        self.act_analyze = QAction("🧠 Nhận diện người", self)
+        self.act_analyze.setToolTip("Bước 2: AI tìm người trong ảnh và gom theo từng người. Xong thì dừng để bạn "
+                                    "kiểm tra, gộp/tách cho đúng.")
+        self.act_analyze.triggered.connect(lambda: self.start_analysis("people"))
+        self.act_quality = QAction("📊 Phân tích ảnh", self)
+        self.act_quality.triggered.connect(lambda: self.start_analysis("quality"))
         self.act_reset = QAction("↺ Làm lại", self)
         self.act_reset.setToolTip("Quên các dấu Giữ/Loại/sao và danh sách khách của thư mục này, nhập lại từ đầu")
         self.act_reset.triggered.connect(self.reset_current_folder)
@@ -166,10 +171,9 @@ class MainWindow(QMainWindow):
         self.act_merge.setEnabled(False)
         self.act_merge.triggered.connect(lambda: self.merge_selected_people())
         self.act_select = QAction("⭐ Chọn ảnh", self)
-        self.act_select.setToolTip("AI chọn N ảnh đẹp, khác dáng nhau; bạn xem lại rồi xuất ảnh")
         self.act_select.triggered.connect(lambda: self.open_select_dialog())
-        for act in (self.act_import, self.act_analyze, self.act_merge, self.act_select, self.act_client_list,
-                    self.act_export, self.act_loupe, self.act_reset):
+        for act in (self.act_import, self.act_analyze, self.act_merge, self.act_quality, self.act_select,
+                    self.act_client_list, self.act_export, self.act_loupe, self.act_reset):
             tb.addAction(act)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
@@ -326,6 +330,7 @@ class MainWindow(QMainWindow):
         self._fill_people()
         self._refresh_sidebar()
         self._update_empty_state()
+        self._update_steps()
         if self.model.rowCount():
             self.select_row(0)
 
@@ -343,6 +348,7 @@ class MainWindow(QMainWindow):
         self._session_root = None
         self._paused_job = None
         self._fill_people()
+        self._update_steps()
 
     def _remembered_summary(self) -> str:
         assert self.project is not None
@@ -414,6 +420,7 @@ class MainWindow(QMainWindow):
         self.act_import.setEnabled(False)
         self._reload_timer.start()
         thread.start()
+        self._update_steps()
         return thread
 
     def _on_import_progress(self, phase: str, done: int, total: int) -> None:
@@ -468,8 +475,9 @@ class MainWindow(QMainWindow):
         self._update_empty_state()
         if not self.grid.currentIndex().isValid() and self.model.rowCount():
             self.select_row(0)
-        if not cancelled and self.settings.value("auto_analyze", True, bool) and self.models_ready():
-            self.start_analysis()
+        self._update_steps()
+        if not cancelled and self.project is not None:
+            self.status.setText(self.status.text().rstrip(". ") + ". Bước tiếp theo: bấm 🧠 Nhận diện người.")
 
     def _pause_or_resume(self) -> None:
         running = self.import_thread or self.analyze_thread
@@ -477,8 +485,8 @@ class MainWindow(QMainWindow):
             running.cancel()
             self.pause_button.setEnabled(False)
             self.status.setText("Đang tạm dừng…")
-        elif self._paused_job == "analyze":
-            self.start_analysis()
+        elif self._paused_job in ("people", "quality"):
+            self.start_analysis(self._paused_job)
         elif self._last_import_root is not None:
             self.start_import(self._last_import_root)
 
@@ -514,13 +522,40 @@ class MainWindow(QMainWindow):
             self._registry = ModelRegistry()
         return self._registry.ready("identity")
 
-    def start_analysis(self) -> AnalyzeThread | None:
+    def _step_state(self) -> tuple[int, int, int]:
+        """(photos, photos with people detected, photos scored) of the current folder."""
+        if self.project is None:
+            return 0, 0, 0
+        conn = self.project.conn
+        photos = conn.execute("SELECT COUNT(*) FROM assets WHERE status = 'ok'").fetchone()[0]
+        detected = conn.execute(
+            "SELECT COUNT(*) FROM stage_status WHERE stage = 'detect' AND state = 'done'").fetchone()[0]
+        scored = conn.execute(
+            "SELECT COUNT(DISTINCT asset_id) FROM measurements WHERE extractor = 'quality'").fetchone()[0]
+        return photos, detected, scored
+
+    def _update_steps(self) -> None:
+        """Enable each step only when the previous one is done and nothing is running."""
+        busy = self.import_thread is not None or self.analyze_thread is not None
+        photos, detected, scored = self._step_state()
+        self.act_analyze.setEnabled(not busy and photos > 0)
+        self.act_quality.setEnabled(not busy and detected > 0)
+        self.act_select.setEnabled(not busy and scored > 0)
+        self.act_quality.setToolTip(
+            "Bước 3: chấm điểm từng người trong ảnh (nét ở mắt, mặt, sáng, bố cục)."
+            + ("" if detected else " Hãy bấm 🧠 Nhận diện người trước."))
+        self.act_select.setToolTip(
+            "Bước 4: AI chọn N ảnh đẹp, khác dáng nhau; bạn xem lại rồi ⤴ Xuất ảnh."
+            + ("" if scored else " Hãy bấm 📊 Phân tích ảnh trước."))
+
+    def start_analysis(self, mode: str = "people") -> AnalyzeThread | None:
         if self.project is None or self.import_thread is not None or self.analyze_thread is not None:
             return None
-        thread = AnalyzeThread(self.project.folder)
+        thread = AnalyzeThread(self.project.folder, mode)
         thread.progress.connect(self._on_analyze_progress)
         thread.succeeded.connect(self._on_analyze_done)
-        thread.failed.connect(lambda msg: QMessageBox.warning(self, "Nhận diện người", msg))
+        title = "Nhận diện người" if mode == "people" else "Phân tích ảnh"
+        thread.failed.connect(lambda msg: QMessageBox.warning(self, title, msg))
         thread.finished.connect(self._on_analyze_thread_finished)
         self.analyze_thread = thread
         self._paused_job = None
@@ -529,8 +564,8 @@ class MainWindow(QMainWindow):
         self.pause_button.setText("Tạm dừng")
         self.pause_button.setVisible(True)
         self.pause_button.setEnabled(True)
-        self.act_analyze.setEnabled(False)
         thread.start()
+        self._update_steps()
         return thread
 
     def _stop_analysis(self) -> None:
@@ -541,7 +576,7 @@ class MainWindow(QMainWindow):
         self.analyze_thread = None
         thread.cancel()
         thread.wait(30000)
-        self.act_analyze.setEnabled(True)
+        self._update_steps()
         if self.import_thread is None:
             self.progress.setVisible(False)
             self.pause_button.setVisible(False)
@@ -562,9 +597,16 @@ class MainWindow(QMainWindow):
         if self.sender() is not self.analyze_thread or self.project is None:
             return  # a stopped thread (closing window / switching folder)
         if summary["cancelled"]:
-            self.status.setText(f"Đã tạm dừng nhận diện ({summary['analysed']} ảnh xong). Bấm “Tiếp tục” để làm tiếp.")
+            done = summary["analysed"] if summary.get("mode") != "quality" else summary["measured"]
+            self.status.setText(f"Đã tạm dừng ({done} ảnh xong). Bấm “Tiếp tục” để làm tiếp.")
             return
         assert self.project is not None
+        if summary.get("mode") == "quality":
+            parts = [f"Phân tích xong: {self._step_state()[2]} ảnh có điểm"]
+            if summary.get("measure_failed"):
+                parts.append(f"{summary['measure_failed']} ảnh không chấm được")
+            self.status.setText(", ".join(parts) + ". Bước tiếp theo: bấm ⭐ Chọn ảnh, hoặc xếp theo điểm.")
+            return
         people = self.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
         unknown = self.project.conn.execute(
             "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE is_main = 1 AND subject_id IS NULL").fetchone()[0]
@@ -575,21 +617,21 @@ class MainWindow(QMainWindow):
             parts.append(f"{review} gợi ý cần xem lại")
         if summary["failed"]:
             parts.append(f"{summary['failed']} ảnh lỗi")
-        if summary.get("measure_failed"):
-            parts.append(f"{summary['measure_failed']} ảnh không chấm được điểm")
         note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
-        self.status.setText(", ".join(parts) + "." + note)
+        self.status.setText(", ".join(parts) + "." + note
+                            + " Hãy kiểm tra, gộp/tách người cho đúng, rồi bấm 📊 Phân tích ảnh.")
 
     def _on_analyze_thread_finished(self) -> None:
         if self.sender() is not self.analyze_thread:
             return  # stopped via _stop_analysis; the window may already have closed the database
         cancelled = self.analyze_thread is not None and self.analyze_thread.cancel_requested
+        mode = self.analyze_thread.mode if self.analyze_thread is not None else "people"
         self.analyze_thread = None
-        self.act_analyze.setEnabled(True)
+        self._update_steps()
         if self.import_thread is None:
             self.progress.setVisible(False)
             if cancelled and self.project is not None:
-                self._paused_job = "analyze"
+                self._paused_job = mode
                 self.pause_button.setText("Tiếp tục")
                 self.pause_button.setEnabled(True)
             else:

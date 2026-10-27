@@ -20,6 +20,7 @@ PROFILE_VERSION = "cosplay-tech-v1"
 WEIGHTS = {"focus": 35, "face": 25, "exposure": 20, "framing": 20}
 LABELS = {"focus": "nét", "face": "mặt", "exposure": "sáng", "framing": "bố cục"}
 NOT_MEASURED = ("mắt nhắm/mở", "thẩm mỹ tổng thể")
+GOOD, POOR = 75.0, 45.0  # a criterion at/above GOOD is a strength, at/below POOR a weakness
 
 
 @dataclass(slots=True)
@@ -27,7 +28,10 @@ class Score:
     total: float | None  # 0..100, None if nothing could be judged
     parts: dict[str, float | None]
     confidence: float  # share of the rubric weight that was observable
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)  # serious problems (also listed in weaknesses)
+    strengths: list[str] = field(default_factory=list)
+    weaknesses: list[str] = field(default_factory=list)
+    not_rated: list[str] = field(default_factory=list)  # criteria that could not be judged, with why
 
     def summary(self) -> str:
         if self.total is None:
@@ -78,12 +82,64 @@ def score(v: dict) -> Score:
         if v["area"] < 0.05:
             frame -= 30  # subject is tiny in the frame
         parts["framing"] = max(0.0, frame)
+    strengths, weaknesses, not_rated = _explain(v, parts, warnings)
     used = {k: w for k, w in WEIGHTS.items() if parts[k] is not None}
     if not used:
-        return Score(None, parts, 0.0, warnings)
+        return Score(None, parts, 0.0, warnings, strengths, weaknesses, not_rated)
     total = sum(parts[k] * w for k, w in used.items()) / sum(used.values())  # type: ignore[operator]
     return Score(round(total, 1), {k: None if x is None else round(x, 1) for k, x in parts.items()},
-                 round(sum(used.values()) / sum(WEIGHTS.values()), 2), warnings)
+                 round(sum(used.values()) / sum(WEIGHTS.values()), 2), warnings, strengths, weaknesses, not_rated)
+
+
+def _explain(v: dict, parts: dict[str, float | None], warnings: list[str]) -> tuple[list[str], list[str], list[str]]:
+    """Plain-language strengths / weaknesses / not judged, each backed by a measurement."""
+    good: list[str] = []
+    bad: list[str] = list(warnings)
+    todo: list[str] = []
+    eyes = v.get("eye_sharp") is not None
+    focus, face, light, frame = parts["focus"], parts["face"], parts["exposure"], parts["framing"]
+    if focus is None:
+        todo.append("độ nét (vùng đo quá nhỏ hoặc quá phẳng)")
+    elif focus >= GOOD:
+        good.append("nét ở mắt" if eyes else "người nét")
+    elif focus > POOR:
+        bad.append("nét chưa tới, hơi mềm" + (" ở mắt" if eyes else ""))
+    elif not any(w in bad for w in ("lệch nét / rung", "người không nét")):
+        bad.append("thiếu nét")
+    if face is None:
+        todo.append("khuôn mặt (không thấy rõ mặt" + (")" if v.get("face_sharp") is not None
+                                                       else " hoặc chưa có mô hình chấm mặt)"))
+    elif face >= GOOD:
+        good.append("mặt rõ, dễ nhìn")
+    elif face > POOR:
+        bad.append("mặt chưa rõ lắm (hơi nghiêng, che hoặc mềm)")
+    elif "mặt khó thấy (che, nghiêng, mờ)" not in bad:
+        bad.append("mặt khó thấy (che, nghiêng, mờ)")
+    luma = v.get("face_luma") if v.get("face_luma") is not None else v.get("body_luma")
+    if light is None:
+        todo.append("ánh sáng")
+    elif light >= GOOD:
+        good.append("sáng tốt, mặt không cháy" if v.get("face_luma") is not None else "sáng tốt")
+    else:
+        if luma is not None and luma < 25:
+            bad.append("tối (nếu chụp low-key có chủ ý thì bỏ qua)")
+        elif luma is not None and luma > 85:
+            bad.append("hơi sáng quá")
+        elif "mặt bị cháy sáng" not in bad:
+            bad.append("có vùng cháy sáng trên người")
+    if frame is None:
+        todo.append("bố cục")
+    else:
+        if v.get("cut_side"):
+            bad.append("người bị cắt ở mép ảnh")
+        if (v.get("area") or 1) < 0.05:
+            bad.append("người quá nhỏ trong khung")
+        if (v.get("offcentre") or 0) > 0.8:
+            bad.append("người nằm sát mép khung")
+        if frame >= GOOD and not v.get("cut_head"):
+            good.append("bố cục gọn, đủ người")
+    todo += [f"{name} (chưa có mô hình)" for name in NOT_MEASURED]
+    return good, bad, todo
 
 
 def occurrence_scores(conn: sqlite3.Connection) -> dict[int, Score]:

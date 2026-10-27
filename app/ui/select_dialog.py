@@ -31,7 +31,7 @@ class SelectDialog(QDialog):
         intro.setWordWrap(True)
         layout.addWidget(intro)
         if scored == 0:
-            warn = QLabel("⚠ Chưa có ảnh nào được chấm điểm. Hãy bấm 🧠 Phân tích ảnh trước.")
+            warn = QLabel("⚠ Chưa có ảnh nào được chấm điểm. Hãy bấm 📊 Phân tích ảnh trước.")
             warn.setWordWrap(True)
             layout.addWidget(warn)
         self.per_person = QRadioButton(f"Mỗi người N ảnh ({people} người)")

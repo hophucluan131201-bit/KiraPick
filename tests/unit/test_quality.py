@@ -135,3 +135,18 @@ def test_per_person_selection_and_saved_run(project: Project) -> None:
         save_run(conn, select_in_view(conn, 1, {1, 2, 4}), {"n": 1})  # replaces the previous run
     assert [r[0] for r in project.conn.execute("SELECT asset_id FROM picks")] == [1]
     assert decisions.get(project.conn, 1).flag is None  # choosing never sets a flag by itself
+
+
+def test_explanation_lists_strengths_weaknesses_and_not_judged() -> None:
+    good = score({"eye_sharp": 0.8, "face_quality": 0.8, "face_clip": 0.0, "face_luma": 55, "area": 0.4,
+                  "offcentre": 0.1, "cut_head": 0.0, "cut_side": 0.0, "face_sharp": 0.7})
+    assert good.strengths == ["nét ở mắt", "mặt rõ, dễ nhìn", "sáng tốt, mặt không cháy", "bố cục gọn, đủ người"]
+    assert not good.weaknesses and good.not_rated == ["mắt nhắm/mở (chưa có mô hình)",
+                                                      "thẩm mỹ tổng thể (chưa có mô hình)"]
+    back_view = score({"body_sharp": 0.5, "body_clip": 0.0, "body_luma": 12, "area": 0.03, "cut_side": 1.0})
+    assert "nét chưa tới, hơi mềm" in back_view.weaknesses
+    assert "tối (nếu chụp low-key có chủ ý thì bỏ qua)" in back_view.weaknesses
+    assert {"người bị cắt ở mép ảnh", "người quá nhỏ trong khung"} <= set(back_view.weaknesses)
+    assert back_view.not_rated[0].startswith("khuôn mặt (không thấy rõ mặt")
+    burnt = score({"eye_sharp": 0.1, "face_quality": 0.2, "face_clip": 0.3, "face_luma": 70, "area": 0.4})
+    assert burnt.weaknesses.count("mặt bị cháy sáng") == 1 and "lệch nét / rung" in burnt.weaknesses

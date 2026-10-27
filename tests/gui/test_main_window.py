@@ -37,8 +37,6 @@ def _window(qtbot, env: dict) -> mw.MainWindow:
 
     apply_dark_theme(QApplication.instance())
     settings = QSettings(env["ini"], QSettings.Format.IniFormat)
-    if settings.value("auto_analyze") is None:
-        settings.setValue("auto_analyze", env.get("auto_analyze", False))  # AI has its own tests
     w = mw.MainWindow(settings=settings)
     qtbot.addWidget(w)
     w.show()
@@ -300,13 +298,21 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     for f in photos:
         shutil.copy2(f, shoot / f.name)
 
-    env["auto_analyze"] = True
     w = _window(qtbot, env)
     if not w.models_ready():
         pytest.skip("AI models not fetched")
+    # Step by step: importing does not start the AI; each later step waits for the previous one.
     w.start_import(shoot)
-    qtbot.waitUntil(lambda: w.import_thread is None and w.analyze_thread is None
-                    and "Nhận diện xong" in w.status.text(), timeout=120000)
+    qtbot.waitUntil(lambda: w.import_thread is None, timeout=60000)
+    assert w.analyze_thread is None and "🧠 Nhận diện người" in w.status.text()
+    assert w.act_analyze.isEnabled() and not w.act_quality.isEnabled() and not w.act_select.isEnabled()
+    w.start_analysis("people")
+    qtbot.waitUntil(lambda: w.analyze_thread is None and "Nhận diện xong" in w.status.text(), timeout=120000)
+    assert not w.project.conn.execute("SELECT 1 FROM measurements").fetchone()  # no scoring yet
+    assert w.act_quality.isEnabled() and not w.act_select.isEnabled()
+    w.start_analysis("quality")
+    qtbot.waitUntil(lambda: w.analyze_thread is None and "Phân tích xong" in w.status.text(), timeout=120000)
+    assert w.act_select.isEnabled()
     subjects = actions.subjects_summary(w.project.conn)
     assert len(subjects) >= 3  # distinct cosplayers with clear faces
     kinds = [w.people.item(i).data(Qt.ItemDataRole.UserRole)[0] for i in range(w.people.count())]
@@ -321,7 +327,8 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     first = w.people.item(0).data(Qt.ItemDataRole.UserRole)[1]
     assert w.model.rowCount() == subjects[0]["photos"]
     assert w.inspector.fields["Chủ thể"].text().startswith(actions.subject_label(w.project.conn, first))
-    assert "/100" in w.inspector.fields["Điểm chất lượng"].text()
+    explained = w.inspector.fields["Điểm chất lượng"].text()
+    assert "/100" in explained and "Điểm mạnh" in explained and "Chưa đánh giá" in explained
 
     monkeypatch.setattr(mw.QInputDialog, "getText", lambda *a, **k: ("Aki", True))
     w.rename_current_person()
@@ -337,7 +344,7 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     assert aki["photos"] == subjects[0]["photos"] + subjects[1]["photos"]
 
     # Re-running the analysis/grouping keeps the user's merge and name.
-    w.start_analysis()
+    w.start_analysis("people")
     qtbot.waitUntil(lambda: w.analyze_thread is None, timeout=60000)
     again = {r["id"]: r for r in actions.subjects_summary(w.project.conn)}
     assert again[aki["id"]]["display_name"] == "Aki" and again[aki["id"]]["photos"] == aki["photos"]
@@ -347,7 +354,7 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
                                    (aki["id"],)).fetchone()[0]
     with w.project.transaction() as conn:
         actions.remove_photos_from_subject(conn, aki["id"], [asset])
-    w.start_analysis()
+    w.start_analysis("people")
     qtbot.waitUntil(lambda: w.analyze_thread is None, timeout=60000)
     assert not w.project.conn.execute("SELECT 1 FROM occurrences WHERE subject_id = ? AND asset_id = ?",
                                       (aki["id"], asset)).fetchone()
@@ -421,7 +428,7 @@ def test_ai_selection_puts_picks_first_marks_keep_and_explains(qtbot, env: dict)
     assert "AI đã chọn" in w.status.text()
     w.select_row(0)
     text = w.inspector.fields["Điểm chất lượng"].text()
-    assert "/100" in text and "AI chọn" in text and "Chưa chấm" in text
+    assert "/100" in text and "AI chọn" in text and "Chưa đánh giá" in text and "mắt nhắm/mở" in text
     before = w.teacher.store.culling_count()
     w.set_flag("reject")  # the user disagrees with the AI's first choice: a taste example
     assert w.teacher.store.culling_count() == before + 1

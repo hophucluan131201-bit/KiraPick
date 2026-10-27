@@ -101,9 +101,13 @@ class AnalyzeJob:
         self,
         progress: Callable[[AnalyzeProgress], None] = lambda _p: None,
         should_cancel: Callable[[], bool] = lambda: False,
+        mode: str = "all",
     ) -> AnalyzeSummary:
+        """mode 'people': detect + group (then the user corrects groups); 'quality': measure; 'all': both."""
+        if mode not in ("people", "quality", "all"):
+            raise ValueError(mode)
         summary = AnalyzeSummary()
-        todo = self._queue_and_list()
+        todo = self._queue_and_list() if mode != "quality" else []
         if todo:
             progress(AnalyzeProgress("load_models", 0, len(todo)))
             persons = PersonDetector.load(self.registry, prefer_gpu=self.prefer_gpu)
@@ -113,13 +117,13 @@ class AnalyzeJob:
             summary.fallback_reason = persons.session.fallback_reason
             self.crop_dir.mkdir(parents=True, exist_ok=True)
             self._detect_all(todo, persons, faces, embedder, summary, progress, should_cancel)
-        if not summary.cancelled:
+        if not summary.cancelled and mode != "people":
             from app.workers import quality_job  # local import: avoids a cycle through app.quality
 
             summary.measured, summary.measure_failed, summary.cancelled = quality_job.run(
                 self.project, self.registry, lambda phase, done, total: progress(AnalyzeProgress(phase, done, total)),
                 should_cancel)
-        if not summary.cancelled:
+        if not summary.cancelled and mode != "quality":
             from app.identity.cluster import recluster  # local import: clustering is pure, no models
 
             progress(AnalyzeProgress("group", 0, 1))

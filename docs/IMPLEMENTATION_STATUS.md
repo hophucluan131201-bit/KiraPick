@@ -119,7 +119,7 @@ expected for this GPU (to profile: FP16, IO binding, preprocessing share, power 
 | Schema v3: occurrences (normalised boxes, prominence, main/background), vectors, reviewed "different" pairs | tested | migration from v2 in place |
 | Analysis job: prefetch decode, YOLOX + YuNet + SFace, outfit colour, avatar crops, resumable per photo, failures isolated, re-analysis keeps occurrence ids (box IoU) | tested | `tests/gui` real-photo flow, rerun = 0 work |
 | Grouping v2 (look-first): link if face ≥ 0.65 (photos > 5 min apart also need outfit ≥ 0.65, unless face ≥ 0.80); or within ±5 min outfit ≥ 0.80 and faces (if both visible) ≥ 0.55; or within ±5 min face ≥ 0.55 and outfit ≥ 0.78. Outfit = HSV histograms of 3 bands (hair, upper, lower body) of the central 60% of the person box at 400 px; older vectors are recomputed from cached thumbnails before regrouping (no models needed). Groups merge only if mean face similarity ≥ 0.45, or ≥ 0.60 when no photos of the two are within 5 min (no chaining); same-photo cannot-link; manual seeds attract first; user exclusions and "different" pairs respected; face-less members only *suggested* ("?"); a face-less-only group needs ≥ 2 photos; stable subject ids; background people never grouped. Review queue: same outfit within 5 min, or face ≥ 0.45 within 30 min, or face ≥ 0.60 any time (max 30) | tested | `tests/unit/test_identity_cluster.py` (synthetic), `scripts/calibration/evaluate_grouping.py` (real labels) |
-| UI: "🧠 Phân tích ảnh" (formerly "Nhận diện người"; auto after import, background, pause/resume), NGƯỜI list with face avatars, person filter, "Chưa xác định", "?" badge for suggested photos, rename (double-click), tick people + "🔗 Gộp người" toolbar button (or right-click) to merge, keeping the named person, mark different, grid menu: confirm / remove from person / assign to person, review dialog, inspector lists people in the photo | tested offscreen | `test_people_recognition_flow_on_real_photos` |
+| UI: "🧠 Nhận diện người" (started by the user, no longer automatic after import; background, pause/resume), NGƯỜI list with face avatars, person filter, "Chưa xác định", "?" badge for suggested photos, rename (double-click), tick people + "🔗 Gộp người" toolbar button (or right-click) to merge, keeping the named person, mark different, grid menu: confirm / remove from person / assign to person, review dialog, inspector lists people in the photo | tested offscreen | `test_people_recognition_flow_on_real_photos` |
 
 ## Done — M3 quality + M4 selection (`app/quality/`, `app/workers/quality_job.py`, `app/ai/face_quality.py`)
 
@@ -130,6 +130,11 @@ expected for this GPU (to profile: FP16, IO binding, preprocessing share, power 
 | Rubric `cosplay-tech-v1`: focus 35, face 25, exposure 20, framing 20; N/A re-weighted, confidence; low-key tolerated; warnings (lệch nét, mặt khó thấy, mặt cháy sáng, đầu chạm mép) | tested | unit tests |
 | Selection: per person or in view, MMR diversity, saved run (`picks`, schema v4), “AI” badge, sort modes (time / score / AI picks first), inspector breakdown | tested offscreen | `test_ai_selection_puts_picks_first_marks_keep_and_explains` |
 | Taste examples: each Keep/Reject on a scored photo → learning store v2 (`culling_feedback`: score parts, AI rank, decision) | tested | `tests/unit/test_learning.py` |
+
+Workflow is step by step (owner's request 2026-10-27): import → 🧠 Nhận diện người (detect + group,
+then stop for corrections) → 📊 Phân tích ảnh (quality only) → ⭐ Chọn ảnh; each button is enabled
+only when the previous step has results and nothing is running (`_update_steps`). The inspector
+explains a score as strengths / weaknesses / not judged, each item tied to a measurement.
 
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
@@ -192,7 +197,7 @@ stragglers (profile, motion blur, hands over face) that the owner can merge with
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-247 passed in 54.31s
+248 passed in 54.87s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):
