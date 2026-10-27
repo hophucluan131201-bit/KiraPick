@@ -25,9 +25,12 @@ from app.ai.models import ModelRegistry, ModelUnavailableError
 from app.core.errors import ImageReadError
 from app.ingest.preview import load_full_resolution
 from app.quality.measure import (
+    EYE_DIST_REF,
     LAYOUT_VERSION,
     QUALITY_VERSION,
+    at_portrait_scale,
     edge_sharpness,
+    eye_distance,
     exposure,
     eye_region,
     framing,
@@ -38,7 +41,7 @@ from app.storage.project import Project, utc_now
 log = logging.getLogger(__name__)
 
 STAGE = "quality"
-STAGE_VERSION = 3  # 2: eyes open/closed (MediaPipe blendshapes); 3: aesthetic hint (TOPIQ)
+STAGE_VERSION = 4  # 2: eyes open/closed (MediaPipe blendshapes); 3: aesthetic hint (TOPIQ); 4: close-up sharpness
 EXTRACTOR = "quality"
 WORK_LONG_SIDE = 1600  # exposure / layout are measured at this size
 FACE_FOR_FOCUS = 0.6  # detection score needed to look for the eyes
@@ -83,16 +86,18 @@ def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None
         geo = refiner.refine(full, face)
         if geo is not None:
             gray = cv2.cvtColor(full, cv2.COLOR_BGR2GRAY)
+            dist = eye_distance(geo)
+            values["sharp_scale"] = round(min(1.0, EYE_DIST_REF / dist), 4) if dist > 0 else 1.0
             eye_box = eye_region(geo, w, h)
             if eye_box is not None:
                 x0, y0, x1, y1 = eye_box
-                values["eye_sharp"] = edge_sharpness(gray[y0:y1, x0:x1])
+                values["eye_sharp"] = edge_sharpness(at_portrait_scale(gray[y0:y1, x0:x1], dist))
                 values["eyes_found"] = 1.0
             fx, fy, fw, fh = geo.box
             ix0, iy0 = max(0, int(fx + fw * 0.15)), max(0, int(fy + fh * 0.1))
             ix1, iy1 = min(w, int(fx + fw * 0.85)), min(h, int(fy + fh * 0.9))
             if ix1 - ix0 >= 16 and iy1 - iy0 >= 16:
-                values["face_sharp"] = edge_sharpness(gray[iy0:iy1, ix0:ix1])
+                values["face_sharp"] = edge_sharpness(at_portrait_scale(gray[iy0:iy1, ix0:ix1], dist))
                 exp = exposure(full[iy0:iy1, ix0:ix1])
                 values["face_luma"], values["face_clip"] = exp["luma"], exp["clip"]
             if face_quality is not None:

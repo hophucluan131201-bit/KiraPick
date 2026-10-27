@@ -1,4 +1,13 @@
-## KiraPick 2.0 – bản chính thức
+## KiraPick 2.1.0b1 – bản thử nghiệm (beta)
+
+> **Bản beta, chưa phải bản chính thức.** Bản chính thức mới nhất vẫn là 2.0.6.
+> - **Độ nét ảnh cận mặt:** ảnh chụp cận (mắt cách nhau hơn 500 điểm ảnh) được đo ở cỡ của chân dung thường,
+>   nên ảnh cận nét không còn bị chê "thiếu nét"; ảnh chân dung bình thường vẫn đo ở 100% như cũ.
+> - **Bố cục** được chấm cả khi app không thấy thân người (ảnh cận mặt); cắt trán trong ảnh cận được coi là
+>   cách chụp, không phải lỗi.
+> - **Thanh công cụ gọn lại:** "Tự chuyển ảnh" và "⚡ Dùng card đồ hoạ" nằm trong nút **⚙ Tuỳ chọn**, nên nút
+>   **⌨ Phím tắt** không còn bị đẩy ra khỏi màn hình. Bấm 📊 Phân tích ảnh lại để chấm theo cách đo mới.
+
 
 > **2.0.6 – hết "Not responding", không bị kẹt ở card đồ hoạ chậm.** AI chạy trong một tiến trình riêng nên
 > cửa sổ luôn phản hồi (kể cả khi đang nạp mô hình). Lúc bắt đầu, app đo thử: nếu card đồ hoạ (DirectML) không

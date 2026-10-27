@@ -588,3 +588,13 @@ def test_view_buttons_back_button_and_key_hints(qtbot, env: dict) -> None:
     w.close()
     w2 = _window(qtbot, env)
     assert not w2.act_help.isChecked() and not w2.key_hints.isVisible()
+
+
+def test_toolbar_keeps_the_key_hints_button_on_a_1080p_screen(qtbot, env: dict) -> None:
+    """Owner's report: after "⚡ Dùng card đồ hoạ" was added, "⌨ Phím tắt" fell off the toolbar."""
+    w = _window(qtbot, env)
+    toolbar = w.findChildren(mw.QToolBar)[0]
+    assert toolbar.sizeHint().width() <= 1880
+    assert w.act_help in toolbar.actions() and w.act_gpu not in toolbar.actions()
+    assert w.act_gpu in w.options_button.menu().actions() and w.act_auto_advance in w.options_button.menu().actions()
+    assert w.key_hints.isVisible() == w.act_help.isChecked()

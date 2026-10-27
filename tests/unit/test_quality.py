@@ -190,3 +190,29 @@ def test_aesthetic_hint_is_a_small_labelled_part() -> None:
     assert any("gợi ý thẩm mỹ thấp" in w for w in low.weaknesses)
     assert high.total - low.total < 10  # a hint, it cannot decide alone
     assert not any("thẩm mỹ" in t for t in high.not_rated)
+
+
+def test_close_up_is_judged_at_portrait_scale_and_framed_from_the_face() -> None:
+    """Owner's report (SNO_1056): a very sharp frame-filling close-up was called "thiếu nét", and its
+    framing was "chưa đánh giá" (no body box)."""
+    import cv2
+
+    from app.quality.measure import EYE_DIST_REF, at_portrait_scale, edge_sharpness, framing
+
+    rng = np.random.default_rng(1)
+    sharp = (rng.random((120, 160)) > 0.5).astype(np.uint8) * 200 + 20  # crisp edges at 100%
+    sharp = cv2.resize(sharp, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+    lens_close_up = cv2.GaussianBlur(  # same detail over 4x the pixels, edges ~3 px wide (lens limit)
+        cv2.resize(sharp, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC), (0, 0), 1.5)
+    blurred_close_up = cv2.GaussianBlur(lens_close_up, (0, 0), 10)
+    eyes_apart = EYE_DIST_REF * 4
+    assert edge_sharpness(lens_close_up) < 0.5  # what the old 100% measurement said
+    focused = edge_sharpness(at_portrait_scale(lens_close_up, eyes_apart))
+    assert focused > 0.6
+    assert edge_sharpness(at_portrait_scale(blurred_close_up, eyes_apart)) < 0.7 * focused  # real blur still shows
+    assert at_portrait_scale(sharp, EYE_DIST_REF * 0.8) is sharp  # normal portraits: 100% as before
+
+    close_up = framing(None, (0.2, 0.0, 0.6, 0.7))  # face fills the frame, forehead cropped on purpose
+    assert close_up["area"] == 1.0 and close_up["cut_head"] == 0.0
+    wide = framing((0.3, 0.0, 0.3, 0.9), (0.4, 0.0, 0.1, 0.1))  # head cut in a wider shot: still a flaw
+    assert wide["cut_head"] == 1.0

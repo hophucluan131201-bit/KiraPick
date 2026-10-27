@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QToolButton,
     QSplitter,
     QStackedWidget,
     QToolBar,
@@ -238,9 +239,19 @@ class MainWindow(QMainWindow):
         self.act_learning.triggered.connect(self.show_learning)
         tb.addAction(self.act_learning)
         tb.addSeparator()
-        tb.addAction(self.act_auto_advance)
-        tb.addAction(self.act_gpu)
+        # Settings that are switched rarely live in one small menu, so the toolbar fits a 1080p
+        # screen and "⌨ Phím tắt" stays visible.
+        options = QMenu(self)
+        options.setToolTipsVisible(True)
+        options.addAction(self.act_auto_advance)
+        options.addAction(self.act_gpu)
+        self.options_button = QToolButton(self)
+        self.options_button.setText("⚙ Tuỳ chọn")
+        self.options_button.setToolTip("Tự chuyển ảnh sau K/X, dùng card đồ hoạ cho AI")
+        self.options_button.setMenu(options)
+        self.options_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         tb.addAction(self.act_help)
+        tb.addWidget(self.options_button)
         # The search box lives at the top of the sidebar (always visible; a toolbar
         # would hide it in its overflow menu on narrow or scaled screens).
         self.search = QLineEdit()
@@ -344,6 +355,7 @@ class MainWindow(QMainWindow):
         self.key_hints.setWordWrap(True)
         self.key_hints.setTextFormat(Qt.TextFormat.RichText)
         self.key_hints.setVisible(self.act_help.isChecked())
+        self.key_hints.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)  # never squeezed away
         center_box = QWidget()
         center_layout = QVBoxLayout(center_box)
         center_layout.setContentsMargins(0, 0, 0, 0)

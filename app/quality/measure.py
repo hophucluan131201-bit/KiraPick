@@ -25,7 +25,8 @@ import numpy as np
 
 from app.ai.detect import Box
 
-QUALITY_VERSION = "q3"  # q2: + eyes (blink_left/right, ear_left/right, blink); q3: + aesthetic_mos
+QUALITY_VERSION = "q4"  # q2: + eyes (blink_left/right, ear_left/right, blink); q3: + aesthetic_mos;
+# q4: close-ups measured at portrait scale (sharp_scale), framing also from the face alone
 LAYOUT_VERSION = "hog32x64-v1"
 EDGE_PERCENTILE = 99.5
 MIN_CONTRAST = 12.0  # grey levels; flatter regions cannot show focus
@@ -56,6 +57,29 @@ def edge_sharpness(gray: np.ndarray) -> float | None:
     gy = cv2.Sobel(g, cv2.CV_32F, 0, 1, ksize=3)
     steep = float(np.percentile(cv2.magnitude(gx, gy), EDGE_PERCENTILE))
     return round(min(1.5, steep / (4.0 * contrast)), 4)  # a 3x3 Sobel answers 4x the step height
+
+
+FACE_TO_BODY_AREA = 8.0  # a lone face stands for a body ~8x its area (as in identity.features)
+CLOSE_UP_FACE = 0.35  # face height (fraction of the frame) from which a shot is a close-up
+EYE_DIST_REF = 500.0  # px between the eyes; closer-up faces are measured at this scale
+
+
+def eye_distance(face: FaceGeometry) -> float:
+    (rx, ry), (lx, ly) = face.landmarks[0], face.landmarks[1]
+    return float(np.hypot(lx - rx, ly - ry))
+
+
+def at_portrait_scale(gray: np.ndarray, eye_dist: float) -> np.ndarray:
+    """Shrink a close-up so its eyes are EYE_DIST_REF px apart; other faces stay at 100%.
+
+    In a frame-filling close-up (eyes 1000+ px apart) every edge spans several pixels at 100%
+    (the lens's own resolution), so a perfectly focused eye looked "soft". Faces of normal
+    portraits (owner's NEFs: 250-530 px between the eyes) are still judged at full resolution.
+    """
+    if eye_dist <= EYE_DIST_REF:
+        return gray
+    k = EYE_DIST_REF / eye_dist
+    return cv2.resize(gray, None, fx=k, fy=k, interpolation=cv2.INTER_AREA)
 
 
 def _clip_box(x0: float, y0: float, x1: float, y1: float, w: int, h: int) -> tuple[int, int, int, int] | None:
@@ -91,7 +115,8 @@ def exposure(region: np.ndarray) -> dict[str, float]:
 
 
 def framing(person: Box | None, face: Box | None) -> dict[str, float | None]:
-    """From normalised boxes (0..1 of the frame)."""
+    """From normalised boxes (0..1 of the frame). Without a person box (close-ups: the body
+    detector often finds none), size and position come from the face."""
     out: dict[str, float | None] = {"area": None, "offcentre": None, "cut_side": None, "cut_head": None,
                                     "face_height": None}
     if person is not None:
@@ -99,9 +124,15 @@ def framing(person: Box | None, face: Box | None) -> dict[str, float | None]:
         out["area"] = round(w * h, 4)
         out["offcentre"] = round(abs(x + w / 2 - 0.5) * 2, 4)
         out["cut_side"] = float(x <= 0.003 or x + w >= 0.997)
+    elif face is not None:
+        x, y, w, h = face
+        out["area"] = round(min(1.0, w * h * FACE_TO_BODY_AREA), 4)
+        out["offcentre"] = round(abs(x + w / 2 - 0.5) * 2, 4)
+        out["cut_side"] = 0.0  # a cropped shoulder in a close-up is normal
     if face is not None:
         out["face_height"] = round(face[3], 4)
-        out["cut_head"] = float(face[1] <= 0.005)  # forehead touches the top edge
+        # forehead touching the top edge: a mistake in a wider shot, a style in a close-up
+        out["cut_head"] = float(face[1] <= 0.005 and face[3] < CLOSE_UP_FACE)
     return out
 
 
