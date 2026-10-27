@@ -189,6 +189,16 @@ shoot (thumbnails, 315 faces): open eyes ~0.06; every face ≥ 0.5 (15) had clos
 bỏ qua” — never 0 because it can be intended). Quality stage v2 re-measures existing sessions.
 Not calibrated on labelled closed-eye photos yet.
 
+**Aesthetic hint (beta 0.3.0b1, branch `beta`; `main` and published releases untouched):** TOPIQ IAA
+(CFANet + ResNet50, trained on AVA; IQA-PyTorch, PolyForm Noncommercial — owner approved) exported to
+ONNX with dynamic H/W (sides multiples of 32), checked against PyTorch on 4 shapes (identical to 4
+decimals). 280 MB, so the Windows build converts it (`scripts/convert_topiq.py`, minimal pinned venv,
+checkpoint SHA-256 pinned, `.sha256` sidecar for the registry). On the owner's shoot (thumbnails):
+mean score p5/p50/p95 = 4.32/4.73/5.06, lowest = casual snapshots, dark and tilted frames; highest =
+clean full-body cosplay portraits. Rubric `cosplay-tech-v3`: weight 10 of 110, 4.2→0 … 5.2→100,
+labelled “gợi ý thẩm mỹ (AI tham khảo, học từ ảnh thi chung)”. ~0.2 s/photo on CPU. Quality stage v3
+re-measures. Not validated against the owner's own preferences.
+
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
 quality 5.8 s for 7 photos (quality ≈ 0.1–0.3 s/photo + full-res JPEG decode 0.1–0.7 s).

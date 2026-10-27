@@ -62,10 +62,13 @@ def test_layout_tells_poses_apart() -> None:
 def test_rubric_spreads_missing_weight_and_warns() -> None:
     full = score({"eye_sharp": 0.8, "face_quality": 0.8, "face_clip": 0.0, "face_luma": 55, "area": 0.4,
                   "offcentre": 0.1, "cut_head": 0.0, "cut_side": 0.0})
-    assert full.total == 100 and full.confidence == pytest.approx(1 - WEIGHTS["eyes"] / 100) and not full.warnings
+    total_weight = sum(WEIGHTS.values())
+    assert full.total == 100 and not full.warnings
+    assert full.confidence == pytest.approx(1 - (WEIGHTS["eyes"] + WEIGHTS["aesthetic"]) / total_weight, abs=0.01)
     no_face = score({"body_sharp": 0.8, "body_clip": 0.0, "body_luma": 55, "area": 0.4, "offcentre": 0.1})
     assert no_face.parts["face"] is None and no_face.total == 100  # N/A is not a zero
-    assert no_face.confidence == pytest.approx(1 - (WEIGHTS["face"] + WEIGHTS["eyes"]) / 100)
+    assert no_face.confidence == pytest.approx(
+        1 - (WEIGHTS["face"] + WEIGHTS["eyes"] + WEIGHTS["aesthetic"]) / total_weight, abs=0.01)
     bad = score({"eye_sharp": 0.1, "face_quality": 0.2, "face_clip": 0.3, "face_luma": 95, "area": 0.4,
                  "cut_head": 1.0})
     assert bad.total < 25 and len(bad.warnings) == 4
@@ -176,3 +179,14 @@ def test_owner_case_a_better_different_pose_beats_a_mere_landscape_crop() -> Non
     burst_copy = _cand(9930, 85, _with_cosine(base, 0.99, 4), 1.0)  # better score but a near-copy of the first
     picked = [c.asset_id for c, _ in choose([hands_on_head, burst_copy, arms_crossed], 2)]
     assert picked == [9930, 9939]  # the best of the burst, then the other pose — not two copies
+
+
+def test_aesthetic_hint_is_a_small_labelled_part() -> None:
+    base = {"eye_sharp": 0.8, "face_quality": 0.8, "face_clip": 0.0, "face_luma": 55, "area": 0.4,
+            "offcentre": 0.1, "blink": 0.05}
+    high, low = score(base | {"aesthetic_mos": 5.4}), score(base | {"aesthetic_mos": 4.0})
+    assert high.parts["aesthetic"] == 100 and low.parts["aesthetic"] == 0
+    assert any("gợi ý thẩm mỹ cao" in s for s in high.strengths)
+    assert any("gợi ý thẩm mỹ thấp" in w for w in low.weaknesses)
+    assert high.total - low.total < 10  # a hint, it cannot decide alone
+    assert not any("thẩm mỹ" in t for t in high.not_rated)

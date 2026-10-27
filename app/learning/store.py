@@ -21,7 +21,8 @@ from app import __version__
 log = logging.getLogger(__name__)
 
 DB_NAME = "learning.db"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+_SCHEMA_V4 = "ALTER TABLE culling_feedback ADD COLUMN aesthetic REAL;"  # aesthetic hint score
 _SCHEMA_V3 = "ALTER TABLE culling_feedback ADD COLUMN eyes REAL;"  # eyes open/closed score
 _SCHEMA_V2 = """
 CREATE TABLE culling_feedback (
@@ -77,6 +78,8 @@ class LearningStore:
                     self.conn.executescript(_SCHEMA_V2)
                 if version < 3:
                     self.conn.executescript(_SCHEMA_V3)
+                if version < 4:
+                    self.conn.executescript(_SCHEMA_V4)
                 self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def add_identity(self, kind: str, same: bool, pairs: list[PairEvidence], face_version: str,
@@ -99,9 +102,10 @@ class LearningStore:
         with self.conn:
             self.conn.execute(
                 """INSERT INTO culling_feedback (created_on, app_version, profile_version, decision, ai_rank, total,
-                   focus, face, exposure, framing, eyes) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                   focus, face, exposure, framing, eyes, aesthetic) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (date.today().isoformat(), __version__, profile_version, decision, ai_rank, total,
-                 parts.get("focus"), parts.get("face"), parts.get("exposure"), parts.get("framing"), parts.get("eyes")),
+                 parts.get("focus"), parts.get("face"), parts.get("exposure"), parts.get("framing"), parts.get("eyes"),
+                 parts.get("aesthetic")),
             )
 
     def culling_count(self) -> int:

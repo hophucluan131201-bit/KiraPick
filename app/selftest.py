@@ -67,6 +67,7 @@ def run(report_path: Path) -> int:
         if missing:
             raise RuntimeError(f"models not ready: {missing}")
         report["steps"].append("models verified (SHA-256)")
+        report["aesthetic_model"] = report["models"].get("aesthetic", "not in manifest")
         info = configure()
         report["onnxruntime"] = {"version": info.ort_version, "providers": list(info.available)}
         report["steps"].append("onnxruntime loaded")

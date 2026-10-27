@@ -46,6 +46,9 @@ def main() -> int:
             failures += 1
             continue
         part = status.path.with_suffix(status.path.suffix + ".part")
+        if spec.url.startswith("build:"):  # needs PyTorch: made by the installer build, optional here
+            print(f"BỎ QUA  {spec.file}: tạo bằng {spec.url[len('build:'):]} (xem hướng dẫn trong file đó)")
+            continue
         if spec.url.startswith("repo:"):  # converted by us, kept in the repository (see its provenance)
             src = Path(__file__).resolve().parents[1] / spec.url[len("repo:"):]
             print(f"Chép {spec.file} từ {src.parent.name}/ …", flush=True)

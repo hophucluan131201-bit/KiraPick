@@ -15,6 +15,7 @@ những tấm đẹp, khác dáng nhau để bạn duyệt lại.
 - **Không cần Internet** sau khi cài; không gửi ảnh hay dữ liệu đi đâu.
 - **Không bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc.** Xuất ảnh = sao chép.
 - Đọc RAW (Nikon NEF ưu tiên, Canon CR2/CR3, Sony ARW, …) và JPEG.
+- Bản **0.3.0b1 (nhánh `beta`)** có thêm *gợi ý thẩm mỹ* bằng AI (TOPIQ, phi thương mại).
 - Tình trạng: **bản thử nghiệm (beta)**. Có phát hiện mắt nhắm / nhìn xuống; chưa đánh giá được độ đẹp nghệ thuật.
   Chi tiết: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) (tiếng Anh).
 
@@ -99,6 +100,7 @@ open/closed, face, exposure, framing) and picks the best, varied shots for you t
 - **No Internet needed** after installation; no photo or data ever leaves the computer.
 - **Never edits, deletes, renames or moves original photos.** Export = copy.
 - Reads RAW (Nikon NEF first, Canon CR2/CR3, Sony ARW, …) and JPEG.
+- Version **0.3.0b1 (`beta` branch)** adds an AI *aesthetic hint* (TOPIQ, non-commercial).
 - Status: **beta**. Detects closed / downcast eyes; artistic quality is not judged yet.
   Details: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 

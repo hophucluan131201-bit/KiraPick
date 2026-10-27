@@ -84,6 +84,18 @@
    "provenance": "Converted to ONNX (opset 17) with tf2onnx 1.16.1 from face_landmarker.task v1 float16 (https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task, Apache-2.0, model card 'MediaPipe Face Mesh V2' / 'Blendshape V2'); reproduce with scripts/convert_mediapipe.py; outputs checked against the TFLite interpreter (landmarks max diff 4e-4 px, blendshapes 1e-6).",
    "runtime": "onnxruntime",
    "purpose": "quality"
+  },
+  {
+   "id": "aesthetic",
+   "name": "TOPIQ image aesthetics (CFANet, ResNet50, AVA) — ONNX",
+   "file": "topiq_iaa_res50.onnx",
+   "sha256": "",
+   "size": 0,
+   "license": "PolyForm-Noncommercial-1.0.0",
+   "url": "build:scripts/convert_topiq.py",
+   "provenance": "Converted at build time by scripts/convert_topiq.py from cfanet_iaa_ava_res50-3cd62bb3.pth (IQA-PyTorch GitHub release v0.1-weights, SHA-256 3cd62bb3…6975; Chen et al., TOPIQ, IEEE TIP 2024); trained on AVA. ONNX checked against PyTorch on 4 shapes (< 1e-3). The export is not byte-reproducible, so the converter writes a .sha256 file next to it that the registry checks. Non-commercial weights: approved by the owner for this non-commercial app (2026-10-27).",
+   "runtime": "onnxruntime",
+   "purpose": "aesthetic"
   }
  ]
 }

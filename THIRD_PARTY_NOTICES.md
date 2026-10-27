@@ -22,6 +22,9 @@ AI model weights (bundled, verified by SHA-256; see docs/model-licenses.md in th
 - YOLOX-S and YOLOX-M (Megvii-BaseDetection/YOLOX 0.1.1rc0) - Apache-2.0
 - MediaPipe Face Landmarker v2 (face mesh + blendshapes, Google) - Apache-2.0; converted to ONNX
   (scripts/convert_mediapipe.py)
+- TOPIQ image aesthetics (CFANet, ResNet50, AVA) from IQA-PyTorch - PolyForm Noncommercial 1.0.0,
+  Copyright (c) 2022 Chaofeng Chen; C. Chen et al., "TOPIQ: A Top-down Approach from Semantics to
+  Distortions for Image Quality Assessment", IEEE TIP 2024. Non-commercial use only.
 - eDifFIQA(T) face image quality jun2024 (OpenCV Zoo) - CC BY 4.0.
   Attribution: Ž. Babnik, P. Peer, V. Štruc, "eDifFIQA: Towards Efficient Face Image
   Quality Assessment based on Denoising Diffusion Probabilistic Models",

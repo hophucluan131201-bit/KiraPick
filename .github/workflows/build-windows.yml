@@ -8,7 +8,7 @@ name: Build Windows installer
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, beta]
     tags: ["v*"]
 
 permissions:
@@ -50,4 +50,5 @@ jobs:
           $version = (Select-String -Path app/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
           $tag = "v$version"
           $files = Get-ChildItem dist/installer -File | ForEach-Object { $_.FullName }
+          if (gh release view $tag 2>$null) { Write-Host "Release $tag already exists: left untouched"; exit 0 }
           gh release create $tag $files --target "${{ github.sha }}" --title "KiraPick $version (beta)" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease

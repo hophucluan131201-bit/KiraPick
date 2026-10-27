@@ -24,10 +24,11 @@ class SelectDialog(QDialog):
         self.setWindowTitle("Chọn ảnh đẹp")
         layout = QVBoxLayout(self)
         intro = QLabel(
-            "AI chọn những ảnh điểm kỹ thuật cao nhất (nét ở mắt, mặt rõ, đủ sáng, bố cục) và tránh "
+            "AI chọn những ảnh điểm cao nhất (nét ở mắt, mắt mở, mặt rõ, đủ sáng, bố cục, gợi ý thẩm mỹ) và tránh "
             "chọn các ảnh gần giống nhau (cùng dáng, cùng loạt chụp liên tiếp). Ảnh được chọn xếp lên "
             "đầu, có nhãn “AI”; bạn xem lại và bấm K (giữ) / X (loại) như bình thường.\n"
-            f"Chưa chấm được: {', '.join(NOT_MEASURED)} — hãy nhìn kỹ những điểm này."
+            + (f"Chưa chấm được: {', '.join(NOT_MEASURED)} — hãy nhìn kỹ những điểm này."
+               if NOT_MEASURED else "Điểm thẩm mỹ chỉ là gợi ý (AI học từ ảnh thi chung, không riêng cosplay).")
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)

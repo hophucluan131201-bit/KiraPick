@@ -43,7 +43,7 @@ def explain_html(score: Score, pick_rank: int | None = None, selection: str | No
         lines = "".join(f"<br>• {escape(i)}" for i in items)
         return f"<br><span style='color:{color}'><b>{title}</b></span>{lines}"
 
-    head = f"<b>{score.total:.0f}/100</b> điểm kỹ thuật" if score.total is not None else "<b>chưa chấm được</b>"
+    head = f"<b>{score.total:.0f}/100</b> điểm" if score.total is not None else "<b>chưa chấm được</b>"
     if pick_rank is not None:
         head += f" · ⭐ AI chọn (thứ {pick_rank})"
     if selection:

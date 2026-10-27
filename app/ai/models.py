@@ -83,9 +83,16 @@ class ModelRegistry:
             st = path.stat()
         except OSError:
             return ModelStatus(spec, ModelState.MISSING, path)
+        expected_sha, expected_size = spec.sha256, spec.size
+        if not expected_sha:  # converted at build time: the converter wrote "<sha256> <size>" next to it
+            try:
+                expected_sha, size_text = path.with_name(path.name + ".sha256").read_text().split()[:2]
+                expected_size = int(size_text)
+            except (OSError, ValueError):
+                return ModelStatus(spec, ModelState.CORRUPT, path)
         cached = self._verified.get(model_id)
         if cached is None or cached[:2] != (st.st_size, st.st_mtime_ns):
-            ok = st.st_size == spec.size and sha256_of(path) == spec.sha256
+            ok = st.st_size == expected_size and sha256_of(path) == expected_sha
             cached = (st.st_size, st.st_mtime_ns, ok)
             self._verified[model_id] = cached
         return ModelStatus(spec, ModelState.READY if cached[2] else ModelState.CORRUPT, path)

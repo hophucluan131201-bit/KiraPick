@@ -1,0 +1,15 @@
+# Build-time only: convert the TOPIQ aesthetics checkpoint to ONNX (scripts/convert_topiq.py).
+# Not part of the app or the installer. pyiqa itself is installed with --no-deps; the script imports
+# only its TOPIQ architecture. Versions as verified in the dev container (2026-10-27).
+torch==2.9.1
+torchvision==0.24.1
+timm==1.0.22
+onnx==1.23.2
+onnxscript==0.7.2
+onnxruntime==1.24.4
+numpy==2.5.4
+requests==2.34.2
+tqdm==4.70.1
+pyyaml==6.0.3
+huggingface_hub==2.3.0  # needed by timm at import; nothing is downloaded (pretrained=False)
+safetensors==0.8.0

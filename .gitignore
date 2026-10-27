@@ -37,3 +37,4 @@ backup/
 snorlu_debug.zip
 kirapick_debug.zip
 .venv-build/
+.venv-convert/

@@ -21,6 +21,9 @@ def test_manifest_pins_every_model_with_license_and_hash() -> None:
     specs = load_manifest()
     assert {"face_detector", "face_embedder", "person_detector_s", "person_detector_m"} <= set(specs)
     for spec in specs.values():
+        if spec.url.startswith("build:"):  # converted at build time, checked through a .sha256 sidecar
+            assert spec.sha256 == "" and (Path(__file__).parents[2] / spec.url[6:]).is_file() and spec.license
+            continue
         assert len(spec.sha256) == 64 and spec.size > 0 and spec.license
         assert spec.url.startswith("https://") or (spec.url.startswith("repo:") and
                                                    (Path(__file__).parents[2] / spec.url[5:]).is_file())

@@ -75,12 +75,24 @@ Get-ChildItem "models\weights\*.onnx" -ErrorAction SilentlyContinue | ForEach-Ob
 }
 Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", "identity,quality,gpu", "--dest", $models)
 
+# Aesthetic hint (TOPIQ): converted from the PyTorch checkpoint in a separate, build-only venv.
+if (-not (Test-Path (Join-Path $models "topiq_iaa_res50.onnx.sha256"))) {
+    if (-not (Test-Path ".venv-convert\Scripts\python.exe")) {
+        Invoke-Tool "Tạo .venv-convert" $pyExe ($pyArgs + @("-m", "venv", ".venv-convert"))
+    }
+    $cpy = Join-Path $Root ".venv-convert\Scripts\python.exe"
+    Invoke-Tool "Cài công cụ chuyển đổi" $cpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "packaging\requirements-convert.txt")
+    Invoke-Tool "Cài pyiqa" $cpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "--no-deps", "pyiqa==0.1.14.1")
+    Invoke-Tool "Chuyển mô hình thẩm mỹ" $cpy @("scripts\convert_topiq.py", "--out", $models)
+}
+
 Step "4/6 PyInstaller"
 $dist = Join-Path $Root "dist\KiraPick"
 if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
 Invoke-Tool "PyInstaller" $bpy @("-m", "PyInstaller", "--noconfirm", "--clean", "--workpath", "build\pyi", "--distpath", "dist", "packaging\kirapick.spec")
 New-Item -ItemType Directory -Force -Path (Join-Path $dist "models") | Out-Null
 Copy-Item (Join-Path $models "*.onnx") (Join-Path $dist "models")
+Copy-Item (Join-Path $models "*.onnx.sha256") (Join-Path $dist "models")
 
 Step "5/6 Tự kiểm tra bản đóng gói (chặn mạng)"
 $report = Join-Path $Root "dist\selftest.json"

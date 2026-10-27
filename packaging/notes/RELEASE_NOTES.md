@@ -1,5 +1,9 @@
 ## KiraPick – bản thử nghiệm (beta)
 
+> **0.3.0b1 – bản thử nghiệm điểm thẩm mỹ.** Thêm *gợi ý thẩm mỹ* bằng AI (TOPIQ, học từ ảnh thi
+> chung AVA, không riêng cosplay; trọng số nhỏ 10/110). Mô hình này chỉ được dùng **phi thương mại**.
+> Bộ cài nặng hơn khoảng 250 MB. Bản ổn định trước đó (0.2.0b4) vẫn giữ nguyên ở dưới.
+
 Ứng dụng lọc ảnh cosplay / đường phố, chạy **hoàn toàn offline** trên Windows 10/11.
 Không cần cài Git hay Python — mọi thứ đã nằm trong bộ cài. Có card đồ hoạ (NVIDIA, AMD, Intel) thì AI tự dùng card qua DirectML; không có thì chạy bằng CPU.
 

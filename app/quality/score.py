@@ -9,7 +9,9 @@ measured 0.5-0.8, a defocused background face 0.08, a 2 px Gaussian blur
 ~0.2); they are NOT calibrated against the owner's choices yet.
 Eyes: MediaPipe eyeBlink (0 open .. 1 closed); on the owner's shoot open eyes measured ~0.06 and
 every face >= 0.5 had closed or downcast eyes. Closed eyes are not scored 0: they can be intended.
-Not measured at all (no model yet): aesthetics/artistry.
+Aesthetics (beta): TOPIQ trained on AVA contest ratings (general photography, not cosplay), only a
+small hint: weight 10. On the owner's shoot the 1..10 score spanned 4.3-5.1 (p5-p95), so it is
+stretched 4.2 -> 0 .. 5.2 -> 100.
 """
 
 from __future__ import annotations
@@ -18,10 +20,12 @@ import json
 import sqlite3
 from dataclasses import dataclass, field
 
-PROFILE_VERSION = "cosplay-tech-v2"
-WEIGHTS = {"focus": 30, "eyes": 20, "face": 20, "exposure": 15, "framing": 15}
-LABELS = {"focus": "nét", "eyes": "mắt", "face": "mặt", "exposure": "sáng", "framing": "bố cục"}
-NOT_MEASURED = ("thẩm mỹ tổng thể",)
+PROFILE_VERSION = "cosplay-tech-v3"
+WEIGHTS = {"focus": 30, "eyes": 20, "face": 20, "exposure": 15, "framing": 15, "aesthetic": 10}
+LABELS = {"focus": "nét", "eyes": "mắt", "face": "mặt", "exposure": "sáng", "framing": "bố cục",
+          "aesthetic": "thẩm mỹ"}
+NOT_MEASURED: tuple[str, ...] = ()
+AESTHETIC_LOW, AESTHETIC_HIGH = 4.2, 5.2  # TOPIQ mean score (1..10) mapped to 0..100
 BLINK_OPEN, BLINK_CLOSED = 0.30, 0.50  # MediaPipe eyeBlink: below = open, at/above = closed or looking down
 GOOD, POOR = 75.0, 45.0  # a criterion at/above GOOD is a strength, at/below POOR a weakness
 
@@ -56,6 +60,8 @@ def score(v: dict) -> Score:
         parts["focus"] = _ramp(sharp, 0.15, 0.75)
         if sharp < 0.25:
             warnings.append("lệch nét / rung" if v.get("eye_sharp") is not None else "người không nét")
+    if v.get("aesthetic_mos") is not None:
+        parts["aesthetic"] = _ramp(v["aesthetic_mos"], AESTHETIC_LOW, AESTHETIC_HIGH)
     blink = v.get("blink")
     if blink is not None:
         if blink < BLINK_OPEN:
@@ -157,6 +163,13 @@ def _explain(v: dict, parts: dict[str, float | None], warnings: list[str]) -> tu
             bad.append("người nằm sát mép khung")
         if frame >= GOOD and not v.get("cut_head"):
             good.append("bố cục gọn, đủ người")
+    beauty = parts["aesthetic"]
+    if beauty is None:
+        todo.append("thẩm mỹ tổng thể (chưa có mô hình)")
+    elif beauty >= GOOD:
+        good.append("gợi ý thẩm mỹ cao (AI tham khảo, học từ ảnh thi chung)")
+    elif beauty <= POOR:
+        bad.append("gợi ý thẩm mỹ thấp (AI tham khảo, học từ ảnh thi chung)")
     todo += [f"{name} (chưa có mô hình)" for name in NOT_MEASURED]
     return good, bad, todo
 

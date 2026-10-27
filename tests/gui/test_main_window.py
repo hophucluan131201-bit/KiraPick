@@ -360,7 +360,8 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     assert w.model.rowCount() == subjects[0]["photos"]
     assert w.inspector.fields["Chủ thể"].text().startswith(actions.subject_label(w.project.conn, first))
     explained = w.inspector.fields["Điểm chất lượng"].text()
-    assert "/100" in explained and "Điểm mạnh" in explained and "Chưa đánh giá" in explained
+    assert "/100" in explained and "Điểm mạnh" in explained and "mắt" in explained
+    assert "thẩm mỹ" in explained  # judged (hint) when the aesthetic model is present, else listed as not judged
 
     monkeypatch.setattr(mw.QInputDialog, "getText", lambda *a, **k: ("Aki", True))
     w.rename_current_person()
