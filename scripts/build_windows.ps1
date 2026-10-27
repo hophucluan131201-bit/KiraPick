@@ -86,6 +86,10 @@ if (-not (Test-Path (Join-Path $models "topiq_iaa_res50.onnx.sha256"))) {
     Invoke-Tool "Chuyển mô hình thẩm mỹ" $cpy @("scripts\convert_topiq.py", "--out", $models)
 }
 
+# Large models: weights stored as float16 (half the size; checked against the originals).
+Invoke-Tool "Cài onnx (chỉ để thu gọn mô hình)" $bpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "onnx==1.23.2")
+Invoke-Tool "Thu gọn mô hình lớn" $bpy @("scripts\shrink_models.py", "--dest", $models)
+
 Step "4/6 PyInstaller"
 $dist = Join-Path $Root "dist\KiraPick"
 if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }

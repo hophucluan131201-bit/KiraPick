@@ -21,5 +21,14 @@ source. Re-check this table before any commercial distribution.
 | OSNet (torchreid) | body / outfit re-identification | code MIT | weights trained on Market-1501 / MSMT17 (research-only datasets) | **not fetched**: hosted on HuggingFace/Google Drive, blocked from the dev container; to be exported on the owner's PC |
 | DINOv2-small | general visual embedding | Apache-2.0 (model card) | LVD-142M | **not fetched**: dl.fbaipublicfiles.com blocked from the dev container |
 
+**Installer size (2.0.1):** `scripts/shrink_models.py` stores the weights of ArcFace, YoutuReID,
+SFace, TOPIQ and YOLOX-M as float16 with a Cast back to float32 (compute stays float32; only weight
+values are rounded). It checks every model against the original before replacing it and writes a
+`<file>.sha256` sidecar `"<sha256> <size> fp16w-of:<original sha256>"`; the registry accepts a
+shrunk file only if it names the pinned original. Weights 751 MB → 402 MB. On the owner's 439
+thumbnails: ArcFace cosine mean 0.99983 (min 0.963, one tiny face), ReID ≥ 0.999998, TOPIQ |Δ| ≤ 0.004
+on 1–10, YOLOX-M 2 of 1253 boxes differ; grouping precision/recall identical. A modified file in
+the licence sense: the weights are the same models in another number format.
+
 Runtime components: ONNX Runtime (MIT), NVIDIA CUDA 13 / cuDNN 9 redistributables via pip
 (NVIDIA license; installed into the venv, not system-wide), OpenCV (Apache-2.0), PySide6 (LGPLv3).

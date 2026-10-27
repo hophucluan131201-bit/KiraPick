@@ -32,7 +32,7 @@ a = Analysis(
     ],
     hiddenimports=["app.selftest"],
     excludes=[
-        "tkinter", "pytest", "pytestqt", "IPython", "matplotlib", "scipy", "pandas",
+        "tkinter", "pytest", "onnx", "pytestqt", "IPython", "matplotlib", "scipy", "pandas",
         "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtQml", "PySide6.QtQuick",
         "PySide6.Qt3DCore", "PySide6.QtMultimedia", "PySide6.QtPdf", "PySide6.QtCharts",
         "PySide6.QtDataVisualization", "PySide6.QtNetwork", "PySide6.QtWebSockets", "PySide6.QtBluetooth",
@@ -40,6 +40,12 @@ a = Analysis(
     ],
     noarchive=False,
 )
+# Not needed by this widgets-only app: Qt's own translations (the UI text is the app's own; no
+# QTranslator is loaded) and the software OpenGL renderer (no OpenGL / Qt Quick is used).
+_UNUSED = ("translations", "opengl32sw.dll")
+a.datas = [d for d in a.datas if not any(u in d[0].replace("\\", "/").split("/") for u in _UNUSED)]
+a.binaries = [b for b in a.binaries if Path(b[0]).name.lower() not in _UNUSED]
+
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,

@@ -415,3 +415,22 @@ def test_person_boxes_of_both_detectors_are_merged() -> None:
     found = PersonDetector(medium_misses_her, small_finds_her).detect(np.zeros((640, 640, 3), np.uint8))
     assert len(found) == 1 and found[0][1] == pytest.approx(0.87)
     assert PersonDetector(medium_misses_her).detect(np.zeros((640, 640, 3), np.uint8)) == []
+
+
+def test_registry_accepts_float16_weights_only_from_the_pinned_original(tmp_path: Path) -> None:
+    """scripts/shrink_models.py writes "<sha> <size> fp16w-of:<original sha>" next to the file."""
+    import hashlib
+
+    original, shrunk = b"original weights" * 100, b"half weights" * 50
+    spec = replace(load_manifest()["face_embedder_arcface"], file="m.onnx",
+                   sha256=hashlib.sha256(original).hexdigest(), size=len(original))
+    (tmp_path / "m.onnx").write_bytes(shrunk)
+    registry = lambda: ModelRegistry(tmp_path, {spec.id: spec})  # noqa: E731
+    assert registry().status(spec.id).state is ModelState.CORRUPT  # no sidecar: not the pinned file
+    sidecar = tmp_path / "m.onnx.sha256"
+    sidecar.write_text(f"{hashlib.sha256(shrunk).hexdigest()} {len(shrunk)} fp16w-of:{'0' * 64}\n")
+    assert registry().status(spec.id).state is ModelState.CORRUPT  # made from some other file
+    sidecar.write_text(f"{hashlib.sha256(shrunk).hexdigest()} {len(shrunk)} fp16w-of:{spec.sha256}\n")
+    assert registry().status(spec.id).state is ModelState.READY
+    (tmp_path / "m.onnx").write_bytes(shrunk[:-1] + b"X")  # tampered after shrinking
+    assert registry().status(spec.id).state is ModelState.CORRUPT

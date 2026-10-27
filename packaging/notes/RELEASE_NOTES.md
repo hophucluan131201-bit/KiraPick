@@ -1,5 +1,8 @@
 ## KiraPick 2.0 – bản chính thức
 
+> **2.0.1 – bộ cài nhẹ hơn khoảng 370 MB.** Các mô hình AI lớn được lưu ở dạng nửa độ chính xác
+> (FP16); kết quả gom chủ thể trên buổi chụp thử giống hệt bản 2.0.0. Bỏ thêm vài thành phần Qt không dùng.
+
 Ứng dụng lọc ảnh cosplay / đường phố, chạy **hoàn toàn offline** trên Windows 10/11.
 Không cần cài Git hay Python — mọi thứ đã nằm trong bộ cài. Có card đồ hoạ (NVIDIA, AMD, Intel) thì AI tự dùng card qua DirectML; không có thì chạy bằng CPU.
 

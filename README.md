@@ -180,6 +180,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\make_shortcut.ps1   # desktop
   `winget install --id Python.Python.3.12 -e`). Linux/macOS: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"`.
 - Tests: `.\.venv\Scripts\python -m pytest` (sample-photo tests run when `test_photos/` exists; it is git-ignored).
 - AI models (once, needs Internet; the app itself never downloads): `.\.venv\Scripts\python scripts\fetch_models.py`.
+  The installer build also stores the large models' weights as float16 (`scripts/shrink_models.py`, checked against the originals).
   Licenses: [`docs/model-licenses.md`](docs/model-licenses.md).
 - Read-only check of a photo folder:
   `.\.venv\Scripts\python -m app.ingest.cli "D:\Photos\Shoot" --verify --verify-untouched --json report.json`

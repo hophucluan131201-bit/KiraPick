@@ -314,6 +314,19 @@ The Test subset (old labels) measures 1.000 / 0.725 now. Remaining splits are mo
 stragglers (profile, motion blur, hands over face) that the owner can merge with the tick boxes +
 "🔗 Gộp người".
 
+## Release 2.0.1: size review (2026-10-27)
+
+- Repository: 9 MB, nothing large tracked (the two converted MediaPipe models, 6.8 MB, are needed).
+- Model weights in the installer: 751 MB → 402 MB with float16 weight storage (see
+  docs/model-licenses.md for the checks). YOLOX-M kept: on the owner's 439 thumbnails it finds a large
+  person YOLOX-S misses in 44 photos (and S finds one M misses in 45), so both run on GPU.
+- PyInstaller bundle (Linux trial build 392 → 385 MB): Qt translations (unused: no QTranslator) and,
+  on Windows, opengl32sw.dll (software OpenGL, unused by a widgets app) are left out. The packaged app
+  with the shrunk models passed `--self-test` offline here (identity_plus ready) and started its GUI
+  offscreen. Not yet verified: the Windows build itself (GitHub Actions).
+- opencv-python-headless still carries FFmpeg/OpenBLAS (~120 MB); a smaller OpenCV would need a
+  custom build — left as is.
+
 ## Test run
 
 ```

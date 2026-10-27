@@ -72,6 +72,15 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _read_sidecar(path: Path) -> tuple[str, int, str] | None:
+    """``<file>.sha256``: "<sha256> <size> [origin]" written by a build-time converter."""
+    try:
+        parts = path.with_name(path.name + ".sha256").read_text().split()
+        return parts[0], int(parts[1]), parts[2] if len(parts) > 2 else ""
+    except (OSError, ValueError, IndexError):
+        return None
+
+
 class ModelRegistry:
     def __init__(self, models_dir: Path | None = None, manifest: dict[str, ModelSpec] | None = None) -> None:
         self.models_dir = models_dir or default_models_dir()
@@ -86,12 +95,14 @@ class ModelRegistry:
         except OSError:
             return ModelStatus(spec, ModelState.MISSING, path)
         expected_sha, expected_size = spec.sha256, spec.size
+        sidecar = _read_sidecar(path)
         if not expected_sha:  # converted at build time: the converter wrote "<sha256> <size>" next to it
-            try:
-                expected_sha, size_text = path.with_name(path.name + ".sha256").read_text().split()[:2]
-                expected_size = int(size_text)
-            except (OSError, ValueError):
+            if sidecar is None:
                 return ModelStatus(spec, ModelState.CORRUPT, path)
+            expected_sha, expected_size = sidecar[0], sidecar[1]
+        elif sidecar is not None and sidecar[2] == f"fp16w-of:{spec.sha256}":
+            # weights stored as float16 by scripts/shrink_models.py from exactly the pinned file
+            expected_sha, expected_size = sidecar[0], sidecar[1]
         cached = self._verified.get(model_id)
         if cached is None or cached[:2] != (st.st_size, st.st_mtime_ns):
             ok = st.st_size == expected_size and sha256_of(path) == expected_sha
