@@ -1,6 +1,9 @@
-## KiraPick 2.1.0b5 – bản thử nghiệm (beta)
+## KiraPick 2.1.0b6 – bản thử nghiệm (beta)
 
 > **Bản beta, chưa phải bản chính thức.** Bản chính thức mới nhất vẫn là 2.0.6.
+> - **2.1.0b6 – gợi ý thẩm mỹ trên card đồ hoạ:** file tự kiểm tra 2.1.0b5 cho thấy DirectML báo lỗi (nút
+>   Reshape) với mô hình thẩm mỹ vì mô hình nhận ảnh "mọi kích thước". Giờ card đồ hoạ dùng một bản cố định
+>   kích thước cho từng hướng ảnh (ngang 576×384, dọc 384×576, …); vẫn so với CPU lúc khởi động, lỗi thì tự dùng CPU.
 > - **2.1.0b5 – đo để tăng tốc:** file tự kiểm tra ghi thời gian từng khâu của 📊 (đọc ảnh gốc, gợi ý thẩm mỹ,
 >   đo nét/mắt/mặt) và lý do mô hình thẩm mỹ không dùng được card đồ hoạ (nếu có).
 > - **2.1.0b4 – 📊 Phân tích ảnh cũng dùng card đồ hoạ:** mô hình gợi ý thẩm mỹ được chạy trên GPU nếu khi

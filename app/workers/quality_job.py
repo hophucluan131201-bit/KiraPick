@@ -166,7 +166,7 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
     last_aesthetic_check.update(aesthetic.check if aesthetic is not None else {"device": "none"})
     log.info("aesthetic model: %s", last_aesthetic_check)
     if device is not None:
-        device.append(aesthetic.session.device if aesthetic is not None else "cpu")
+        device.append(aesthetic.device if aesthetic is not None else "cpu")
         progress("device:" + device[0], 0, 0)
     done = failed = 0
     total = len(todo)

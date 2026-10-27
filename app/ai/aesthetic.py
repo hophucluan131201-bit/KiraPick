@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 
 from app.ai.models import ModelRegistry
-from app.ai.runtime import create_session
+from app.ai.runtime import Session, create_session
 
 SHORT_SIDE = 384
 
@@ -21,30 +21,56 @@ def _round32(v: float) -> int:
     return max(32, int(round(v / 32)) * 32)
 
 
+def _input_size(h: int, w: int) -> tuple[int, int]:
+    """(height, width) the model sees for a photo of ``h`` x ``w``."""
+    k = SHORT_SIDE / min(h, w)
+    return _round32(h * k), _round32(w * k)
+
+
 class AestheticModel:
-    def __init__(self, registry: ModelRegistry, *, prefer_gpu: bool = True) -> None:
-        path = registry.require("aesthetic")
-        self.session = create_session(path, prefer_gpu=prefer_gpu)
-        self._input = self.session.session.get_inputs()[0].name
-        self.check: dict = {"device": self.session.device, "note": self.session.fallback_reason}  # for reports
-        if self.session.device != "cpu":
-            # The input size follows the photo's shape; a GPU provider may fail or round differently on it.
-            # Keep the GPU only if it gives the CPU's answer on both orientations (owner's laptop:
-            # DirectML 11 ms vs CPU 200 ms per detection, so this matters for 📊).
-            problem = self._differs_from_cpu(path)
-            self.check["problem"] = problem
-            if problem:
-                self.session = create_session(path, prefer_gpu=False)
-                self.session.fallback_reason = f"Gợi ý thẩm mỹ chạy bằng CPU: {problem}"
-            self.check["device"] = self.session.device
+    """CPU: one size-free session. GPU: one fixed-size session per photo shape (DirectML failed on the
+    size-free graph: Reshape error, owner's self-test 2.1.0b5), checked against the CPU first and
+    dropped for good on any GPU error."""
 
-    PROBES = ((384, 576), (576, 384))  # (height, width) of a landscape and a portrait photo
+    PROBES = ((384, 576), (576, 384))  # (height, width) of a landscape and a portrait 3:2 photo
     TOLERANCE = 0.02  # on the 1..10 scale
+    MAX_GPU_SHAPES = 4  # each fixed-size graph holds its own GPU memory
 
-    def _differs_from_cpu(self, path) -> str | None:  # noqa: ANN001
-        cpu = AestheticModel.__new__(AestheticModel)
-        cpu.session = create_session(path, prefer_gpu=False)
-        cpu._input = cpu.session.session.get_inputs()[0].name
+    def __init__(self, registry: ModelRegistry, *, prefer_gpu: bool = True) -> None:
+        self._path = registry.require("aesthetic")
+        self.session = create_session(self._path, prefer_gpu=False)  # any size; the GPU's reference
+        self._input = self.session.session.get_inputs()[0].name
+        self._gpu: dict[tuple[int, int], Session] = {}
+        self.device = "cpu"
+        self.check: dict = {"device": "cpu", "note": None}  # for reports and the log
+        if not prefer_gpu:
+            return
+        first = self._gpu_session(*self.PROBES[0])
+        self.check["note"] = first.fallback_reason
+        if first.device == "cpu":
+            return
+        self.device = first.device
+        # Keep the GPU only if it gives the CPU's answer on both orientations (owner's laptop:
+        # DirectML 11 ms vs CPU 90 ms per detection, so this matters for 📊).
+        problem = self._differs_from_cpu()
+        self.check["problem"] = problem
+        if problem:
+            self._use_cpu(f"Gợi ý thẩm mỹ chạy bằng CPU: {problem}")
+        self.check["device"] = self.device
+
+    def _gpu_session(self, h: int, w: int) -> Session:
+        if (h, w) not in self._gpu:
+            if len(self._gpu) >= self.MAX_GPU_SHAPES:
+                self._gpu.pop(next(iter(self._gpu)))  # the oldest shape
+            self._gpu[(h, w)] = create_session(self._path, prefer_gpu=True, fixed_dims={"h": h, "w": w})
+        return self._gpu[(h, w)]
+
+    def _use_cpu(self, reason: str) -> None:
+        self._gpu.clear()
+        self.device = self.check["device"] = "cpu"
+        self.session.fallback_reason = reason
+
+    def _differs_from_cpu(self) -> str | None:
         import time
 
         self.check["probes"] = probes = []
@@ -58,22 +84,38 @@ class AestheticModel:
                 self.check["error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
                 return f"card đồ hoạ lỗi ({type(exc).__name__})"
             t1 = time.perf_counter()
-            if self.session.device == "cpu":
-                self.check["error"] = self.session.last_error
-                return "card đồ hoạ lỗi khi chạy"  # Session.run already fell back
-            cpu_score = cpu.score(probe)
+            if self.device == "cpu":
+                return "card đồ hoạ lỗi khi chạy"  # score() already moved to the CPU
+            cpu_score = self._mos(self.session, self._tensor(probe))
             probes.append({"size": f"{w}x{h}", "gpu": gpu_score, "cpu": cpu_score,
                            "gpu_ms_first_run": round((t1 - t0) * 1000), "cpu_ms": round((time.perf_counter() - t1) * 1000)})
             if abs(gpu_score - cpu_score) > self.TOLERANCE:
                 return "kết quả trên card đồ hoạ khác CPU"
         return None
 
-    def score(self, bgr: np.ndarray) -> float:
+    @staticmethod
+    def _tensor(bgr: np.ndarray) -> np.ndarray:
         h, w = bgr.shape[:2]
-        k = SHORT_SIDE / min(h, w)
-        img = cv2.resize(bgr, (_round32(w * k), _round32(h * k)), interpolation=cv2.INTER_AREA if k < 1
-                         else cv2.INTER_CUBIC)
-        x = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32).transpose(2, 0, 1)[None] / 255.0
-        outs = self.session.run(None, {self._input: x})
+        th, tw = _input_size(h, w)
+        img = cv2.resize(bgr, (tw, th), interpolation=cv2.INTER_AREA if th < h else cv2.INTER_CUBIC)
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32).transpose(2, 0, 1)[None] / 255.0
+
+    def _mos(self, session: Session, x: np.ndarray) -> float:
+        outs = session.run(None, {self._input: x})
         mos = next(o for o in outs if o.size == 1)
         return round(float(mos.reshape(-1)[0]), 4)
+
+    def score(self, bgr: np.ndarray) -> float:
+        x = self._tensor(bgr)
+        if self.device == "cpu":
+            return self._mos(self.session, x)
+        gpu = self._gpu_session(*x.shape[2:])
+        if gpu.device == "cpu":  # this shape could not get a GPU session
+            self.check["error"] = gpu.fallback_reason
+            self._use_cpu(f"Gợi ý thẩm mỹ chạy bằng CPU: {gpu.fallback_reason}")
+            return self._mos(self.session, x)
+        mos = self._mos(gpu, x)
+        if gpu.device == "cpu":  # Session.run met a GPU error and answered on the CPU
+            self.check["error"] = gpu.last_error
+            self._use_cpu("Gợi ý thẩm mỹ chạy bằng CPU: card đồ hoạ lỗi khi chạy")
+        return mos

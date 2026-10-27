@@ -610,8 +610,83 @@ def test_aesthetic_runs_on_the_gpu_only_if_it_matches_the_cpu(monkeypatch: pytes
         monkeypatch.setattr(aesthetic, "create_session", lambda path, prefer_gpu=True, **k: (
             fake("directml", gpu_value) if prefer_gpu else fake("cpu", 5.0)))
         model = aesthetic.AestheticModel(registry, prefer_gpu=True)
-        assert model.session.device == expected_device, gpu_value
+        assert model.device == expected_device, gpu_value
         if expected_device == "cpu":
             assert "CPU" in model.session.fallback_reason
     monkeypatch.setattr(aesthetic, "create_session", lambda path, prefer_gpu=True, **k: fake("cpu", 5.0))
-    assert aesthetic.AestheticModel(registry, prefer_gpu=False).session.device == "cpu"
+    assert aesthetic.AestheticModel(registry, prefer_gpu=False).device == "cpu"
+
+
+def test_session_can_fix_free_dimensions(tmp_path: Path) -> None:
+    """DirectML failed on TOPIQ's size-free graph (owner's self-test 2.1.0b5: Reshape node_Reshape_1701).
+    A session can be built for one fixed photo size; the scores are the same as the size-free graph."""
+    onnx = pytest.importorskip("onnx")
+    from onnx import TensorProto, helper
+
+    from app.ai.runtime import create_session
+
+    x = helper.make_tensor_value_info("image", TensorProto.FLOAT, [1, 3, "h", "w"])
+    mean = helper.make_node("ReduceMean", ["image"], ["mos"], keepdims=0, axes=[1, 2, 3])
+    graph = helper.make_graph([mean], "g", [x], [helper.make_tensor_value_info("mos", TensorProto.FLOAT, [1])])
+    path = tmp_path / "free.onnx"
+    onnx.save(helper.make_model(graph, opset_imports=[helper.make_opsetid("", 13)], ir_version=8), path)
+    fixed = create_session(path, prefer_gpu=False, fixed_dims={"h": 4, "w": 6})
+    assert fixed.session.get_inputs()[0].shape == [1, 3, 4, 6]
+    image = np.arange(72, dtype=np.float32).reshape(1, 3, 4, 6)
+    assert fixed.run(None, {"image": image})[0] == pytest.approx(create_session(path, prefer_gpu=False).run(
+        None, {"image": image})[0])
+
+
+def test_aesthetic_gpu_uses_one_fixed_size_session_per_photo_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from app.ai import aesthetic
+
+    made: list = []
+
+    def fake_create(path, prefer_gpu=True, fixed_dims=None, **_k):  # noqa: ANN001, ANN202
+        made.append((prefer_gpu, fixed_dims))
+        device = "directml" if prefer_gpu else "cpu"
+        session = SimpleNamespace(device=device, fallback_reason=None, last_error=None,
+                                  session=SimpleNamespace(get_inputs=lambda: [SimpleNamespace(name="image")]))
+
+        def run(_names, feeds):  # noqa: ANN001, ANN202
+            h, w = feeds["image"].shape[2:]
+            if fixed_dims is not None:
+                assert (h, w) == (fixed_dims["h"], fixed_dims["w"])
+            return [np.zeros((1, 10), np.float32), np.array([[5.0]], np.float32)]
+        session.run = run
+        return session
+
+    monkeypatch.setattr(aesthetic, "create_session", fake_create)
+    model = aesthetic.AestheticModel(SimpleNamespace(require=lambda _id: Path("topiq.onnx")), prefer_gpu=True)
+    assert model.device == "directml" and model.check["probes"]
+    model.score(np.zeros((4000, 6000, 3), np.uint8))  # landscape 3:2 -> 384x576 (already made by the check)
+    model.score(np.zeros((6000, 4000, 3), np.uint8))  # portrait -> 576x384 (already made)
+    model.score(np.zeros((3000, 4000, 3), np.uint8))  # 4:3 -> one new session
+    gpu = [d for p, d in made if p]
+    assert gpu == [{"h": 384, "w": 576}, {"h": 576, "w": 384}, {"h": 384, "w": 512}]
+    assert all(d is None for p, d in made if not p)  # the CPU keeps the size-free graph
+
+
+def test_aesthetic_moves_to_the_cpu_for_good_when_the_gpu_fails_later(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from app.ai import aesthetic
+
+    def fake_create(path, prefer_gpu=True, fixed_dims=None, **_k):  # noqa: ANN001, ANN202
+        session = SimpleNamespace(device="directml" if prefer_gpu else "cpu", fallback_reason=None, last_error=None,
+                                  session=SimpleNamespace(get_inputs=lambda: [SimpleNamespace(name="image")]))
+
+        def run(_names, feeds):  # noqa: ANN001, ANN202
+            if prefer_gpu and fixed_dims == {"h": 384, "w": 512}:  # what Session.run does on a GPU error
+                session.device, session.last_error = "cpu", "RuntimeException: Reshape"
+            return [np.array([[5.0]], np.float32)]
+        session.run = run
+        return session
+
+    monkeypatch.setattr(aesthetic, "create_session", fake_create)
+    model = aesthetic.AestheticModel(SimpleNamespace(require=lambda _id: Path("topiq.onnx")), prefer_gpu=True)
+    assert model.device == "directml"
+    assert model.score(np.zeros((3000, 4000, 3), np.uint8)) == 5.0
+    assert model.device == "cpu" and "Reshape" in model.check["error"]

@@ -90,11 +90,13 @@ class Session:
             return self.session.run(output_names, feeds)
 
 
-def _options(directml: bool, cpu_threads: int = 0) -> ort.SessionOptions:
+def _options(directml: bool, cpu_threads: int = 0, fixed_dims: dict[str, int] | None = None) -> ort.SessionOptions:
     opts = ort.SessionOptions()
     opts.log_severity_level = 3
     if cpu_threads:
         opts.intra_op_num_threads = cpu_threads
+    for name, value in (fixed_dims or {}).items():  # e.g. {"h": 384, "w": 576}: a graph for one input size
+        opts.add_free_dimension_override_by_name(name, value)
     if directml:  # required by the DirectML provider
         opts.enable_mem_pattern = False
         opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
@@ -175,10 +177,16 @@ def list_gpus() -> list[dict]:
 
 
 def create_session(model: Path, *, prefer_gpu: bool = True, gpu_mem_limit_mb: int = DEFAULT_GPU_MEM_LIMIT_MB,
-                   cpu_threads: int = 0, allow_directml: bool = True) -> Session:
-    """``allow_directml=False``: CUDA or CPU only (models DirectML handles badly)."""
+                   cpu_threads: int = 0, allow_directml: bool = True,
+                   fixed_dims: dict[str, int] | None = None) -> Session:
+    """``allow_directml=False``: CUDA or CPU only (models DirectML handles badly).
+
+    ``fixed_dims``: give the model's named free input dimensions fixed sizes (the session then only
+    accepts that size). DirectML compiles a fixed-size graph as a whole and failed on TOPIQ's
+    size-free one (Reshape error on the owner's RTX 2080).
+    """
     info = configure()
-    options = lambda directml: _options(directml, cpu_threads)  # noqa: E731
+    options = lambda directml: _options(directml, cpu_threads, fixed_dims)  # noqa: E731
 
     errors: list[str] = []
     if prefer_gpu:
