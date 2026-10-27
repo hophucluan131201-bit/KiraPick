@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import __version__
+from app.branding import APP_NAME, SETTINGS_IDS, data_dir
 from app.storage import decisions
 from app.storage.project import Project
 from app.storage.sessions import delete_session, open_session, purge_old_sessions
@@ -69,8 +70,7 @@ _RELOAD_DURING_IMPORT_MS = 1500
 
 def sessions_dir() -> Path:
     """Hidden per-folder session data (database + thumbnails), never shown as 'projects'."""
-    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
-    return Path(base or Path.home() / ".snorlu") / "sessions"
+    return data_dir() / "sessions"
 
 
 _KEYS_GRID = [
@@ -101,8 +101,8 @@ def _long_side(rec: AssetRecord) -> int | None:
 class MainWindow(QMainWindow):
     def __init__(self, settings: QSettings | None = None) -> None:
         super().__init__()
-        self.setWindowTitle(f"Snorlu AI Culling {__version__}")
-        self.settings = settings or QSettings("Snorlu", "AI Culling")
+        self.setWindowTitle(f"{APP_NAME} {__version__}")
+        self.settings = settings or QSettings(*SETTINGS_IDS)
         self.project: Project | None = None
         self._session_root: Path | None = None
         self._restored_note = ""
@@ -388,7 +388,7 @@ class MainWindow(QMainWindow):
             self.project.close()
         self.project = project
         self._session_root = photo_root
-        self.setWindowTitle(f"{photo_root.name or photo_root} — Snorlu AI Culling {__version__}")
+        self.setWindowTitle(f"{photo_root.name or photo_root} — {APP_NAME} {__version__}")
         self.search.clear()
         self.model.set_search("")
         self.model.set_project(project)

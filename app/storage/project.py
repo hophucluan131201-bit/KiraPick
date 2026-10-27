@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.core.errors import SnorluError
+from app.core.errors import KiraPickError
 from app.storage import db
 
 DB_NAME = "project.snorlu.db"
@@ -23,7 +23,7 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-class ProjectError(SnorluError):
+class ProjectError(KiraPickError):
     pass
 
 

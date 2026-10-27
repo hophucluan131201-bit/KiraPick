@@ -36,7 +36,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: snorlu-windows-installer
+          name: kirapick-windows-installer
           path: |
             dist/installer/*
             dist/selftest.json
@@ -50,4 +50,4 @@ jobs:
           $version = (Select-String -Path app/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
           $tag = "v$version"
           $files = Get-ChildItem dist/installer -File | ForEach-Object { $_.FullName }
-          gh release create $tag $files --target "${{ github.sha }}" --title "Snorlu AI Culling $version (beta)" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease
+          gh release create $tag $files --target "${{ github.sha }}" --title "KiraPick $version (beta)" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease

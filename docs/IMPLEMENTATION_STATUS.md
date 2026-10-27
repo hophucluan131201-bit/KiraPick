@@ -39,7 +39,7 @@ required — a listed provider does not prove inference works).
 | Recursive scan: no symlink/junction following, hidden/system dirs skipped, cancel | tested | Linux; junctions untested (Windows only) |
 | RAW+JPEG pairing by folder+stem, confirmed by capture time | tested | unit tests; wired into the import job (below) |
 | Quick fingerprint (size + edge hashes) and full SHA-256 | tested | |
-| `snorlu-raw-probe` CLI (read-only report, proves files untouched) | tested | integration test |
+| `kirapick-raw-probe` CLI (read-only report, proves files untouched) | tested | integration test |
 | Windows Unicode paths for RAW | tested | **on the user's Windows laptop**: 439 NEF in a Vietnamese path with `&`, 0 errors, sources unchanged |
 
 Details and measurements: [`raw-support-matrix.md`](raw-support-matrix.md).
@@ -72,7 +72,7 @@ Real-data smoke run: 42 sample files imported in 0.6 s (33 ok, 9 damaged files r
 | Filters: all / unflagged / keep / reject / favorite / ≥3★ / errors; per-folder | tested | |
 | Broken files shown with reason, never crash the UI; unhandled errors -> dialog + log | tested / implemented | |
 | Export: keep/favorite/≥N★/selection, preview table, free-space check, confirm, exclusive-create copies, pairs share stem, size verify, CSV (Excel-friendly UTF-8) + JSON | tested | `tests/integration/test_export.py` |
-| Windows launcher `Snorlu.cmd`, optional desktop shortcut from setup script | implemented | not run on Windows yet |
+| Windows launcher `KiraPick.cmd`, optional desktop shortcut from setup script | implemented | not run on Windows yet |
 
 | File-name search (sidebar, Ctrl+F, multi-token OR) | tested | typing digits never triggers rating shortcuts |
 | Client pick lists: paste text + `DSC_####` pattern → parsed (numbers, ranges, shorthand `9645-50`, full names), unmatched/ambiguous report, saved as collection (schema v2), filter + export by list | tested | `tests/unit/test_client_list.py`, GUI test; requested by the user 2026-10-27 |
@@ -164,6 +164,13 @@ as refused connections in the dev container's egress proxy log during test runs.
 no store afterwards (full suite + self-test re-run, proxy log clean). The self-test now checks the
 switch; its socket block only covers Python code, not native libraries.
 
+**Rename 2026-10-27 (0.2.0b2):** product renamed "Snorlu AI Culling" → **KiraPick** (owner's
+choice; avoids a name close to a Pokémon trademark). App data moves once from
+`%LOCALAPPDATA%\Snorlu\Snorlu AI Culling` to `%LOCALAPPDATA%\KiraPick` (`app/branding.py`), window
+settings are copied, old session markers are still recognised; the installer keeps the same AppId so
+it upgrades an earlier install. Internal file names (`project.snorlu.db`) are unchanged on purpose.
+The GitHub repository itself is renamed by the owner (links now point to `…/kirapick`).
+
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
 quality 5.8 s for 7 photos (quality ≈ 0.1–0.3 s/photo + full-res JPEG decode 0.1–0.7 s).
@@ -173,7 +180,7 @@ quality 5.8 s for 7 photos (quality ≈ 0.1–0.3 s/photo + full-res JPEG decode
 Every people correction (merge, "different people", remove from person, assign/confirm) is
 turned into examples: pairs of occurrences with face similarity, outfit similarity, time gap and
 the user's answer. They are stored per Windows user in
-`%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\learning\learning.db` (`app/learning/`), survive the
+`%LOCALAPPDATA%\KiraPick\learning\learning.db` (`app/learning/`), survive the
 30-day session purge, are never part of an installer (each friend starts from the defaults), and
 contain no images, file names, paths, names or capture dates. Errors there never block a
 correction. Tested: `tests/unit/test_learning.py`.
@@ -186,7 +193,7 @@ quality measurements first).
 Data: debug bundle of 109 NEF (Nikon Z 5), 341 occurrences, 159 usable faces. Ground truth: 37 looks
 in `scripts/calibration/labels_test_20261025.py` (6 groups from the owner, the rest labelled
 visually from thumbnails by costume continuity — may contain mistakes). Metric: pairwise, per photo
-(its most prominent main person). Reproduce: `python scripts/calibration/evaluate_grouping.py snorlu_debug.zip`.
+(its most prominent main person). Reproduce: `python scripts/calibration/evaluate_grouping.py kirapick_debug.zip`.
 
 | Rules | Precision | Recall | Wrong merges |
 |---|---|---|---|

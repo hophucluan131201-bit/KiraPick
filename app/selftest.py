@@ -1,4 +1,4 @@
-"""Offline self-test of an installed/packaged app: ``Snorlu.exe --self-test report.json``.
+"""Offline self-test of an installed/packaged app: ``KiraPick.exe --self-test report.json``.
 
 Proves on the target machine, with every outgoing Python network connection blocked
 (native libraries are covered by switching their telemetry off: see app/__init__.py),
@@ -26,7 +26,7 @@ class _NetworkBlocked(OSError):
 def _block_network(attempts: list[str]) -> None:
     def refuse(*args, **_kw):  # noqa: ANN002, ANN003, ANN202
         attempts.append(repr(args[1:] if len(args) > 1 else args)[:200])
-        raise _NetworkBlocked("network access is not allowed in Snorlu AI Culling")
+        raise _NetworkBlocked("network access is not allowed in KiraPick")
 
     socket.socket.connect = refuse  # type: ignore[method-assign]
     socket.socket.connect_ex = refuse  # type: ignore[method-assign]
@@ -75,7 +75,7 @@ def run(report_path: Path) -> int:
         from app.workers.analyze_job import AnalyzeJob
         from app.workers.import_job import ImportJob
 
-        with tempfile.TemporaryDirectory(prefix="snorlu-selftest-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="kirapick-selftest-") as tmp:
             shoot = Path(tmp) / "Ảnh thử"
             shoot.mkdir()
             for i in range(2):

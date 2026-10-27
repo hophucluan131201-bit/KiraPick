@@ -1,6 +1,6 @@
 """Self-checks that compare independent decode paths of the same RAW file.
 
-Used by tests and by ``snorlu-raw-probe --verify`` on the user's own photos to
+Used by tests and by ``kirapick-raw-probe --verify`` on the user's own photos to
 prove (not assume) that the embedded-preview path is oriented correctly.
 """
 

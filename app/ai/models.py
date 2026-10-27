@@ -48,8 +48,8 @@ class ModelStatus:
 
 
 def default_models_dir() -> Path:
-    """SNORLU_MODELS_DIR, else models/ next to a packaged exe, else the repo's models/weights."""
-    env = os.environ.get("SNORLU_MODELS_DIR")
+    """KIRAPICK_MODELS_DIR (or the old SNORLU_MODELS_DIR), else models/ next to a packaged exe, else the repo's models/weights."""
+    env = os.environ.get("KIRAPICK_MODELS_DIR") or os.environ.get("SNORLU_MODELS_DIR")
     if env:
         return Path(env)
     if getattr(sys, "frozen", False):

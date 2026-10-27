@@ -150,7 +150,7 @@ def test_re_export_skips_identical_files_instead_of_duplicating(setup: tuple[Pro
 
     photos = sorted(f.name for f in dest.iterdir() if f.is_file())
     assert photos == ["DSC_0001 (1).jpg", "DSC_0001 (2).jpg", "DSC_0001.jpg", "DSC_0002.jpg"]  # no lists among photos
-    assert first.manifest_csv is not None and first.manifest_csv.parent.name == "_snorlu_danh_sach"
+    assert first.manifest_csv is not None and first.manifest_csv.parent.name == "_kirapick_danh_sach"
 
     # A newly kept photo is still added; only it gets copied.
     (dest / "DSC_0002.jpg").unlink()

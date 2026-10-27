@@ -1,6 +1,6 @@
-Required Notice: Copyright 2026 Snorlu (https://github.com/hophucluan131201-bit/snorlu-ai-culling)
+Required Notice: Copyright 2026 KiraPick (https://github.com/hophucluan131201-bit/kirapick)
 
-Snorlu AI Culling is a personal, non-commercial project shared publicly for free.
+KiraPick is a personal, non-commercial project shared publicly for free.
 Its own source code is licensed under the PolyForm Noncommercial License 1.0.0 below:
 you may use, copy, change and share it for any noncommercial purpose; selling it or
 using it in a commercial product needs the author's permission.

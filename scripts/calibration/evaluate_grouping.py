@@ -1,6 +1,6 @@
 """Measure the app's person grouping against labelled looks (pairwise precision / recall).
 
-    python scripts/calibration/evaluate_grouping.py snorlu_debug.zip            # or an extracted bundle folder
+    python scripts/calibration/evaluate_grouping.py kirapick_debug.zip          # or an extracted bundle folder
     python scripts/calibration/evaluate_grouping.py bundle --labels labels_aki_20261025
 
 Works on a *copy* of the database: manual corrections are cleared so only the
@@ -85,7 +85,7 @@ def evaluate(db_path: Path, looks: dict[str, list[int]]) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("source", type=Path, help="snorlu_debug.zip or the folder it was extracted to")
+    parser.add_argument("source", type=Path, help="kirapick_debug.zip or the folder it was extracted to")
     parser.add_argument("--labels", default="labels_aki_20261025", help="module in scripts/calibration with LOOKS")
     args = parser.parse_args()
     looks = importlib.import_module(args.labels).LOOKS

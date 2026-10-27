@@ -1,4 +1,4 @@
-﻿HƯỚNG DẪN CÀI ĐẶT SNORLU AI CULLING (bản thử nghiệm 0.2)
+﻿HƯỚNG DẪN CÀI ĐẶT KIRAPICK (bản thử nghiệm 0.2)
 =========================================================
 
 KHÔNG cần cài Git, Python hay bất cứ thứ gì khác. Mọi thứ đã có sẵn trong bộ cài.
@@ -10,13 +10,13 @@ BƯỚC 1 - GIẢI NÉN
 1. Nhấp chuột PHẢI vào file .zip bạn vừa tải về.
 2. Chọn "Extract All..." (Giải nén tất cả...) -> bấm "Extract".
 3. Một thư mục mới hiện ra, bên trong có:
-     - Snorlu-AI-Culling-Setup-....exe   (bộ cài)
+     - KiraPick-Setup-....exe   (bộ cài)
      - HUONG_DAN_CAI_DAT.txt             (file bạn đang đọc)
 
 -----------------------------------------------------------------
 BƯỚC 2 - CÀI ĐẶT
 -----------------------------------------------------------------
-1. Nhấp đúp vào file  Snorlu-AI-Culling-Setup-....exe
+1. Nhấp đúp vào file  KiraPick-Setup-....exe
 2. Nếu hiện khung màu xanh "Windows protected your PC" (Windows đã bảo vệ máy tính):
      - Bấm chữ nhỏ  "More info"  (Thông tin thêm)
      - Bấm nút      "Run anyway" (Vẫn chạy)
@@ -27,7 +27,7 @@ BƯỚC 2 - CÀI ĐẶT
 6. Bấm "Install", chờ khoảng 1 phút -> bấm "Finish".
    Không cần mật khẩu Administrator.
 
-Từ giờ mở ứng dụng bằng biểu tượng "Snorlu AI Culling" ngoài màn hình
+Từ giờ mở ứng dụng bằng biểu tượng "KiraPick" ngoài màn hình
 hoặc trong menu Start.
 
 -----------------------------------------------------------------
@@ -55,7 +55,7 @@ YÊN TÂM VỀ ẢNH CỦA BẠN
 -----------------------------------------------------------------
 GỠ CÀI ĐẶT
 -----------------------------------------------------------------
-Start -> Settings (Cài đặt) -> Apps (Ứng dụng) -> tìm "Snorlu AI Culling" -> Uninstall.
+Start -> Settings (Cài đặt) -> Apps (Ứng dụng) -> tìm "KiraPick" -> Uninstall.
 Ảnh của bạn không bị ảnh hưởng.
 
 -----------------------------------------------------------------
@@ -63,6 +63,6 @@ KHI GẶP LỖI
 -----------------------------------------------------------------
 Chụp màn hình lỗi và gửi cho người đã chia sẻ ứng dụng cho bạn, kèm thư mục log:
   bấm phím Windows + R, dán dòng dưới đây rồi Enter, gửi các file trong thư mục mở ra:
-  %LOCALAPPDATA%\Snorlu\Snorlu AI Culling\logs
+  %LOCALAPPDATA%\KiraPick\logs
 
 Đây là dự án cá nhân, phi thương mại, chia sẻ miễn phí - không bán lại.

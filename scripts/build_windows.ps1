@@ -1,5 +1,5 @@
 ﻿<#
-Build the Windows installer of Snorlu AI Culling (CPU build, works offline).
+Build the Windows installer of KiraPick (CPU build, works offline).
 
     powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 
@@ -77,16 +77,16 @@ Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", 
 Remove-Item (Join-Path $models "yolox_m.onnx") -ErrorAction SilentlyContinue  # GPU-only model, not shipped
 
 Step "4/6 PyInstaller"
-$dist = Join-Path $Root "dist\Snorlu AI Culling"
+$dist = Join-Path $Root "dist\KiraPick"
 if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
-Invoke-Tool "PyInstaller" $bpy @("-m", "PyInstaller", "--noconfirm", "--clean", "--workpath", "build\pyi", "--distpath", "dist", "packaging\snorlu.spec")
+Invoke-Tool "PyInstaller" $bpy @("-m", "PyInstaller", "--noconfirm", "--clean", "--workpath", "build\pyi", "--distpath", "dist", "packaging\kirapick.spec")
 New-Item -ItemType Directory -Force -Path (Join-Path $dist "models") | Out-Null
 Copy-Item (Join-Path $models "*.onnx") (Join-Path $dist "models")
 
 Step "5/6 Tự kiểm tra bản đóng gói (chặn mạng)"
 $report = Join-Path $Root "dist\selftest.json"
 Remove-Item $report -ErrorAction SilentlyContinue
-$proc = Start-Process -FilePath (Join-Path $dist "Snorlu.exe") -ArgumentList @("--self-test", "`"$report`"") -Wait -PassThru
+$proc = Start-Process -FilePath (Join-Path $dist "KiraPick.exe") -ArgumentList @("--self-test", "`"$report`"") -Wait -PassThru
 if (Test-Path $report) { Get-Content $report -Encoding UTF8 | ForEach-Object { Write-Host $_ } }
 if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) { throw "Tự kiểm tra thất bại (xem dist\selftest.json)" }
 
@@ -103,7 +103,7 @@ Copy-Item "LICENSE.md", "THIRD_PARTY_NOTICES.md", "docs\model-licenses.md" $note
 Copy-Item "packaging\notes\HUONG_DAN_CAI_DAT.txt", "LICENSE.md" $dist
 
 $guide = Join-Path $Root "packaging\notes\HUONG_DAN_CAI_DAT.txt"
-$portable = Join-Path $out "Snorlu-AI-Culling-$version-portable.zip"
+$portable = Join-Path $out "KiraPick-$version-portable.zip"
 Compress-Archive -Path $dist -DestinationPath $portable
 Write-Host "Bản giải nén là chạy: $portable"
 
@@ -113,8 +113,8 @@ if (-not $iscc) {
     Write-Host "Chưa có Inno Setup 6 nên chưa tạo được file Setup.exe (winget install --id JRSoftware.InnoSetup -e)." -ForegroundColor Yellow
 } else {
     Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "packaging\installer.iss")
-    $setup = Join-Path $out "Snorlu-AI-Culling-Setup-$version.exe"
-    $bundle = Join-Path $out "Snorlu-AI-Culling-$version-BoCai.zip"
+    $setup = Join-Path $out "KiraPick-Setup-$version.exe"
+    $bundle = Join-Path $out "KiraPick-$version-BoCai.zip"
     Compress-Archive -Path $setup, $guide -DestinationPath $bundle
     Write-Host "Bộ cài (gửi file này cho bạn bè): $bundle" -ForegroundColor Green
 }

@@ -1,4 +1,4 @@
-"""``snorlu-raw-probe``: read-only compatibility report for a photo folder.
+"""``kirapick-raw-probe``: read-only compatibility report for a photo folder.
 
     python -m app.ingest.cli D:\\Photos\\Event --verify --json report.json
 
@@ -72,7 +72,7 @@ def probe_file(path: Path, rel: str, ext: str, support: str, *, full: bool, veri
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="snorlu-raw-probe", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="kirapick-raw-probe", description=__doc__.splitlines()[0])
     parser.add_argument("folder", type=Path)
     parser.add_argument("--full", action="store_true", help="also load full resolution (demosaics when needed; slow)")
     parser.add_argument("--verify", action="store_true", help="cross-check embedded preview orientation against LibRaw")

@@ -3,8 +3,8 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "snorlu-ai-culling"
-version = "0.2.0b1"
+name = "kirapick"
+version = "0.2.0b2"
 description = "Offline, non-destructive AI photo culling for cosplay/street photographers (Windows desktop)."
 requires-python = ">=3.11,<3.15"
 # Supported ranges; exact versions verified so far are recorded in requirements.lock.txt.
@@ -27,10 +27,10 @@ dependencies = [
 dev = ["pytest>=8,<10", "pytest-qt>=4.4,<5"]
 
 [project.scripts]
-snorlu-raw-probe = "app.ingest.cli:main"
+kirapick-raw-probe = "app.ingest.cli:main"
 
 [project.gui-scripts]
-snorlu = "app.main:main"
+kirapick = "app.main:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

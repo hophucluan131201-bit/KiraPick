@@ -1,6 +1,6 @@
 """Local learning store: numbers from the user's own corrections, across all shoots.
 
-Lives next to the sessions (``%LOCALAPPDATA%\\Snorlu\\Snorlu AI Culling\\learning``),
+Lives next to the sessions (``%LOCALAPPDATA%\\KiraPick\\learning``),
 is never purged with them and is never part of an installer, so every person who
 installs the app starts from the defaults and teaches it their own way.
 

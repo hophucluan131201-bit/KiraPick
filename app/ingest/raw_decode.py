@@ -92,7 +92,7 @@ def _source_for_libraw(path: Path) -> str | io.BufferedReader:
 
 @contextmanager
 def open_raw(path: Path) -> Iterator[rawpy.RawPy]:
-    """Open a RAW file read-only, translating LibRaw errors to SnorluErrors."""
+    """Open a RAW file read-only, translating LibRaw errors to KiraPickErrors."""
     source = None
     try:
         source = _source_for_libraw(path)

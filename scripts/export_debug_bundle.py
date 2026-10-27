@@ -1,6 +1,6 @@
 """Pack the analysis data of one photo folder so grouping can be tuned on real results.
 
-    .\\.venv\\Scripts\\python scripts\\export_debug_bundle.py "D:\\Photos\\Shoot"   # -> .\\snorlu_debug.zip
+    .\\.venv\\Scripts\\python scripts\\export_debug_bundle.py "D:\\Photos\\Shoot"   # -> .\\kirapick_debug.zip
 
 Contains: the session database (file names, capture times, camera/lens, decisions,
 detected boxes, face/outfit vectors, groups), the 400 px thumbnails and the 160 px
@@ -24,18 +24,16 @@ from app.storage.sessions import session_dir  # noqa: E402
 
 
 def default_sessions_root() -> Path:
-    from PySide6.QtCore import QCoreApplication, QStandardPaths
+    from app.branding import data_dir, legacy_data_dir
 
-    QCoreApplication.setOrganizationName("Snorlu")
-    QCoreApplication.setApplicationName("Snorlu AI Culling")  # must match app/main.py
-    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
-    return Path(base) / "sessions"
+    new = data_dir() / "sessions"
+    return new if new.is_dir() else legacy_data_dir() / "sessions"  # app not started since the rename
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("folder", type=Path, help="the photo folder you imported in the app")
-    parser.add_argument("--out", type=Path, default=Path.cwd() / "snorlu_debug.zip")
+    parser.add_argument("--out", type=Path, default=Path.cwd() / "kirapick_debug.zip")
     parser.add_argument("--sessions", type=Path, help="override the sessions directory")
     args = parser.parse_args()
 

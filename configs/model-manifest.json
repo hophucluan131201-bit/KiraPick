@@ -1,5 +1,5 @@
 {
- "_comment": "Pretrained weights used by Snorlu AI Culling. Files live in models/weights/ (git-ignored) and are fetched once at development/packaging time with scripts/fetch_models.py; the app never downloads at runtime and refuses files whose SHA-256 differs.",
+ "_comment": "Pretrained weights used by KiraPick. Files live in models/weights/ (git-ignored) and are fetched once at development/packaging time with scripts/fetch_models.py; the app never downloads at runtime and refuses files whose SHA-256 differs.",
  "models": [
   {
    "id": "face_detector",

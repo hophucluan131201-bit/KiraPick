@@ -1,4 +1,6 @@
-# Snorlu AI Culling
+# KiraPick
+
+*(formerly "Snorlu AI Culling" — renamed to KiraPick in 0.2.0b2; earlier data is moved automatically)*
 
 Offline, non-destructive photo culling for cosplay/street photographers (Windows desktop).
 **Status: early development** — desktop culling app (import, grid, loupe with 100% zoom,
@@ -9,9 +11,9 @@ shots (first version: eyes-closed and aesthetics are not judged yet). See
 
 ## Dành cho người dùng (không cần biết lập trình)
 
-1. Vào trang **[Releases](https://github.com/hophucluan131201-bit/snorlu-ai-culling/releases)** của dự án
+1. Vào trang **[Releases](https://github.com/hophucluan131201-bit/kirapick/releases)** của dự án
    (cột bên phải trang GitHub → *Releases*).
-2. Tải file **`Snorlu-AI-Culling-…-BoCai.zip`** trong phiên bản mới nhất.
+2. Tải file **`KiraPick-…-BoCai.zip`** trong phiên bản mới nhất.
 3. Nhấp phải → *Extract All* → mở file **`HUONG_DAN_CAI_DAT.txt`** và làm theo (3 bước, không cần
    cài Git hay Python).
 
@@ -28,8 +30,8 @@ work folder such as `D:\Dev` — not `C:\Windows\System32`.
 
 ```powershell
 cd D:\Dev
-git clone https://github.com/hophucluan131201-bit/snorlu-ai-culling.git
-cd snorlu-ai-culling
+git clone https://github.com/hophucluan131201-bit/kirapick.git
+cd kirapick
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 ```
 
@@ -40,10 +42,10 @@ Versions verified so far are in `requirements.lock.txt` (recorded on Linux).
 
 ## Run the app
 
-Double-click **`Snorlu.cmd`** in the project folder (or the desktop shortcut the setup script can
+Double-click **`KiraPick.cmd`** in the project folder (or the desktop shortcut the setup script can
 create). Every start is an empty session: click **📂 Nhập ảnh** and pick a shoot folder; photos are
 only read. There are no projects to manage. Work is remembered per photo folder in hidden app data
-(`%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\sessions`): importing the same folder again brings back its
+(`%LOCALAPPDATA%\KiraPick\sessions`): importing the same folder again brings back its
 Keep/Reject/stars and client lists. A folder not opened for 30 days is forgotten automatically;
 **↺ Làm lại** forgets the current folder immediately (asks first). Importing another folder switches
 to that folder's session.
@@ -75,7 +77,7 @@ dialog; it does not change your own Keep/Reject flags unless you tick that optio
 Export copies the chosen photos (Kept, Favorites, ≥ N stars, or the selection), RAW+JPEG pairs
 together, never overwrites (a different file with the same name gets " (1)"), skips photos already
 exported there (identical bytes), refuses the shoot folder itself as destination, and writes a
-CSV/JSON list into the `_snorlu_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\logs`.
+CSV/JSON list into the `_kirapick_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\KiraPick\logs`.
 
 **Step by step.** Nothing runs on its own; each button becomes available when the previous step is
 done, so you can correct the result in between:
@@ -90,7 +92,7 @@ toolbar to merge them (or select several + right-click). Photos where the face i
 clearly visible are only *suggested* (a "?" badge) or listed under **Chưa xác định**. **Cần xem lại**
 asks about pairs that look alike but are not certain. Right-click photos to confirm, remove from a
 person, or assign to another person. All corrections survive re-analysis. Each correction is also kept as a learning example (numbers only: face/outfit similarity, time
-gap, your answer) in `%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\learning` — per Windows user, never
+gap, your answer) in `%LOCALAPPDATA%\KiraPick\learning` — per Windows user, never
 in the installer, so friends who install the app teach it their own way. Models: see
 `docs/model-licenses.md`; fetch once with `python scripts/fetch_models.py`.
 
@@ -121,9 +123,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 
 Uses a separate `.venv-build` (Python 3.12, exact versions in `packaging/requirements-installer.txt`,
 CPU ONNX Runtime — no CUDA, works on any PC), copies the SHA-256-verified models, builds the app with
-PyInstaller (`packaging/snorlu.spec`), runs `Snorlu.exe --self-test` with the network blocked, then
-writes `dist\installer\Snorlu-AI-Culling-<version>-portable.zip` and, if Inno Setup 6 is installed
-(`winget install --id JRSoftware.InnoSetup -e`), `Snorlu-AI-Culling-Setup-<version>.exe` (per-user, no admin).
+PyInstaller (`packaging/kirapick.spec`), runs `KiraPick.exe --self-test` with the network blocked, then
+writes `dist\installer\KiraPick-<version>-portable.zip` and, if Inno Setup 6 is installed
+(`winget install --id JRSoftware.InnoSetup -e`), `KiraPick-Setup-<version>.exe` (per-user, no admin).
 GitHub Actions can build the same on a clean Windows machine (`.github/workflows/build-windows.yml`,
 run it from the Actions tab). Guide for testers: `packaging/notes/HUONG_DAN.txt`; notices:
 `packaging/notes/LICENSES.txt`. The installer is not code-signed: Windows SmartScreen shows a warning.
@@ -139,12 +141,12 @@ python scripts/raw_samples.py fetch         # DEV ONLY (network): download publi
 
 ## License / Giấy phép
 
-Personal, **non-commercial** project. The Snorlu source code is licensed under the
+Personal, **non-commercial** project. The KiraPick source code is licensed under the
 [PolyForm Noncommercial License 1.0.0](LICENSE.md): free to use, copy, modify and share for any
 noncommercial purpose; commercial use needs the author's permission. Bundled third-party software
 and AI model weights keep their own licenses ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
 [docs/model-licenses.md](docs/model-licenses.md)) — all of them allow this free, non-commercial
-distribution; the non-commercial terms above apply to Snorlu's own code only.
+distribution; the non-commercial terms above apply to KiraPick's own code only.
 
 Dự án cá nhân, phi thương mại: được dùng, sao chép, sửa, chia sẻ miễn phí; không bán lại hay dùng
 thương mại khi chưa được tác giả đồng ý. Thư viện và mô hình AI đi kèm giữ giấy phép riêng của họ.

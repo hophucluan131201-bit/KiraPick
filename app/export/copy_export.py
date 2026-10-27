@@ -24,15 +24,15 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path, PurePosixPath
 
-from app.core.errors import SnorluError
+from app.core.errors import KiraPickError
 from app.ingest.fingerprint import quick_fingerprint
 from app.storage.project import Project
 
 _CHUNK = 1024 * 1024
-MANIFEST_DIR = "_snorlu_danh_sach"  # export lists live here, not between the photos
+MANIFEST_DIR = "_kirapick_danh_sach"  # export lists live here, not between the photos
 
 
-class ExportError(SnorluError):
+class ExportError(KiraPickError):
     pass
 
 
@@ -294,8 +294,8 @@ def _write_manifests(dest: Path, done: list[tuple[ExportItem, str]]) -> tuple[Pa
     ]
     folder = dest / MANIFEST_DIR
     folder.mkdir(exist_ok=True)
-    csv_path = folder / f"snorlu_export_{stamp}.csv"
-    json_path = folder / f"snorlu_export_{stamp}.json"
+    csv_path = folder / f"kirapick_export_{stamp}.csv"
+    json_path = folder / f"kirapick_export_{stamp}.json"
     # utf-8-sig so Excel on Windows opens Vietnamese paths correctly
     with open(csv_path, "x", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(rows[0]))

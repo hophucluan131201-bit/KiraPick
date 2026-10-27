@@ -2,7 +2,7 @@
 
 Decoder: **rawpy 0.27.1 / LibRaw 0.22.1**, Pillow 13.0.0, ExifRead 3.5.1, Python 3.13.
 Measured **2026-10-26 on the Linux dev container** (4 vCPU Xeon 2.1 GHz). These are *not*
-measurements on the target Windows laptop (i7-10750H); re-run `snorlu-raw-probe` there.
+measurements on the target Windows laptop (i7-10750H); re-run `kirapick-raw-probe` there.
 
 "Verified" = a real, full camera file passed all of: embedded-preview decode, metadata
 (make/model/capture time), orientation cross-check against LibRaw's own demosaic,
@@ -28,7 +28,7 @@ Analysis preview (1600 px): 50–335 ms. Full NEF demosaic (24 MP Z 5): ~2.2 s; 
 
 ## Windows field test (user's laptop, 2026-10-27)
 
-`snorlu-raw-probe --verify --verify-untouched` on a real shoot folder
+`kirapick-raw-probe --verify --verify-untouched` on a real shoot folder
 `D:\Snorlu Fes & Photo\Hình ảnh Cosplay\20261025 - Aki\RAW` (non-ASCII + `&` in path),
 Windows 11, i7-10750H:
 

@@ -9,11 +9,11 @@ from __future__ import annotations
 from pathlib import Path
 
 
-class SnorluError(Exception):
+class KiraPickError(Exception):
     """Base class for all expected, user-reportable failures."""
 
 
-class ImageReadError(SnorluError):
+class ImageReadError(KiraPickError):
     """A source image could not be read. Carries the path for the UI only."""
 
     reason: str = "read_error"
@@ -42,5 +42,5 @@ class NoPreviewError(ImageReadError):
     reason = "no_preview"
 
 
-class UnsafePathError(SnorluError):
+class UnsafePathError(KiraPickError):
     """Path rejected for safety (symlink, traversal outside the import root...)."""

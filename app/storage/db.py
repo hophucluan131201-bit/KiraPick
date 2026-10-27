@@ -9,7 +9,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from app.core.errors import SnorluError
+from app.core.errors import KiraPickError
 
 # Each entry is applied once, inside one transaction, in order. Never edit a
 # released migration; append a new one.
@@ -249,7 +249,7 @@ CREATE TABLE picks (
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
-class SchemaTooNewError(SnorluError):
+class SchemaTooNewError(KiraPickError):
     """The project was saved by a newer version of the app."""
 
 

@@ -1,4 +1,4 @@
-"""Offline, read-only hardware diagnostic for Snorlu AI Culling on Windows.
+"""Offline, read-only hardware diagnostic for KiraPick on Windows.
 No network access, no file modifications. Uses optional torch / onnxruntime.
 """
 import sys
@@ -6,7 +6,7 @@ import platform
 import subprocess
 import importlib.util
 
-print('Snorlu AI Culling | Offline GPU diagnostics')
+print('KiraPick | Offline GPU diagnostics')
 print('OS:', platform.platform())
 print('Python:', sys.version.split()[0])
 

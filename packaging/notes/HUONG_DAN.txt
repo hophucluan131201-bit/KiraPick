@@ -1,4 +1,4 @@
-﻿SNORLU AI CULLING - BẢN THỬ NGHIỆM (BETA)
+﻿KIRAPICK - BẢN THỬ NGHIỆM (BETA)
 =========================================
 
 Ứng dụng lọc ảnh cosplay / đường phố chạy hoàn toàn trên máy tính của bạn.
@@ -6,12 +6,12 @@
 - KHÔNG bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc. Xuất ảnh = sao chép.
 
 CÀI ĐẶT
-1. Chạy file Snorlu-AI-Culling-Setup-....exe.
+1. Chạy file KiraPick-Setup-....exe.
 2. Nếu Windows hiện "Windows protected your PC" (Windows đã bảo vệ máy tính):
    bấm "More info" (Thông tin thêm) -> "Run anyway" (Vẫn chạy).
    Lý do: bộ cài thử nghiệm chưa có chữ ký số trả phí, không phải virus.
 3. Bấm Next cho tới khi xong. Không cần quyền Administrator.
-   Ứng dụng cài vào: %LOCALAPPDATA%\Programs\Snorlu AI Culling
+   Ứng dụng cài vào: %LOCALAPPDATA%\Programs\KiraPick
 
 CÁCH DÙNG (4 BƯỚC, MỖI BƯỚC XONG SẼ DỪNG CHỜ BẠN)
 1. 📂 Nhập ảnh       : chọn thư mục ảnh của buổi chụp (RAW NEF/CR2/CR3/ARW..., JPEG).
@@ -32,12 +32,12 @@ LƯU Ý CỦA BẢN THỬ NGHIỆM
   các con số, lưu trên máy bạn, không chia sẻ với ai.
 
 DỮ LIỆU CỦA ỨNG DỤNG
-- %LOCALAPPDATA%\Snorlu\Snorlu AI Culling\sessions : ghi nhớ từng thư mục ảnh (tự xoá sau 30 ngày không mở)
-- %LOCALAPPDATA%\Snorlu\Snorlu AI Culling\learning : bộ nhớ học
-- %LOCALAPPDATA%\Snorlu\Snorlu AI Culling\logs     : file log (gửi kèm khi báo lỗi)
+- %LOCALAPPDATA%\KiraPick\sessions : ghi nhớ từng thư mục ảnh (tự xoá sau 30 ngày không mở)
+- %LOCALAPPDATA%\KiraPick\learning : bộ nhớ học
+- %LOCALAPPDATA%\KiraPick\logs     : file log (gửi kèm khi báo lỗi)
 Gỡ cài đặt (Settings -> Apps) chỉ xoá chương trình; ảnh và dữ liệu trên vẫn giữ nguyên.
 
 KIỂM TRA KHI CÓ LỖI
 Mở PowerShell trong thư mục cài đặt và chạy:
-  .\Snorlu.exe --self-test "$env:USERPROFILE\Desktop\snorlu-selftest.json"
-rồi gửi file snorlu-selftest.json (trên Desktop) và thư mục logs cho người chia sẻ ứng dụng.
+  .\KiraPick.exe --self-test "$env:USERPROFILE\Desktop\kirapick-selftest.json"
+rồi gửi file kirapick-selftest.json (trên Desktop) và thư mục logs cho người chia sẻ ứng dụng.

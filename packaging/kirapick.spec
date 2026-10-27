@@ -1,14 +1,14 @@
 # PyInstaller spec for the Windows installer (also builds on Linux for checks).
-#   pyinstaller --noconfirm --clean packaging/snorlu.spec
-# Output: dist/Snorlu AI Culling/ (one folder). Model weights are NOT bundled here:
-# the build script copies the verified files to "dist/Snorlu AI Culling/models".
+#   pyinstaller --noconfirm --clean packaging/kirapick.spec
+# Output: dist/KiraPick/ (one folder). Model weights are NOT bundled here:
+# the build script copies the verified files to "dist/KiraPick/models".
 # ruff: noqa
 import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).parent
-APP_NAME = "Snorlu AI Culling"
-icon = ROOT / "packaging" / "snorlu.ico"
+APP_NAME = "KiraPick"
+icon = ROOT / "packaging" / "kirapick.ico"
 
 # Microsoft Visual C++ runtime next to the app (app-local deployment, allowed by the VC++
 # redistributable terms): ONNX Runtime and OpenCV need msvcp140.dll, which a PC without the
@@ -28,6 +28,7 @@ a = Analysis(
     binaries=msvc_runtime,
     datas=[
         (str(ROOT / "configs" / "model-manifest.json"), "configs"),
+        (str(ROOT / "packaging" / "kirapick.png"), "assets"),
     ],
     hiddenimports=["app.selftest"],
     excludes=[
@@ -45,7 +46,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Snorlu",
+    name="KiraPick",
     console=False,  # a windowed app; --self-test writes its report to a file
     icon=str(icon) if icon.exists() and sys.platform == "win32" else None,
     version=str(ROOT / "packaging" / "version_info.txt") if sys.platform == "win32" else None,

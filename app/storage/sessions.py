@@ -18,7 +18,8 @@ from pathlib import Path
 from app.storage.project import DB_NAME, Project
 
 SESSION_TTL_DAYS = 30
-_MARKER = "snorlu-session"  # file inside every session dir; required before any deletion
+_MARKER = "kirapick-session"  # file inside every session dir; required before any deletion
+_LEGACY_MARKERS = ("snorlu-session",)  # sessions created before the rename
 
 
 def session_key(photo_folder: Path) -> str:
@@ -34,7 +35,9 @@ def session_dir(sessions_root: Path, photo_folder: Path) -> Path:
 
 def _touch(folder: Path) -> None:
     marker = folder / _MARKER
-    marker.write_text("Snorlu AI Culling session data (safe to delete; photos are elsewhere)\n", encoding="utf-8")
+    marker.write_text("KiraPick session data (safe to delete; photos are elsewhere)\n", encoding="utf-8")
+    for old in _LEGACY_MARKERS:
+        (folder / old).unlink(missing_ok=True)
 
 
 def open_session(sessions_root: Path, photo_folder: Path) -> tuple[Project, bool]:
@@ -47,7 +50,9 @@ def open_session(sessions_root: Path, photo_folder: Path) -> tuple[Project, bool
 
 
 def _is_session(folder: Path) -> bool:
-    return folder.is_dir() and not folder.is_symlink() and (folder / _MARKER).is_file() and (folder / DB_NAME).is_file()
+    return (folder.is_dir() and not folder.is_symlink()
+            and any((folder / m).is_file() for m in (_MARKER, *_LEGACY_MARKERS))
+            and (folder / DB_NAME).is_file())
 
 
 def delete_session(sessions_root: Path, photo_folder: Path) -> bool:
@@ -70,7 +75,8 @@ def purge_old_sessions(sessions_root: Path, *, ttl_days: int = SESSION_TTL_DAYS,
         if folder in keep or not _is_session(folder):
             continue
         try:
-            if (folder / _MARKER).stat().st_mtime < cutoff:
+            marker = next(folder / m for m in (_MARKER, *_LEGACY_MARKERS) if (folder / m).is_file())
+            if marker.stat().st_mtime < cutoff:
                 shutil.rmtree(folder)
                 removed.append(folder)
         except OSError:
