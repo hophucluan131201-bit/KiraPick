@@ -220,3 +220,26 @@ def test_recluster_marks_faceless_members_as_suggested(project: Project) -> None
     row = project.conn.execute("SELECT assignment, confidence FROM occurrences WHERE id = ?", (back,)).fetchone()
     assert row["assignment"] == "suggested" and row["confidence"] > 0.85
     assert (report.auto, report.suggested) == (2, 1)
+
+
+def test_lookalike_faces_hours_apart_need_the_same_outfit() -> None:
+    """Owner's report: a Peach cosplayer and a Miku cosplayer, hours apart, merged by one 0.67 face pair."""
+    a, b = _person(), _person()
+    hours = 3 * 3600
+    lookalike = _blend(a, 0.67)
+    occs = [_occ(1, 1, a, RED, t=0), _occ(2, 2, _shot(a, 0.2), RED, t=30),
+            _occ(3, 3, lookalike, BLUE, t=hours), _occ(4, 4, _shot(b), BLUE, t=hours + 20)]
+    assert _members(group(occs).groups, occs) == [[1, 2], [3], [4]]
+    # The same person coming back hours later in the same costume is still recognised.
+    back = [_occ(1, 1, a, RED, t=0), _occ(2, 2, _blend(a, 0.70), RED, t=hours)]
+    assert _members(group(back).groups, back) == [[1, 2]]
+
+
+def test_far_apart_groups_need_a_high_average_face_similarity() -> None:
+    a, c = _person(), _person()
+    hours = 3 * 3600
+    bridge = _unit(a + c)  # one photo of C resembles A strongly (~0.7), the others do not
+    occs = [_occ(1, 1, a, RED, t=0), _occ(2, 2, _shot(a, 0.2), RED, t=20), _occ(3, 3, _shot(a, 0.2), RED, t=40),
+            _occ(4, 4, bridge, RED, t=hours), _occ(5, 5, c, RED, t=hours + 20), _occ(6, 6, _shot(c, 0.2), RED, t=hours + 40)]
+    groups = _members(group(occs).groups, occs)
+    assert not any({1, 5} <= set(m) for m in groups)

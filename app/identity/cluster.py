@@ -36,13 +36,16 @@ import numpy as np
 
 from app.storage.project import Project, utc_now
 
-FACE_STRONG = 0.65  # SFace cosine: same person at any time
+FACE_STRONG = 0.65  # SFace cosine: same person (photos far apart in time also need FAR_OUTFIT)
+FACE_CERTAIN = 0.80  # near-identical faces link at any time whatever the outfit
+FAR_OUTFIT = 0.65  # outfit similarity a face link needs across more than WINDOW_S
 WINDOW_S = 300  # outfit cues only within +-5 minutes (same look, same set)
 OUTFIT_LINK = 0.85  # outfit-colour similarity that links inside the window ...
 FACE_WITH_OUTFIT = 0.55  # ... unless both faces are visible and less similar than this
 FACE_MID = 0.58  # fairly similar face ...
 OUTFIT_MID = 0.70  # ... plus similar outfit inside the window
 AVERAGE_GUARD = 0.45  # mean face similarity two groups need to merge
+FAR_AVERAGE = 0.60  # ... when no photo of one is within WINDOW_S of a photo of the other
 OUTFIT_SUGGEST = 0.85  # left-over face-less photo: outfit needed for a suggestion
 OUTFIT_MARGIN = 0.05  # best outfit match must beat the runner-up by this much
 SUGGEST_WINDOW_S = 600  # suggestion window for left-over face-less photos
@@ -128,6 +131,16 @@ def _conflict(g1: _Group, g2: _Group, different: set[tuple[int, int]]) -> bool:
     return any((min(a, b), max(a, b)) in different for a in subj1 for b in subj2 if a != b)
 
 
+def _far_face_link_ok(a: Occ, b: Occ, face: float) -> bool:
+    """A strong face link between photos far apart in time also needs a compatible outfit,
+    unless the faces are near-identical: cosplay makeup makes different people look alike."""
+    if a.time is not None and b.time is not None and abs(a.time - b.time) <= WINDOW_S:
+        return True
+    if face >= FACE_CERTAIN:
+        return True
+    return a.outfit is not None and b.outfit is not None and float(a.outfit @ b.outfit) >= FAR_OUTFIT
+
+
 def _edges(occs: list[Occ], nodes: list[int]) -> list[tuple[float, int, int]]:
     """Candidate links (score, i, j) between occurrence indexes; higher score = stronger evidence."""
     edges: list[tuple[float, int, int]] = []
@@ -137,8 +150,9 @@ def _edges(occs: list[Occ], nodes: list[int]) -> list[tuple[float, int, int]]:
         for lo in range(0, len(faced), FACE_CHUNK):
             block = F[lo:lo + FACE_CHUNK] @ F.T
             for r, c in zip(*np.nonzero(block >= FACE_STRONG)):
-                if lo + r < c:
-                    edges.append((1.0 + float(block[r, c]), faced[lo + r], faced[c]))
+                i, j = faced[lo + r], faced[c]
+                if lo + r < c and _far_face_link_ok(occs[i], occs[j], float(block[r, c])):
+                    edges.append((1.0 + float(block[r, c]), i, j))
     timed = sorted((i for i in nodes if occs[i].time is not None and occs[i].outfit is not None),
                    key=lambda i: occs[i].time)
     times = np.array([occs[i].time for i in timed])
@@ -188,6 +202,16 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset()) -> Gro
         if o.assignment != "manual" and (o.face is not None or (o.outfit is not None and o.time is not None)):
             new_group([i], None)
 
+    def _near_in_time(g1: _Group, g2: _Group) -> bool:
+        t1 = sorted(occs[m].time for m in g1.members if occs[m].time is not None)
+        t2 = np.array(sorted(occs[m].time for m in g2.members if occs[m].time is not None))
+        if not t1 or not len(t2):
+            return True  # unknown capture time: do not make it stricter
+        pos = np.searchsorted(t2, t1)
+        gaps = [abs(t2[min(p, len(t2) - 1)] - t) for p, t in zip(pos, t1)] + \
+               [abs(t2[p - 1] - t) for p, t in zip(pos, t1) if p > 0]
+        return min(gaps) <= WINDOW_S
+
     def absorb(keep: int, drop: int) -> None:
         gk, gd = groups[keep], groups[drop]
         for m in gd.members:
@@ -213,8 +237,10 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset()) -> Gro
             g1, g2 = groups[gi], groups[gj]
             if _conflict(g1, g2, different):
                 continue
-            if g1.faces and g2.faces and float(g1.face_sum @ g2.face_sum) / (g1.faces * g2.faces) < AVERAGE_GUARD:
-                continue
+            if g1.faces and g2.faces:
+                guard = AVERAGE_GUARD if _near_in_time(g1, g2) else FAR_AVERAGE
+                if float(g1.face_sum @ g2.face_sum) / (g1.faces * g2.faces) < guard:
+                    continue
             absorb(*((gi, gj) if g2.fixed_subject is None else (gj, gi)))
         for x in (i, j):  # strength of the best accepted link of a face-less member
             if occs[x].face is None:
