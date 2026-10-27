@@ -19,6 +19,21 @@ def subject_label(conn: sqlite3.Connection, subject_id: int) -> str:
     return row["display_name"] or f"Chủ thể {subject_id}"
 
 
+def create_subject(conn: sqlite3.Connection, asset_ids: list[int], name: str | None = None,
+                   from_subject: int | None = None) -> int:
+    """'This is someone else, not any subject so far': a new subject holding these photos (manually).
+
+    ``from_subject``: the subject the photos are taken out of (the one being viewed), if any.
+    """
+    if from_subject is not None:
+        remove_photos_from_subject(conn, from_subject, asset_ids)
+    subject_id = int(conn.execute("INSERT INTO subjects (created_at) VALUES (?)", (utc_now(),)).lastrowid)
+    if name and name.strip():
+        rename_subject(conn, subject_id, name.strip())
+    assign_photos_to_subject(conn, subject_id, asset_ids)
+    return subject_id
+
+
 def rename_subject(conn: sqlite3.Connection, subject_id: int, name: str) -> None:
     name = name.strip()
     conn.execute("UPDATE subjects SET display_name = ?, user_locked = ? WHERE id = ?",

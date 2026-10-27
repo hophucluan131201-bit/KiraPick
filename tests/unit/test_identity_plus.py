@@ -434,3 +434,24 @@ def test_registry_accepts_float16_weights_only_from_the_pinned_original(tmp_path
     assert registry().status(spec.id).state is ModelState.READY
     (tmp_path / "m.onnx").write_bytes(shrunk[:-1] + b"X")  # tampered after shrinking
     assert registry().status(spec.id).state is ModelState.CORRUPT
+
+
+def test_new_subject_from_photos_survives_regrouping(project: Project) -> None:
+    from app.identity import actions
+
+    a, stranger = _person(), _person()
+    for asset in (1, 2):
+        _add(project, asset, _shot(a), outfit=RED)
+    lone = _add(project, 3, _shot(stranger), minute=30, outfit=RED)
+    project.conn.execute("UPDATE occurrences SET prominence = 0.5 WHERE id = ?", (lone,))  # a 'background' group
+    recluster(project)
+    assert sorted(_subjects(project).values()) == [[1, 2]]  # photo 3 is nobody yet
+    with project.transaction() as conn:
+        sid = actions.create_subject(conn, [3], "  Kana ")
+    recluster(project)
+    assert _subjects(project)[sid] == [3] and actions.subject_label(project.conn, sid) == "Kana"
+    with project.transaction() as conn:
+        unnamed = actions.create_subject(conn, [3], from_subject=sid)  # moved out of Kana, no name: a number
+    recluster(project)
+    assert _subjects(project).get(unnamed) == [3] and sid not in _subjects(project)
+    assert project.conn.execute("SELECT 1 FROM subjects WHERE id = ?", (sid,)).fetchone()  # a named subject stays

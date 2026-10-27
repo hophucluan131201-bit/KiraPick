@@ -40,7 +40,8 @@ DirectML; không có thì chạy bằng CPU.
 1. **📂 Nhập ảnh** — chọn thư mục ảnh của một buổi chụp.
 2. **🧠 Nhận diện chủ thể** — AI gom ảnh theo từng người. Kiểm tra danh sách **CHỦ THỂ** bên trái:
    tick ô vuông của nhiều người rồi bấm **🔗 Gộp chủ thể** nếu một người bị tách thành nhiều nhóm;
-   chuột phải vào ảnh để bỏ ảnh khỏi một người hoặc gán cho người khác.
+   chuột phải vào ảnh để bỏ ảnh khỏi một chủ thể, gán cho chủ thể khác, hoặc **➕ Tạo chủ thể mới** nếu đó là
+   người chưa có trong danh sách.
 3. **📊 Phân tích ảnh** — chấm điểm từng người trong từng ảnh. Bảng bên phải liệt kê
    **Điểm mạnh**, **Điểm yếu** và **Chưa đánh giá**.
 4. **⭐ Chọn ảnh** — nhập số ảnh muốn chọn cho mỗi người. Ảnh AI chọn có nhãn **AI** và xếp lên đầu.
@@ -128,7 +129,8 @@ DirectML; otherwise on the CPU.
 1. **📂 Nhập ảnh** (Import) — pick the folder of one shoot.
 2. **🧠 Nhận diện chủ thể** (Find people) — AI groups photos by person. Check the **CHỦ THỂ** (people)
    list: tick several people and press **🔗 Gộp chủ thể** (merge) if one person was split; right-click
-   photos to remove them from a person or assign them to another.
+   photos to remove them from a subject, assign them to another, or **➕ Tạo chủ thể mới** (new subject) for
+   someone not in the list yet.
 3. **📊 Phân tích ảnh** (Analyse) — scores every person in every photo. The right panel lists
    **strengths**, **weaknesses** and what was **not judged**.
 4. **⭐ Chọn ảnh** (Pick) — enter how many photos per person. AI picks get an **AI** badge and go

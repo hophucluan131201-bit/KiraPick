@@ -945,14 +945,21 @@ class MainWindow(QMainWindow):
             name = actions.subject_label(self.project.conn, target)
             confirm = menu.addAction(f"Đúng là {name}")
             remove = menu.addAction(f"Không phải {name} — bỏ khỏi chủ thể này")
+        new_subject = menu.addAction("➕ Tạo chủ thể mới" + (f" từ {len(assets)} ảnh này" if len(assets) > 1 else " từ ảnh này"))
+        new_subject.setToolTip("Chủ thể này chưa có trong danh sách: tạo một chủ thể riêng cho các ảnh đang chọn")
         assign_menu = menu.addMenu("Gán cho chủ thể…")
         targets = {}
-        for r in actions.subjects_summary(self.project.conn):
+        rows = sorted(actions.subjects_summary(self.project.conn),  # named first (A-Z), then by number
+                      key=lambda r: (r["display_name"] is None, (r["display_name"] or "").casefold(), r["id"]))
+        for r in rows:
             if r["id"] != target:
                 targets[assign_menu.addAction(r["display_name"] or f"Chủ thể {r['id']}")] = r["id"]
         assign_menu.setEnabled(bool(targets))
         chosen = menu.exec(self.grid.viewport().mapToGlobal(pos))  # type: ignore[arg-type]
         if chosen is None:
+            return
+        if chosen is new_subject:
+            self.create_subject_from(assets, target if flt is Filter.SUBJECT else None)
             return
         with self.project.transaction() as conn:
             if chosen is remove:
@@ -965,6 +972,24 @@ class MainWindow(QMainWindow):
                 actions.assign_photos_to_subject(conn, targets[chosen], assets)
                 self.teacher.assigned(conn, targets[chosen], assets)
         self._after_people_change()
+
+    def create_subject_from(self, assets: list[int], from_subject: int | None = None) -> int | None:
+        """A new subject for photos of someone not in the list yet (name optional); ``from_subject``:
+        the subject being viewed, which the photos leave."""
+        if self.project is None or not assets:
+            return None
+        name, ok = QInputDialog.getText(self, "Tạo chủ thể mới",
+                                        f"Tên chủ thể mới cho {len(assets)} ảnh (để trống = tự đặt số):")
+        if not ok:
+            return None
+        with self.project.transaction() as conn:
+            if from_subject is not None:
+                self.teacher.removed(conn, from_subject, assets)
+            subject_id = actions.create_subject(conn, assets, name, from_subject)
+            self.teacher.assigned(conn, subject_id, assets)
+        self._after_people_change()
+        self.status.setText(f"Đã tạo {actions.subject_label(self.project.conn, subject_id)} với {len(assets)} ảnh.")
+        return subject_id
 
     def _selection_text(self, rec: AssetRecord | None) -> str | None:
         """Why the last ⭐ selection chose this photo, or did not."""

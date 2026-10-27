@@ -16,7 +16,8 @@ CÀI ĐẶT
 CÁCH DÙNG (4 BƯỚC, MỖI BƯỚC XONG SẼ DỪNG CHỜ BẠN)
 1. 📂 Nhập ảnh       : chọn thư mục ảnh của buổi chụp (RAW NEF/CR2/CR3/ARW..., JPEG).
 2. 🧠 Nhận diện chủ thể : AI gom ảnh theo từng người. Kiểm tra danh sách CHỦ THỂ bên trái,
-                       tick ô vuông + "🔗 Gộp chủ thể" nếu một người bị tách làm nhiều nhóm.
+                       tick ô vuông + "🔗 Gộp chủ thể" nếu một người bị tách làm nhiều nhóm;
+                       chuột phải ảnh -> "➕ Tạo chủ thể mới" nếu là người chưa có trong danh sách.
 3. 📊 Phân tích ảnh   : chấm điểm kỹ thuật (nét ở mắt, mặt, ánh sáng, bố cục).
 4. ⭐ Chọn ảnh        : nhập số ảnh muốn chọn cho mỗi người; ảnh AI chọn có nhãn "AI".
 Xem lại bằng phím K (giữ) / X (loại) / U (bỏ đánh dấu), rồi "⤴ Xuất ảnh" -> "Ảnh đã Giữ".

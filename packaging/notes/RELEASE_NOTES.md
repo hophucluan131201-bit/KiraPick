@@ -1,5 +1,9 @@
 ## KiraPick 2.0 – bản chính thức
 
+> **2.0.3 – ➕ Tạo chủ thể mới.** Chuột phải vào ảnh → **➕ Tạo chủ thể mới** cho người chưa có trong danh sách
+> (đặt tên hoặc để trống); nếu đang xem một chủ thể, ảnh được chuyển sang chủ thể mới. Danh sách "Gán cho chủ thể…"
+> xếp theo tên rồi theo số.
+>
 > **2.0.2 – "Cần xem lại" hỏi ít mà trúng hơn.** Chỉ hỏi khi hai chủ thể có trang phục khá giống nhau;
 > mặt hơi giống (do makeup) mà trang phục khác hẳn thì không hỏi nữa. Buổi chụp thử: từ 64 câu hỏi (7 câu đúng là
 > cùng một bộ) xuống 14 câu (6 câu đúng).

@@ -436,6 +436,16 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     assert all(w.people.item(i).checkState() == Qt.CheckState.Unchecked for i in range(w.people.count()))
     assert not w.act_merge.isEnabled()
 
+    # ➕ a photo of someone not in the list yet becomes a new subject (taken out of the one viewed)
+    from PySide6.QtWidgets import QInputDialog
+
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Kana", True))
+    kana = w.create_subject_from([assets[0]], from_subject=3)
+    summary = {r["id"]: r for r in actions.subjects_summary(conn)}
+    assert summary[kana]["display_name"] == "Kana" and summary[kana]["photos"] == 1 and summary[3]["photos"] == 3
+    assert "Đã tạo Kana với 1 ảnh" in w.status.text()
+    assert any("Kana" in w.people.item(i).text() for i in range(w.people.count()))
+
     # 🎓: what was learnt, and forgetting it (after a confirmation)
     from app.learning.store import PairEvidence
 
