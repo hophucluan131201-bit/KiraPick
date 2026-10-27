@@ -531,10 +531,11 @@ def test_view_buttons_back_button_and_key_hints(qtbot, env: dict) -> None:
     _import(qtbot, w, env["photos"])
     w.select_row(0)
     assert w.act_grid_view.isChecked() and not w.act_loupe.isChecked()
-    assert w.key_hints.isVisible() and "chọn nhiều ảnh" in w.key_hints.text()
+    hints = lambda: w.key_hints.text().replace("&nbsp;", " ")  # noqa: E731
+    assert w.key_hints.isVisible() and "chọn nhiều ảnh" in hints()
     w.act_loupe.trigger()
     assert w.center.currentIndex() == 2 and w.act_loupe.isChecked() and not w.act_grid_view.isChecked()
-    assert "về lưới ảnh" in w.key_hints.text() and "phóng tới mắt" in w.key_hints.text()
+    assert "về lưới ảnh" in hints() and "phóng tới mắt" in hints()
     assert w.viewer.back_button.isVisible()
     qtbot.mouseClick(w.viewer.back_button, Qt.MouseButton.LeftButton)
     assert w.center.currentIndex() == 1 and w.act_grid_view.isChecked()
