@@ -147,6 +147,46 @@ def test_fetch_extracts_the_pinned_member_of_a_zip(tmp_path: Path, monkeypatch: 
     assert ModelRegistry(dest, {spec.id: spec}).status(spec.id).state is ModelState.READY
 
 
+def test_download_resumes_after_a_broken_transfer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import http.server
+    import threading
+
+    import scripts.fetch_models as fetch
+
+    payload = bytes(range(256)) * 4000  # ~1 MB
+    calls: list[str | None] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            rng = self.headers.get("Range")
+            calls.append(rng)
+            start = int(rng.split("=")[1].rstrip("-")) if rng else 0
+            body = payload[start:]
+            self.send_response(206 if rng else 200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if len(calls) == 1:  # first try: the connection drops half-way
+                self.wfile.write(body[: len(body) // 2])
+                self.wfile.flush()
+                self.connection.shutdown(2)
+                return
+            self.wfile.write(body)
+
+        def log_message(self, *a) -> None:  # noqa: ANN002
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setattr(fetch.time, "sleep", lambda s: None)
+    try:
+        target = tmp_path / "m.onnx.part"
+        fetch._download(f"http://127.0.0.1:{server.server_port}/m.onnx", target)
+    finally:
+        server.shutdown()
+    assert target.read_bytes() == payload
+    assert calls[0] is None and calls[1] == f"bytes={len(payload) // 2}-"  # continued, not restarted
+
+
 def test_manifest_marks_arcface_as_non_commercial() -> None:
     specs = load_manifest()
     assert specs["face_embedder_arcface"].purpose == specs["body_reid"].purpose == "identity_plus"

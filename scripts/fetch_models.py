@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -21,6 +22,40 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.ai.models import ModelRegistry, ModelState, sha256_of  # noqa: E402
+
+
+ATTEMPTS = 6
+TIMEOUT_S = 300
+
+
+def _download(url: str, target: Path) -> None:
+    """Download with retries; a broken transfer continues where it stopped (HTTP Range)."""
+    target.unlink(missing_ok=True)
+    for attempt in range(1, ATTEMPTS + 1):
+        have = target.stat().st_size if target.exists() else 0
+        request = urllib.request.Request(url, headers={"Range": f"bytes={have}-"} if have else {})
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT_S) as resp:  # noqa: S310
+                if have and resp.status != 206:  # server ignored the range: start over
+                    have = 0
+                total = have + int(resp.headers.get("Content-Length") or 0)
+                shown = -1
+                with open(target, "ab" if have else "wb") as out:
+                    while chunk := resp.read(1 << 20):
+                        out.write(chunk)
+                        have += len(chunk)
+                        if total and (pct := have * 100 // total) // 10 != shown:
+                            shown = pct // 10
+                            print(f"  {pct}%", flush=True)
+            if total and have < total:  # the server closed early without an error
+                raise OSError(f"incomplete: {have} of {total} bytes")
+            return
+        except OSError as exc:
+            if attempt == ATTEMPTS:
+                raise
+            print(f"  mạng chậm/ngắt ({exc}); thử lại lần {attempt + 1}/{ATTEMPTS}, tải tiếp phần còn thiếu …",
+                  flush=True)
+            time.sleep(min(30, 2 ** attempt))
 
 
 def main() -> int:
@@ -64,9 +99,7 @@ def main() -> int:
             print(f"Đang tải {spec.file} ({spec.size / 1e6:.0f} MB) …", flush=True)
             download = part.with_suffix(".zip.part") if spec.archive_member else part
             try:
-                with urllib.request.urlopen(spec.url, timeout=120) as resp, open(download, "wb") as out:  # noqa: S310
-                    while chunk := resp.read(1 << 20):
-                        out.write(chunk)
+                _download(spec.url, download)
                 if spec.archive_member:  # only the one pinned member is extracted
                     with zipfile.ZipFile(download) as zf, zf.open(spec.archive_member) as src, open(part, "wb") as out:
                         shutil.copyfileobj(src, out, 1 << 20)
