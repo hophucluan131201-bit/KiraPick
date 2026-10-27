@@ -394,3 +394,24 @@ def test_unidentified_lists_only_photos_without_any_subject(project: Project) ->
     _add(project, 3, None)  # nobody known in this photo
     recluster(project)
     assert [r[0] for r in project.conn.execute(UNIDENTIFIED_ASSETS)] == [3]
+
+
+def test_person_boxes_of_both_detectors_are_merged() -> None:
+    """DSC_0117: YOLOX-M took a kigurumi cosplayer for a teddy bear; YOLOX-S found her."""
+    from types import SimpleNamespace
+
+    from app.ai.detect import PersonDetector
+
+    def fake(cell: int, score: float) -> SimpleNamespace:
+        def run(_names, _feeds):  # noqa: ANN001, ANN202
+            out = np.zeros((1, 8400, 85), np.float32)
+            out[0, :, 2:4] = np.log(4.0)  # 4 strides wide/high boxes, logits for "nobody" below
+            out[0, cell, 4], out[0, cell, 5] = score, 1.0
+            return [out]
+        inner = SimpleNamespace(run=run, get_inputs=lambda: [SimpleNamespace(name="images")])
+        return SimpleNamespace(session=inner, device="cuda", fallback_reason=None)
+
+    medium_misses_her, small_finds_her = fake(0, 0.0), fake(4000, 0.87)
+    found = PersonDetector(medium_misses_her, small_finds_her).detect(np.zeros((640, 640, 3), np.uint8))
+    assert len(found) == 1 and found[0][1] == pytest.approx(0.87)
+    assert PersonDetector(medium_misses_her).detect(np.zeros((640, 640, 3), np.uint8)) == []

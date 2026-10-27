@@ -297,7 +297,11 @@ corrections two people of one photo sat in one subject → small groups that are
 of any photo (prominence < 0.75, < 4 photos) are not subjects; a subject keeps one person per photo
 (merge + repair on every grouping); (2) "Chưa xác định" listed photos whose lead was known but had a
 second unknown person → it now lists only photos with no subject at all; (3) UI says "Chủ thể"
-instead of "Người". A sharpness ratio (background blur) was tried and rejected: on thumbnails and
+instead of "Người". 0.3.0b4: DSC_0117 (owner, NEF): a kigurumi cosplayer (doll mask) was not detected on GPU — YOLOX-M
+scored her large box as COCO "teddy bear" (0.82; person ≤ 0.35), so a man behind her became the lead.
+YOLOX-S finds her (0.87). On GPU both models now run and boxes are merged with NMS (detect stage v2:
+sessions re-detect once; manual corrections survive through box matching). A sharpness ratio
+(background blur) was tried and rejected: on thumbnails and
 crops it did not separate the background people (ratios 0.57–1.06 vs 0.56–1.0 for real subjects).
 
 Caveats: ArcFace/ReID vectors were computed from the bundle's 400 px thumbnails (faces ~60 px); the

@@ -43,14 +43,18 @@ def iou(a: Box, b: Box) -> float:
 
 
 class PersonDetector:
-    """YOLOX (COCO) restricted to the 'person' class."""
+    """YOLOX (COCO) restricted to the 'person' class.
+
+    With a GPU, YOLOX-M and YOLOX-S both run and their boxes are merged: YOLOX-M alone took a
+    kigurumi cosplayer (doll mask) for a teddy bear and missed her, YOLOX-S found her at 0.87.
+    """
 
     INPUT = 640
     STRIDES = (8, 16, 32)
 
-    def __init__(self, session: Session) -> None:
-        self.session = session
-        self._input = session.session.get_inputs()[0].name
+    def __init__(self, session: Session, *extra: Session) -> None:
+        self.session = session  # the main (largest) model; its device is reported
+        self.sessions = (session, *extra)
         grids, strides = [], []
         for s in self.STRIDES:
             n = self.INPUT // s
@@ -62,16 +66,26 @@ class PersonDetector:
 
     @classmethod
     def load(cls, registry: ModelRegistry, *, prefer_gpu: bool = True) -> PersonDetector:
-        session = create_session(registry.require("person_detector_s"), prefer_gpu=False)
+        small = create_session(registry.require("person_detector_s"), prefer_gpu=False)
         if prefer_gpu and registry.status("person_detector_m").state is ModelState.READY:  # optional (GPU builds)
             gpu = create_session(registry.require("person_detector_m"), prefer_gpu=True)
-            if gpu.device != "cpu":
-                session = gpu  # the larger model only when it really runs on a GPU (CUDA or DirectML)
-        return cls(session)
+            if gpu.device != "cpu":  # the larger model only when it really runs on a GPU (CUDA or DirectML)
+                small_gpu = create_session(registry.require("person_detector_s"), prefer_gpu=True)
+                return cls(gpu, small_gpu if small_gpu.device != "cpu" else small)
+        return cls(small)
 
     @property
     def device(self) -> str:
         return self.session.device
+
+    def _raw(self, session: Session, canvas: np.ndarray, ratio: float) -> tuple[np.ndarray, np.ndarray]:
+        blob = canvas.transpose(2, 0, 1)[None].astype(np.float32)
+        out = session.session.run(None, {session.session.get_inputs()[0].name: blob})[0][0]
+        xy = (out[:, :2] + self._grid) * self._stride
+        wh = np.exp(out[:, 2:4]) * self._stride
+        score = out[:, 4] * out[:, 5]  # objectness x P(person)
+        keep = score >= PERSON_SCORE
+        return np.concatenate([xy[keep] - wh[keep] / 2, wh[keep]], 1) / ratio, score[keep]
 
     def detect(self, bgr: np.ndarray) -> list[tuple[Box, float]]:
         h, w = bgr.shape[:2]
@@ -79,16 +93,11 @@ class PersonDetector:
         resized = cv2.resize(bgr, (int(w * ratio), int(h * ratio)), interpolation=cv2.INTER_LINEAR)
         canvas = np.full((self.INPUT, self.INPUT, 3), 114, np.uint8)
         canvas[: resized.shape[0], : resized.shape[1]] = resized
-        blob = canvas.transpose(2, 0, 1)[None].astype(np.float32)
-        out = self.session.session.run(None, {self._input: blob})[0][0]
-        xy = (out[:, :2] + self._grid) * self._stride
-        wh = np.exp(out[:, 2:4]) * self._stride
-        score = out[:, 4] * out[:, 5]  # objectness x P(person)
-        keep = score >= PERSON_SCORE
-        if not keep.any():
+        found = [self._raw(s, canvas, ratio) for s in self.sessions]
+        boxes = np.concatenate([b for b, _ in found]) if found else np.zeros((0, 4))
+        score = np.concatenate([sc for _, sc in found]) if found else np.zeros(0)
+        if not len(score):
             return []
-        xy, wh, score = xy[keep], wh[keep], score[keep]
-        boxes = np.concatenate([xy - wh / 2, wh], 1) / ratio
         boxes[:, 0] = boxes[:, 0].clip(0, w)
         boxes[:, 1] = boxes[:, 1].clip(0, h)
         boxes[:, 2] = np.minimum(boxes[:, 2], w - boxes[:, 0])

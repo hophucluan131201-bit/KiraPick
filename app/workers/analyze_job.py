@@ -31,7 +31,7 @@ from app.storage.project import Project, utc_now
 log = logging.getLogger(__name__)
 
 STAGE = "detect"
-STAGE_VERSION = 1  # bump when detection/feature extraction changes
+STAGE_VERSION = 2  # bump when detection/feature extraction changes; 2: YOLOX-M + YOLOX-S merged on GPU
 ANALYSIS_LONG_SIDE = 1600
 USABLE_FACE_SCORE = 0.75  # below this a face is "seen" but not trusted for identity
 FACE_VECTOR_VERSION = "sface-2021dec"

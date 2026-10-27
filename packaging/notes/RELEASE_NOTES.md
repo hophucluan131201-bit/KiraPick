@@ -1,5 +1,10 @@
 ## KiraPick – bản thử nghiệm (beta)
 
+> **0.3.0b4 – không bỏ sót cosplayer kigurumi.** Trên máy có card đồ hoạ, bộ dò người lớn (YOLOX-M) từng
+> nhận nhầm cosplayer mặt búp bê thành "gấu bông" nên người phía sau thành chủ thể chính; nay chạy cả hai
+> bộ dò (M và S) rồi gộp kết quả. Lần đầu mở lại một thư mục, 🧠 Nhận diện chủ thể sẽ dò lại toàn bộ
+> (các lần sửa tay vẫn được giữ) và cần bấm lại 📊 Phân tích ảnh.
+>
 > **0.3.0b3 – sửa theo góp ý.** Người đứng phía sau (mờ, quay lưng) không còn thành chủ thể riêng;
 > một chủ thể chỉ giữ một người trong mỗi ảnh (tự sửa cả dữ liệu cũ); "Chưa xác định" chỉ còn những ảnh
 > chưa có chủ thể nào; chữ "Người" đổi thành "Chủ thể"; ngưỡng gom chỉnh theo số đo thật trên ảnh lớn
