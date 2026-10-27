@@ -2,8 +2,8 @@
 
 Offline, non-destructive photo culling for cosplay/street photographers (Windows desktop).
 **Status: early development** — desktop culling app (import, grid, loupe with 100% zoom,
-keyboard culling, copy export) works; offline AI groups photos by person (first version, thresholds
-not yet calibrated); quality scoring and best-shot selection are not built yet. See
+keyboard culling, copy export) works; offline AI groups photos by person and look
+(calibrated on one labelled shoot); quality scoring and best-shot selection are not built yet. See
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 Specification: [`docs/TECHNICAL_SPEC_v1.1.md`](docs/TECHNICAL_SPEC_v1.1.md).

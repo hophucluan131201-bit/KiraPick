@@ -86,7 +86,7 @@ class ReviewDialog(QDialog):
             for col in range(2):
                 self.pics[col].clear()
                 self.names[col].clear()
-            self.similarity.setText("Mọi cặp khuôn mặt hơi giống nhau đã được xem.")
+            self.similarity.setText("Mọi cặp có thể là cùng một người đã được xem.")
             return
         self.counter.setText(f"GỢI Ý {self.index + 1}/{len(self.queue)}")
         for col, sid in enumerate((s.a, s.b)):
@@ -97,8 +97,11 @@ class ReviewDialog(QDialog):
             else:
                 self.pics[col].setText("(không có ảnh mặt)")
             self.names[col].setText(f"<b>{actions.subject_label(self.project.conn, sid)}</b><br>{photos} ảnh")
+        reason = f"Độ giống khuôn mặt AI: {s.similarity:.2f}" if s.similarity else "Không so được khuôn mặt"
+        if s.same_outfit:
+            reason += " · trang phục giống nhau, chụp cách nhau vài phút"
         self.similarity.setText(
-            f"Độ giống khuôn mặt AI: {s.similarity:.2f} — chưa đủ chắc để tự gộp. "
+            f"{reason} — chưa đủ chắc để tự gộp. "
             "Hai người trùng trang phục/makeup cũng có thể giống nhau; bạn quyết định."
         )
 

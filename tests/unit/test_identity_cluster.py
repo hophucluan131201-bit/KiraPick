@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from app.identity import actions
-from app.identity.cluster import AUTO_PAIR, Occ, group, merge_suggestions, recluster
+from app.identity.cluster import FACE_STRONG, Occ, group, merge_suggestions, recluster
 from app.storage.project import Project
 
 RNG = np.random.default_rng(7)
@@ -47,7 +47,7 @@ def test_same_people_group_and_strangers_stay_apart() -> None:
     a, b = _person(), _person()
     occs = [_occ(1, 1, _shot(a)), _occ(2, 2, _shot(a)), _occ(3, 3, _shot(a)), _occ(4, 4, _shot(b)), _occ(5, 5, _shot(b))]
     assert float(occs[0].face @ occs[1].face) > 0.8 and abs(float(occs[0].face @ occs[3].face)) < 0.3
-    groups, _ = group(occs)
+    groups = group(occs).groups
     assert _members(groups, occs) == [[1, 2, 3], [4, 5]]
 
 
@@ -55,7 +55,7 @@ def test_two_people_in_one_photo_are_never_merged() -> None:
     a = _person()
     twin_look = _shot(a, 0.1)  # e.g. twins / identical makeup in the same photo
     occs = [_occ(1, 10, _shot(a, 0.1)), _occ(2, 10, twin_look)]
-    groups, _ = group(occs)
+    groups = group(occs).groups
     assert _members(groups, occs) == [[1], [2]]
 
 
@@ -63,23 +63,55 @@ def test_no_chaining_through_a_middle_face() -> None:
     a, c = _person(), _person()
     middle = _unit(a + c)  # resembles both
     occs = [_occ(1, 1, a), _occ(2, 2, middle), _occ(3, 3, c)]
-    groups, _ = group(occs)
+    groups = group(occs).groups
     assert not any({1, 3} <= set(m) for m in _members(groups, occs)), "A and C must not end up together"
 
 
-def test_faceless_photo_only_suggested_by_outfit_within_time_window() -> None:
+RED = _unit(np.r_[np.ones(10), np.zeros(118)])
+BLUE = _unit(np.r_[np.zeros(118), np.ones(10)])
+PINK = _unit(np.r_[np.ones(9), np.zeros(118), np.ones(1) * 1.2])  # ~0.88 like RED: similar colours
+
+
+def test_faceless_photo_joins_by_outfit_within_time_window_as_suggestion() -> None:
     a = _person()
-    red = _unit(np.r_[np.ones(10), np.zeros(118)])
-    blue = _unit(np.r_[np.zeros(118), np.ones(10)])
     occs = [
-        _occ(1, 1, _shot(a), red, t=0), _occ(2, 2, _shot(a), red, t=30),
-        _occ(3, 3, None, red, t=120),       # back view, same outfit, 2 min later -> suggestion
-        _occ(4, 4, None, red, t=60 * 60),   # same outfit an hour later -> nothing
-        _occ(5, 5, None, blue, t=60),       # other outfit -> nothing
+        _occ(1, 1, _shot(a), RED, t=0), _occ(2, 2, _shot(a), RED, t=30),
+        _occ(3, 3, None, RED, t=120),       # back view, same outfit, 2 min later -> joins, only suggested
+        _occ(4, 4, None, RED, t=60 * 60),   # same outfit an hour later -> nothing
+        _occ(5, 5, None, BLUE, t=60),       # other outfit -> nothing
     ]
-    groups, suggestions = group(occs)
-    assert _members(groups, occs) == [[1, 2]]
-    assert {occs[i].id for i in suggestions} == {3}
+    result = group(occs)
+    assert _members(result.groups, occs) == [[1, 2, 3]]
+    assert {occs[i].id for i in result.weak} == {3} and not result.suggestions
+
+
+def test_faceless_photos_form_a_person_only_together() -> None:
+    occs = [_occ(1, 1, None, BLUE, t=0), _occ(2, 2, None, BLUE, t=40), _occ(3, 3, None, RED, t=60)]
+    result = group(occs)
+    assert _members(result.groups, occs) == [[1, 2]]  # lone face-less photo 3 is no person of its own
+    assert {occs[i].id for i in result.weak} == {1, 2}
+
+
+def test_same_look_links_a_weaker_face_but_lookalike_cosplayers_stay_apart() -> None:
+    """Calibration case: two cosplayers in similar pink, minutes apart, faces ~0.5 similar."""
+    a, b = _person(), _person()
+    straggler = _blend(a, 0.58)  # same person, unusual angle: face too weak alone
+    other = _blend(a, 0.50)  # another cosplayer with similar makeup
+    occs = [
+        _occ(1, 1, a, RED, t=0), _occ(2, 2, _shot(a, 0.2), RED, t=60),
+        _occ(3, 3, straggler, RED, t=200),  # same outfit + face >= 0.55 -> same person
+        _occ(4, 4, other, PINK, t=120),  # similar outfit but face < 0.55 -> stays apart
+        _occ(5, 5, _shot(b), BLUE, t=150),
+    ]
+    assert float(RED @ PINK) > 0.85
+    groups = group(occs).groups
+    assert _members(groups, occs) == [[1, 2, 3], [4], [5]]
+
+
+def test_same_outfit_far_apart_in_time_does_not_link() -> None:
+    a = _person()
+    occs = [_occ(1, 1, a, RED, t=0), _occ(2, 2, _blend(a, 0.58), RED, t=3600)]
+    assert _members(group(occs).groups, occs) == [[1], [2]]
 
 
 def test_manual_and_excluded_constraints() -> None:
@@ -89,7 +121,7 @@ def test_manual_and_excluded_constraints() -> None:
         _occ(2, 2, _shot(a)),
         _occ(3, 3, _shot(a), excluded=7),  # user removed this photo from subject 7
     ]
-    groups, _ = group(occs)
+    groups = group(occs).groups
     by_fixed = {g.fixed_subject: sorted(occs[m].id for m in g.members) for g in groups if g.members}
     assert by_fixed[7] == [1, 2]
     assert [3] in by_fixed.values()
@@ -106,7 +138,8 @@ def project(tmp_path: Path) -> Project:
     p.close()
 
 
-def _add(p: Project, asset: int, face: np.ndarray | None, *, minute: int = 0, main: int = 1) -> int:
+def _add(p: Project, asset: int, face: np.ndarray | None, *, minute: int = 0, main: int = 1,
+         outfit: np.ndarray | None = None) -> int:
     conn = p.conn
     if not conn.execute("SELECT 1 FROM assets WHERE id = ?", (asset,)).fetchone():
         conn.execute(
@@ -120,6 +153,8 @@ def _add(p: Project, asset: int, face: np.ndarray | None, *, minute: int = 0, ma
            VALUES (?, ?, 1.0, ?, 1, 'n')""", (asset, json.dumps([0.1, 0.1, 0.5, 0.8]), main)).lastrowid)
     if face is not None:
         conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'face', 't', ?)", (occ, face.astype("<f4").tobytes()))
+    if outfit is not None:
+        conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'outfit', 't', ?)", (occ, outfit.astype("<f4").tobytes()))
     return occ
 
 
@@ -161,15 +196,27 @@ def test_recluster_is_stable_and_respects_corrections(project: Project) -> None:
 
 def test_review_suggestions_and_mark_different(project: Project) -> None:
     a = _person()
-    near = _blend(a, 0.48)  # similar-ish face (heavy makeup?), between SUGGEST and AUTO_PAIR
+    near = _blend(a, 0.50)  # similar-ish face (heavy makeup?), below the automatic level
     _add(project, 1, a)
     _add(project, 2, near)
     recluster(project)
     subjects = list(_subjects(project))
     assert len(subjects) == 2
     sims = merge_suggestions(project.conn)
-    assert len(sims) == 1 and sims[0].similarity < AUTO_PAIR
+    assert len(sims) == 1 and sims[0].similarity < FACE_STRONG and not sims[0].same_outfit
     actions.mark_different(project.conn, *subjects)
     assert merge_suggestions(project.conn) == []
     recluster(project)
     assert len(_subjects(project)) == 2
+
+
+def test_recluster_marks_faceless_members_as_suggested(project: Project) -> None:
+    a = _person()
+    _add(project, 1, _shot(a), outfit=RED)
+    _add(project, 2, _shot(a), minute=1, outfit=RED)
+    back = _add(project, 3, None, minute=2, outfit=RED)
+    report = recluster(project)
+    assert list(_subjects(project).values()) == [[1, 2, 3]]
+    row = project.conn.execute("SELECT assignment, confidence FROM occurrences WHERE id = ?", (back,)).fetchone()
+    assert row["assignment"] == "suggested" and row["confidence"] > 0.85
+    assert (report.auto, report.suggested) == (2, 1)

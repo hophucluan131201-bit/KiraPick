@@ -19,7 +19,7 @@ required — a listed provider does not prove inference works).
 |---|---|---|
 | M0 Feasibility + safety | **tested** | RAW feasibility; AI runtime (offline-only providers, telemetry off, GPU→CPU fallback); model manifest + licenses. **CUDA verified on the RTX 2080 Super Max-Q** (2026-10-27, see below). OSNet/DINOv2 not fetched yet |
 | M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
-| M2 Identity | **implemented + tested (synthetic + 7 real photos)** | Detection, face embeddings, conservative grouping, people panel, review queue, manual corrections that survive re-analysis. **Thresholds not calibrated on labelled data**; no body re-ID model yet (OSNet/DINOv2 blocked from dev container); outfit-colour cue only suggests |
+| M2 Identity | **implemented + tested (synthetic + 7 real photos)** | Detection, face embeddings, look-first grouping (face + outfit within 5 min), people panel, review queue, manual corrections that survive re-analysis. **Calibrated on one labelled shoot only** (precision 1.00 / recall 0.76, thin margin); no body re-ID model yet (OSNet/DINOv2 blocked from dev container) |
 | M3 Quality | not started | |
 | M4 Best shot | not started | |
 | M5 Local VLM | not started | |
@@ -118,18 +118,33 @@ expected for this GPU (to profile: FP16, IO binding, preprocessing share, power 
 |---|---|---|
 | Schema v3: occurrences (normalised boxes, prominence, main/background), vectors, reviewed "different" pairs | tested | migration from v2 in place |
 | Analysis job: prefetch decode, YOLOX + YuNet + SFace, outfit colour, avatar crops, resumable per photo, failures isolated, re-analysis keeps occurrence ids (box IoU) | tested | `tests/gui` real-photo flow, rerun = 0 work |
-| Grouping: auto-merge only if best pair ≥ 0.55 AND group average ≥ 0.45; same-photo cannot-link; no chaining; manual seeds fixed; user exclusions and "different" pairs respected; face-less photos only *suggested* by outfit within ±10 min; stable subject ids; background people never grouped | tested | `tests/unit/test_identity_cluster.py` (synthetic ground truth) |
+| Grouping v2 (look-first): link if face ≥ 0.65 (any time); or within ±5 min outfit ≥ 0.85 and faces (if both visible) ≥ 0.55; or within ±5 min face ≥ 0.58 and outfit ≥ 0.70. Groups merge only if mean face similarity ≥ 0.45 (no chaining); same-photo cannot-link; manual seeds attract first; user exclusions and "different" pairs respected; face-less members only *suggested* ("?"); a face-less-only group needs ≥ 2 photos; stable subject ids; background people never grouped. Review queue: same outfit within 5 min, or face ≥ 0.45 within 30 min, or face ≥ 0.60 any time (max 30) | tested | `tests/unit/test_identity_cluster.py` (synthetic), `scripts/calibration/evaluate_grouping.py` (real labels) |
 | UI: "🧠 Nhận diện người" (auto after import, background, pause/resume), NGƯỜI list with face avatars, person filter, "Chưa xác định", "?" badge for suggested photos, rename (double-click), merge selected, mark different, grid menu: confirm / remove from person / assign to person, review dialog, inspector lists people in the photo | tested offscreen | `test_people_recognition_flow_on_real_photos` |
 
-On the owner's 7 sample NEFs: 7 people, 2 photos unidentified (face hidden by hands; second person
-without face), 3 review suggestions (best 0.49). Accuracy on a full shoot is **not measured**: needs
-the owner's labels (spec §10: Dataset A).
+### Grouping calibration (owner's "Test" shoot, 2026-10-25)
+
+Data: debug bundle of 109 NEF (Nikon Z 5), 341 occurrences, 159 usable faces. Ground truth: 37 looks
+in `scripts/calibration/labels_test_20261025.py` (6 groups from the owner, the rest labelled
+visually from thumbnails by costume continuity — may contain mistakes). Metric: pairwise, per photo
+(its most prominent main person). Reproduce: `python scripts/calibration/evaluate_grouping.py snorlu_debug.zip`.
+
+| Rules | Precision | Recall | Wrong merges |
+|---|---|---|---|
+| v1 face-only (best pair ≥ 0.55, average ≥ 0.45) | 0.56 | 0.76 | many different cosplayers in one person |
+| v2 look-first (current) | **1.00** | **0.76** | none; 4 face-less photos suggested |
+
+Measured distributions: same look face similarity median 0.68 (p10 0.40); different looks max 0.63
+(p99 0.53); outfit same look median 0.92, different looks p99 0.86. **The margin is thin**: two
+different cosplayers in similar pink, 2–5 min apart, reached face 0.54 / outfit 0.91 — that is why
+outfit links need face ≥ 0.55. Remaining splits are mostly single photos (profile, back view, mask);
+7 of them are in the top 12 of the review queue. Not yet known: behaviour on other shoots, lighting,
+masks; face-less looks (e.g. full-helmet mecha) stay unidentified — needs a body re-ID model.
 
 ## Test run
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-210 passed in 72.95s
+230 passed in 138.81s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):
