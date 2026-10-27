@@ -1,152 +1,200 @@
 # KiraPick
 
-*(formerly "Snorlu AI Culling" — renamed to KiraPick in 0.2.0b2; earlier data is moved automatically)*
+**[🇻🇳 Tiếng Việt](#-tiếng-việt)** · **[🇬🇧 English](#-english)**
 
-Offline, non-destructive photo culling for cosplay/street photographers (Windows desktop).
-**Status: early development** — desktop culling app (import, grid, loupe with 100% zoom,
-keyboard culling, copy export) works; offline AI groups photos by person and look
-(calibrated on one labelled shoot), gives each person a technical score and picks N varied best
-shots (first version: eyes-closed and aesthetics are not judged yet). See
-[`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
+*(trước đây tên là / formerly "Snorlu AI Culling" — dữ liệu cũ được chuyển tự động / earlier data is moved automatically)*
 
-## Dành cho người dùng (không cần biết lập trình)
+---
 
-1. Vào trang **[Releases](https://github.com/hophucluan131201-bit/kirapick/releases)** của dự án
+## 🇻🇳 Tiếng Việt
+
+KiraPick là ứng dụng Windows giúp **lọc ảnh cosplay và chân dung bằng AI, chạy hoàn toàn offline**:
+gom ảnh theo từng người, chấm điểm kỹ thuật (nét ở mắt, mặt, ánh sáng, bố cục) và tự chọn ra
+những tấm đẹp, khác dáng nhau để bạn duyệt lại.
+
+- **Không cần Internet** sau khi cài; không gửi ảnh hay dữ liệu đi đâu.
+- **Không bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc.** Xuất ảnh = sao chép.
+- Đọc RAW (Nikon NEF ưu tiên, Canon CR2/CR3, Sony ARW, …) và JPEG.
+- Tình trạng: **bản thử nghiệm (beta)**. Chưa đánh giá được mắt nhắm/mở và độ đẹp nghệ thuật.
+  Chi tiết: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) (tiếng Anh).
+
+### Cài đặt (không cần biết lập trình)
+
+1. Vào trang **[Releases](https://github.com/hophucluan131201-bit/KiraPick/releases)**
    (cột bên phải trang GitHub → *Releases*).
-2. Tải file **`KiraPick-…-BoCai.zip`** trong phiên bản mới nhất.
-3. Nhấp phải → *Extract All* → mở file **`HUONG_DAN_CAI_DAT.txt`** và làm theo (3 bước, không cần
-   cài Git hay Python).
+2. Tải file **`KiraPick-…-BoCai.zip`** của phiên bản mới nhất.
+3. Nhấp phải → *Extract All* (Giải nén) → mở **`HUONG_DAN_CAI_DAT.txt`** và làm theo.
+   Không cần cài Git hay Python.
+4. Nếu Windows báo *“Windows protected your PC”*: bấm **More info → Run anyway**
+   (bộ cài chưa có chữ ký số trả phí, không phải virus).
 
-Dự án cá nhân, **phi thương mại**, chia sẻ miễn phí — xem [Giấy phép](#license--giấy-phép).
+Máy cần Windows 10/11 64-bit. Có card đồ hoạ (NVIDIA, AMD, Intel) thì AI chạy trên card qua
+DirectML; không có thì chạy bằng CPU.
 
-Specification: [`docs/TECHNICAL_SPEC_v1.1.md`](docs/TECHNICAL_SPEC_v1.1.md).
-RAW support evidence: [`docs/raw-support-matrix.md`](docs/raw-support-matrix.md).
+### Cách dùng: 4 bước, mỗi bước xong sẽ dừng chờ bạn
 
-## Setup (Windows, PowerShell)
+1. **📂 Nhập ảnh** — chọn thư mục ảnh của một buổi chụp.
+2. **🧠 Nhận diện người** — AI gom ảnh theo từng người. Kiểm tra danh sách **NGƯỜI** bên trái:
+   tick ô vuông của nhiều người rồi bấm **🔗 Gộp người** nếu một người bị tách thành nhiều nhóm;
+   chuột phải vào ảnh để bỏ ảnh khỏi một người hoặc gán cho người khác.
+3. **📊 Phân tích ảnh** — chấm điểm từng người trong từng ảnh. Bảng bên phải liệt kê
+   **Điểm mạnh**, **Điểm yếu** và **Chưa đánh giá**.
+4. **⭐ Chọn ảnh** — nhập số ảnh muốn chọn cho mỗi người. Ảnh AI chọn có nhãn **AI** và xếp lên đầu.
+   Duyệt lại bằng **K** (giữ) / **X** (loại) / **U** (bỏ đánh dấu), rồi **⤴ Xuất ảnh → Ảnh đã Giữ**.
 
-Requirements: Git and Python 3.11–3.14 (`winget install --id Git.Git -e`,
-`winget install --id Python.Python.3.12 -e`). Use a normal (non-Administrator) PowerShell and a
-work folder such as `D:\Dev` — not `C:\Windows\System32`.
+Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng phím tắt nhỏ luôn hiện dưới khu vực ảnh
+(ẩn/hiện bằng **⌨ Phím tắt**, **F1** xem đầy đủ).
+
+| Phím | Tác dụng |
+|---|---|
+| ← / → (↑ ↓ trong lưới) | ảnh trước / sau |
+| Space / Enter, Esc | xem lớn ↔ lưới, về lưới |
+| Z | 100% (điểm ảnh gốc) ↔ vừa khung |
+| + / − , cuộn chuột | phóng to tới 800% / thu nhỏ (luôn trên ảnh gốc) |
+| E | phóng tới mắt người chính để xem nét; nháy đúp = 100% tại chỗ đó |
+| K / X / U | giữ / loại / bỏ đánh dấu (áp dụng cho mọi ảnh đang chọn) |
+| Ctrl/Shift + click | chọn nhiều ảnh |
+| 1–5, 0 | chấm sao, xoá sao |
+| F | yêu thích |
+| Ctrl+I / Ctrl+E | nhập thư mục / xuất ảnh |
+| Ctrl+F | tìm tên file (nhiều số cách nhau bằng dấu cách: `9645 9650`) |
+| Ctrl+L | danh sách khách chọn: dán tin nhắn của khách, vd `9645, 9657-9660, DSC_9665.jpg` |
+
+**Danh sách khách chọn (📋 Khách chọn):** dán tin nhắn khách gửi; app hiểu số, khoảng
+(`9657-9660`, `9657 đến 9660`, `9645-50`) và tên file đầy đủ, báo trước những số không tìm thấy.
+
+**Xuất ảnh** chỉ **sao chép** (Giữ, Yêu thích, ≥ N sao, ảnh đang chọn hoặc danh sách khách), giữ
+cặp RAW+JPEG đi cùng nhau, không ghi đè, bỏ qua ảnh đã xuất trước đó, và ghi danh sách CSV/JSON
+vào thư mục con `_kirapick_danh_sach`.
+
+**Dữ liệu của ứng dụng** (không phải ảnh): `%LOCALAPPDATA%\KiraPick` — `sessions` (ghi nhớ từng
+thư mục ảnh, tự quên sau 30 ngày không mở; **↺ Làm lại** để quên ngay), `learning` (bộ nhớ học:
+chỉ là các con số từ những lần bạn sửa nhóm người và Giữ/Loại, riêng cho từng máy), `logs` (gửi
+kèm khi báo lỗi).
+
+### Dành cho người phát triển
 
 ```powershell
 cd D:\Dev
-git clone https://github.com/hophucluan131201-bit/kirapick.git
-cd kirapick
-powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
+git clone https://github.com/hophucluan131201-bit/KiraPick.git
+cd KiraPick
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1   # tạo .venv, cài thư viện, chạy kiểm thử
+.\KiraPick.cmd                                                          # mở ứng dụng
+powershell -ExecutionPolicy Bypass -File .\scripts\make_shortcut.ps1   # biểu tượng trên Desktop
 ```
 
-The script picks a suitable Python, creates `.venv` inside the project, installs dependencies and
-runs the tests. It changes nothing system-wide.
-(Linux/macOS: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"`.)
-Versions verified so far are in `requirements.lock.txt` (recorded on Linux).
+- Kiểm thử: `.\.venv\Scripts\python -m pytest`
+- Tải mô hình AI (một lần, cần Internet): `.\.venv\Scripts\python scripts\fetch_models.py`
+- Bộ cài: GitHub Actions tự build khi commit trên `main` có chữ `[release]`; build tay:
+  `powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1`
 
-## Run the app
+---
 
-Double-click **`KiraPick.cmd`** in the project folder (or the desktop shortcut the setup script can
-create). Every start is an empty session: click **📂 Nhập ảnh** and pick a shoot folder; photos are
-only read. There are no projects to manage. Work is remembered per photo folder in hidden app data
-(`%LOCALAPPDATA%\KiraPick\sessions`): importing the same folder again brings back its
-Keep/Reject/stars and client lists. A folder not opened for 30 days is forgotten automatically;
-**↺ Làm lại** forgets the current folder immediately (asks first). Importing another folder switches
-to that folder's session.
+## 🇬🇧 English
 
-The toolbar switch **▦ Lưới ảnh | 🔍 Xem lớn** changes the view (the large view also has a
-“◀ Về lưới ảnh (Esc)” button). A small cheat sheet of keys sits under the photos and follows the view;
-hide/show it with **⌨ Phím tắt**, F1 lists everything.
+KiraPick is a Windows app that **culls cosplay and portrait photos with AI, fully offline**: it
+groups photos by person, gives each person a technical score (sharpness at the eyes, face,
+exposure, framing) and picks the best, varied shots for you to review.
+
+- **No Internet needed** after installation; no photo or data ever leaves the computer.
+- **Never edits, deletes, renames or moves original photos.** Export = copy.
+- Reads RAW (Nikon NEF first, Canon CR2/CR3, Sony ARW, …) and JPEG.
+- Status: **beta**. Eyes closed and artistic quality are not judged yet.
+  Details: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
+
+### Install (no programming needed)
+
+1. Open the **[Releases](https://github.com/hophucluan131201-bit/KiraPick/releases)** page
+   (right-hand column of the GitHub page → *Releases*).
+2. Download **`KiraPick-…-BoCai.zip`** of the latest version (*bộ cài* = installer).
+3. Right-click → *Extract All* → open **`HUONG_DAN_CAI_DAT.txt`** (Vietnamese guide) and run
+   `KiraPick-Setup-….exe`. No Git or Python needed; no administrator rights needed.
+4. If Windows shows *“Windows protected your PC”*: click **More info → Run anyway**
+   (the beta installer is not code-signed; it is not a virus).
+
+Requires Windows 10/11 64-bit. With a graphics card (NVIDIA, AMD, Intel) the AI runs on it through
+DirectML; otherwise on the CPU.
+
+### Use: 4 steps, each one waits for you
+
+1. **📂 Nhập ảnh** (Import) — pick the folder of one shoot.
+2. **🧠 Nhận diện người** (Find people) — AI groups photos by person. Check the **NGƯỜI** (people)
+   list: tick several people and press **🔗 Gộp người** (merge) if one person was split; right-click
+   photos to remove them from a person or assign them to another.
+3. **📊 Phân tích ảnh** (Analyse) — scores every person in every photo. The right panel lists
+   **strengths**, **weaknesses** and what was **not judged**.
+4. **⭐ Chọn ảnh** (Pick) — enter how many photos per person. AI picks get an **AI** badge and go
+   first. Review with **K** (keep) / **X** (reject) / **U** (clear), then **⤴ Xuất ảnh → Ảnh đã Giữ**
+   (export kept photos).
+
+The **▦ Lưới ảnh | 🔍 Xem lớn** switch changes between grid and large view. A small cheat sheet of
+keys sits under the photos (toggle with **⌨ Phím tắt**, **F1** shows all).
 
 | Key | Action |
 |---|---|
 | ← / → (↑ ↓ in grid) | previous / next photo |
-| Space / Enter, Esc | loupe ↔ grid, back to grid |
-| Z | true 100% zoom (full-resolution pixels) ↔ fit |
-| + / − , mouse wheel | zoom closer (up to 800%, always on full-resolution pixels) / back |
-| E | jump to the eyes of the main person (200% for small faces) to check focus; double-click = 100% there |
-| K / X / U | keep / reject / clear flag (applies to all selected photos in the grid) |
+| Space / Enter, Esc | large view ↔ grid, back to grid |
+| Z | true 100% (full-resolution pixels) ↔ fit |
+| + / − , mouse wheel | zoom up to 800% / back (always full-resolution pixels) |
+| E | jump to the main person's eyes to check focus; double-click = 100% there |
+| K / X / U | keep / reject / clear (applies to every selected photo) |
+| Ctrl/Shift + click | select several photos |
 | 1–5, 0 | star rating, clear rating |
-| F | favorite |
+| F | favourite |
 | Ctrl+I / Ctrl+E | import folder / export |
 | Ctrl+F | search file names (several numbers separated by spaces: `9645 9650`) |
 | Ctrl+L | client pick list: paste the client's message, e.g. `9645, 9657-9660, DSC_9665.jpg` |
 
-**Client pick lists** (📋 Khách chọn): paste what the client sent and the file-name pattern
-(`DSC_####`, detected automatically). Numbers, ranges (`9657-9660`, `9657 đến 9660`, `9645-50`) and
-full names are understood. The preview lists names that match no photo and names found in several
-folders before anything is saved. The list appears under **Lọc → Danh sách khách** and in the export
-dialog; it does not change your own Keep/Reject flags unless you tick that option.
+**Client pick lists (📋 Khách chọn):** paste what the client sent; numbers, ranges
+(`9657-9660`, `9657 đến 9660`, `9645-50`) and full file names are understood, and names that match
+no photo are reported before anything is saved.
 
-Export copies the chosen photos (Kept, Favorites, ≥ N stars, or the selection), RAW+JPEG pairs
-together, never overwrites (a different file with the same name gets " (1)"), skips photos already
-exported there (identical bytes), refuses the shoot folder itself as destination, and writes a
-CSV/JSON list into the `_kirapick_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\KiraPick\logs`.
+**Export** only **copies** (kept, favourites, ≥ N stars, the selection or a client list), keeps
+RAW+JPEG pairs together, never overwrites, skips photos already exported there, and writes a
+CSV/JSON list into the `_kirapick_danh_sach` subfolder.
 
-**Step by step.** Nothing runs on its own; each button becomes available when the previous step is
-done, so you can correct the result in between:
-1. **📂 Nhập ảnh** — import only.
-2. **🧠 Nhận diện người** — find and group people (GPU if available), then stop so you can fix groups.
-3. **📊 Phân tích ảnh** — technical score of every person in every photo.
-4. **⭐ Chọn ảnh** — pick N varied best shots; review with K/X; **⤴ Xuất ảnh**.
+**App data** (not photos): `%LOCALAPPDATA%\KiraPick` — `sessions` (memory of each photo folder,
+forgotten after 30 days unused; **↺ Làm lại** forgets it now), `learning` (numbers only, from your
+people corrections and keep/reject choices, per computer), `logs` (attach when reporting a bug).
 
-**People (🧠 Nhận diện người)** runs in the background. The **NGƯỜI** list shows each recognised person with a face thumbnail; click to
-filter, double-click to name; tick the boxes of several people and press **🔗 Gộp người** in the
-toolbar to merge them (or select several + right-click). Photos where the face is not
-clearly visible are only *suggested* (a "?" badge) or listed under **Chưa xác định**. **Cần xem lại**
-asks about pairs that look alike but are not certain. Right-click photos to confirm, remove from a
-person, or assign to another person. All corrections survive re-analysis. Each correction is also kept as a learning example (numbers only: face/outfit similarity, time
-gap, your answer) in `%LOCALAPPDATA%\KiraPick\learning` — per Windows user, never
-in the installer, so friends who install the app teach it their own way. Models: see
-`docs/model-licenses.md`; fetch once with `python scripts/fetch_models.py`.
-
-**Best shots (⭐ Chọn ảnh)**: 📊 Phân tích ảnh scores each person in each photo (sharpness at
-the eyes measured on the full-resolution image, face quality, exposure, framing). The right panel
-lists **Điểm mạnh** (strengths), **Điểm yếu** (weaknesses) and **Chưa đánh giá** (what could not be
-judged, e.g. eyes closed and aesthetics — no model yet). ⭐ Chọn ảnh asks for N (per person, or in the current view) and picks the best
-photos while skipping near-copies (same pose, same burst). Picked photos get an “AI” badge, go to
-the top of the list (sorting box under the search field) and can be marked Keep automatically
-(your own Keep/Reject is never changed). Review with K/X, then ⤴ Xuất ảnh → “Ảnh đã Giữ”.
-Export **copies** only: the app never moves or deletes your originals.
-
-## Check your own photo folder (read-only)
+### For developers
 
 ```powershell
-.\.venv\Scripts\python -m app.ingest.cli "D:\Photos\Buoi chup" --verify --verify-untouched --json report.json
+cd D:\Dev
+git clone https://github.com/hophucluan131201-bit/KiraPick.git
+cd KiraPick
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1   # .venv, dependencies, tests
+.\KiraPick.cmd                                                          # run the app
+powershell -ExecutionPolicy Bypass -File .\scripts\make_shortcut.ps1   # desktop shortcut
 ```
 
-Reports, per file: camera, which preview is used, timings, orientation cross-check, and proves
-with SHA-256 that no source file changed. Add `--full` to also time full-resolution loading.
-Nothing is written next to your photos.
+- Requirements: Git and Python 3.11–3.14 (`winget install --id Git.Git -e`,
+  `winget install --id Python.Python.3.12 -e`). Linux/macOS: `python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"`.
+- Tests: `.\.venv\Scripts\python -m pytest` (sample-photo tests run when `test_photos/` exists; it is git-ignored).
+- AI models (once, needs Internet; the app itself never downloads): `.\.venv\Scripts\python scripts\fetch_models.py`.
+  Licenses: [`docs/model-licenses.md`](docs/model-licenses.md).
+- Read-only check of a photo folder:
+  `.\.venv\Scripts\python -m app.ingest.cli "D:\Photos\Shoot" --verify --verify-untouched --json report.json`
+- Installer: GitHub Actions builds it on Windows for commits on `main` containing `[release]`
+  (`.github/workflows/build-windows.yml`): PyInstaller (`packaging/kirapick.spec`) with ONNX Runtime
+  DirectML, SHA-256-verified models, `KiraPick.exe --self-test` with the network blocked, Inno Setup
+  per-user installer, portable zip. Local build: `powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1`.
+- Specification: [`docs/TECHNICAL_SPEC_v1.1.md`](docs/TECHNICAL_SPEC_v1.1.md) · RAW support:
+  [`docs/raw-support-matrix.md`](docs/raw-support-matrix.md).
 
-## Build the installer (Windows, for sharing)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
-```
-
-Uses a separate `.venv-build` (Python 3.12, exact versions in `packaging/requirements-installer.txt`,
-CPU ONNX Runtime — no CUDA, works on any PC), copies the SHA-256-verified models, builds the app with
-PyInstaller (`packaging/kirapick.spec`), runs `KiraPick.exe --self-test` with the network blocked, then
-writes `dist\installer\KiraPick-<version>-portable.zip` and, if Inno Setup 6 is installed
-(`winget install --id JRSoftware.InnoSetup -e`), `KiraPick-Setup-<version>.exe` (per-user, no admin).
-GitHub Actions can build the same on a clean Windows machine (`.github/workflows/build-windows.yml`,
-run it from the Actions tab). Guide for testers: `packaging/notes/HUONG_DAN.txt`; notices:
-`packaging/notes/LICENSES.txt`. The installer is not code-signed: Windows SmartScreen shows a warning.
-
-## Tests
-
-```powershell
-.\.venv\Scripts\python -m pytest            # unit tests always; sample tests if test_photos/ exists
-python scripts/raw_samples.py fetch         # DEV ONLY (network): download public RAW samples
-```
-
-`test_photos/` is git-ignored. Put private sample photos there; they are never committed.
+---
 
 ## License / Giấy phép
 
-Personal, **non-commercial** project. The KiraPick source code is licensed under the
-[PolyForm Noncommercial License 1.0.0](LICENSE.md): free to use, copy, modify and share for any
-noncommercial purpose; commercial use needs the author's permission. Bundled third-party software
-and AI model weights keep their own licenses ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
-[docs/model-licenses.md](docs/model-licenses.md)) — all of them allow this free, non-commercial
-distribution; the non-commercial terms above apply to KiraPick's own code only.
+**Tiếng Việt.** Dự án cá nhân, **phi thương mại**, chia sẻ miễn phí. Mã nguồn KiraPick theo giấy phép
+[PolyForm Noncommercial 1.0.0](LICENSE.md): được dùng, sao chép, sửa và chia sẻ cho mục đích phi
+thương mại; không bán lại hay dùng thương mại khi chưa được tác giả đồng ý. Thư viện và mô hình AI đi
+kèm giữ giấy phép riêng của họ ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+[docs/model-licenses.md](docs/model-licenses.md)); tất cả đều cho phép chia sẻ miễn phí như thế này.
 
-Dự án cá nhân, phi thương mại: được dùng, sao chép, sửa, chia sẻ miễn phí; không bán lại hay dùng
-thương mại khi chưa được tác giả đồng ý. Thư viện và mô hình AI đi kèm giữ giấy phép riêng của họ.
+**English.** Personal, **non-commercial** project, shared for free. The KiraPick source code is licensed
+under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free to use, copy, modify and share for
+any noncommercial purpose; commercial use needs the author's permission. Bundled third-party software
+and AI model weights keep their own licenses ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+[docs/model-licenses.md](docs/model-licenses.md)); all of them allow this free, non-commercial
+distribution.
