@@ -24,7 +24,7 @@ import numpy as np
 from app.ai.detect import FaceDetector, FaceEmbedder, PersonDetector, associate, iou, pil_to_bgr
 from app.ai.models import ModelRegistry
 from app.core.errors import ImageReadError
-from app.identity.features import OUTFIT_VERSION, OccurrenceFeatures, features_for
+from app.identity.features import OUTFIT_VERSION, OccurrenceFeatures, features_for, outfit_descriptor, outfit_image
 from app.ingest.preview import load_image
 from app.storage.project import Project, utc_now
 
@@ -115,6 +115,7 @@ class AnalyzeJob:
             from app.identity.cluster import recluster  # local import: clustering is pure, no models
 
             progress(AnalyzeProgress("group", 0, 1))
+            refresh_outfits(self.project)
             recluster(self.project)
             progress(AnalyzeProgress("group", 1, 1))
         return summary
@@ -232,3 +233,41 @@ class AnalyzeJob:
                WHERE asset_id = ? AND stage = ?""",
             (error, utc_now(), asset_id, STAGE),
         )
+
+
+def refresh_outfits(project: Project) -> int:
+    """Recompute outfit vectors made by an older descriptor from the cached thumbnails.
+
+    Needs no AI model, so an improved descriptor reaches existing sessions in
+    seconds instead of a full re-analysis. Returns the number of vectors updated.
+    """
+    rows = project.conn.execute(
+        """SELECT o.id, o.asset_id, o.person_box, p.file_name FROM occurrences o
+           JOIN previews p ON p.asset_id = o.asset_id AND p.kind = 'thumb'
+           LEFT JOIN occurrence_vectors v ON v.occurrence_id = o.id AND v.kind = 'outfit'
+           WHERE o.person_box IS NOT NULL AND (v.model_version IS NULL OR v.model_version != ?)
+           ORDER BY o.asset_id""",
+        (OUTFIT_VERSION,),
+    ).fetchall()
+    updated = 0
+    images: dict[int, np.ndarray | None] = {}
+    with project.transaction() as conn:
+        for r in rows:
+            if r["asset_id"] not in images:
+                images.clear()  # rows are ordered by photo: keep one decoded thumbnail
+                try:  # np.fromfile + imdecode: cv2.imread cannot open non-ASCII paths on Windows
+                    data = np.fromfile(project.cache_dir / r["file_name"], dtype=np.uint8)
+                    img = cv2.imdecode(data, cv2.IMREAD_COLOR)
+                except OSError:
+                    img = None
+                images[r["asset_id"]] = None if img is None else outfit_image(img)
+            small = images[r["asset_id"]]
+            vec = outfit_descriptor(small, tuple(json.loads(r["person_box"]))) if small is not None else None
+            conn.execute("DELETE FROM occurrence_vectors WHERE occurrence_id = ? AND kind = 'outfit'", (r["id"],))
+            if vec is not None:
+                conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'outfit', ?, ?)",
+                             (r["id"], OUTFIT_VERSION, _vec(vec)))
+                updated += 1
+    if rows:
+        log.info("outfit vectors refreshed: %d of %d", updated, len(rows))
+    return updated

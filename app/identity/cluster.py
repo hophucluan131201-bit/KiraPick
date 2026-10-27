@@ -18,11 +18,11 @@ within a few minutes. Rules, in order of authority:
 6. Photos without a usable face that joined a group are only *suggested*
    (shown with "?"); a group made only of face-less photos needs >= 2 photos.
 
-Calibration (owner's 'Test' shoot, 109 photos, 37 labelled looks, SFace +
-HSV outfit histogram): pairwise precision 1.00, recall 0.76 (previous
-face-only rules: 0.56 / 0.76). Margin is thin: the most similar *different*
-cosplayers reached face 0.54 / outfit 0.91 within 5 minutes, so these values
-must be re-checked on more shoots (scripts/calibration/evaluate_grouping.py).
+Calibration (owner's full shoot, 439 NEF, 46 labelled looks, SFace + banded
+outfit histograms): pairwise precision 1.00, recall 0.82 (first face-only rules:
+precision 0.56 on a subset). Margin is thin: different cosplayers in similar
+colours a few minutes apart reach face 0.58 — re-check on more shoots with
+scripts/calibration/evaluate_grouping.py.
 """
 
 from __future__ import annotations
@@ -40,10 +40,10 @@ FACE_STRONG = 0.65  # SFace cosine: same person (photos far apart in time also n
 FACE_CERTAIN = 0.80  # near-identical faces link at any time whatever the outfit
 FAR_OUTFIT = 0.65  # outfit similarity a face link needs across more than WINDOW_S
 WINDOW_S = 300  # outfit cues only within +-5 minutes (same look, same set)
-OUTFIT_LINK = 0.85  # outfit-colour similarity that links inside the window ...
+OUTFIT_LINK = 0.80  # outfit-colour similarity that links inside the window ...
 FACE_WITH_OUTFIT = 0.55  # ... unless both faces are visible and less similar than this
-FACE_MID = 0.58  # fairly similar face ...
-OUTFIT_MID = 0.70  # ... plus similar outfit inside the window
+FACE_MID = 0.55  # fairly similar face ...
+OUTFIT_MID = 0.78  # ... plus similar outfit inside the window
 AVERAGE_GUARD = 0.45  # mean face similarity two groups need to merge
 FAR_AVERAGE = 0.60  # ... when no photo of one is within WINDOW_S of a photo of the other
 OUTFIT_SUGGEST = 0.85  # left-over face-less photo: outfit needed for a suggestion

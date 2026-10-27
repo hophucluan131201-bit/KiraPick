@@ -3,9 +3,12 @@
 - prominence: how much a person is "the subject" of the frame (size x centrality),
   relative to the most prominent person in the same photo; background passers-by
   get is_main = False and are not grouped into subjects.
-- outfit: a colour histogram of the body below the head. It is a weak cue
-  (same outfit != same person, and lighting changes colours), used only to
-  *suggest* identity for photos without a usable face — never to auto-assign.
+- outfit: colour histograms of three bands of the person (hair/head, upper body,
+  lower body), taken from the central 60% of the box width so the background
+  beside the person counts little. Computed on a 400 px image (the size of the
+  cached thumbnails, so it can be recomputed without the models). It is a weak
+  cue: same outfit != same person, and lighting changes colours; grouping only
+  uses it together with time and face (see app/identity/cluster.py).
 """
 
 from __future__ import annotations
@@ -21,7 +24,10 @@ MAIN_RELATIVE = 0.4  # at least 40% of the most prominent person's score
 MAIN_MIN_AREA = 0.02  # and at least 2% of the frame (or a usable face)
 FACE_TO_BODY_AREA = 8.0  # a lone face stands for a body ~8x its area
 OUTFIT_BINS = (16, 4, 2)  # hue, saturation, value
-OUTFIT_VERSION = "hsv16x4x2-v1"
+OUTFIT_VERSION = "hsv16x4x2-centre3-v2"
+OUTFIT_LONG_SIDE = 400  # = thumbnail size
+OUTFIT_BANDS = ((0.0, 0.25), (0.25, 0.6), (0.6, 1.0))  # head/hair, upper body, lower body
+OUTFIT_STRIP = (0.2, 0.8)  # central part of the box width
 CROP_SIZE = 160
 
 
@@ -50,19 +56,34 @@ def _raw_prominence(nbox: Box) -> float:
     return area * (1.0 - 0.5 * off_centre)
 
 
-def outfit_descriptor(bgr: np.ndarray, box: Box) -> np.ndarray | None:
-    """Hellinger-normalised HSV histogram of the body below the head."""
-    x, y, w, h = (int(round(v)) for v in box)
-    top = y + int(h * 0.25)
-    region = bgr[max(0, top): max(0, y + h), max(0, x): max(0, x + w)]
-    if region.size == 0 or region.shape[0] < 8 or region.shape[1] < 8:
-        return None
+def _hist(region: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
     hist = cv2.calcHist([hsv], [0, 1, 2], None, list(OUTFIT_BINS), [0, 180, 0, 256, 0, 256]).reshape(-1)
-    total = float(hist.sum())
-    if total <= 0:
-        return None
-    vec = np.sqrt(hist / total).astype(np.float32)
+    vec = np.sqrt(hist / max(float(hist.sum()), 1.0))
+    return vec / (np.linalg.norm(vec) or 1.0)
+
+
+def outfit_image(bgr: np.ndarray) -> np.ndarray:
+    """The photo at the outfit working size (no upscaling)."""
+    h, w = bgr.shape[:2]
+    scale = OUTFIT_LONG_SIDE / max(h, w)
+    if scale >= 1:
+        return bgr
+    return cv2.resize(bgr, (max(1, round(w * scale)), max(1, round(h * scale))), interpolation=cv2.INTER_AREA)
+
+
+def outfit_descriptor(small: np.ndarray, nbox: Box) -> np.ndarray | None:
+    """Hellinger-normalised banded HSV histograms; ``nbox`` is normalised, ``small`` from outfit_image()."""
+    h, w = small.shape[:2]
+    x, y, bw, bh = nbox[0] * w, nbox[1] * h, nbox[2] * w, nbox[3] * h
+    x0, x1 = max(0, int(x + bw * OUTFIT_STRIP[0])), min(w, int(x + bw * OUTFIT_STRIP[1]))
+    parts = []
+    for a, b in OUTFIT_BANDS:
+        y0, y1 = max(0, int(y + bh * a)), min(h, int(y + bh * b))
+        if y1 - y0 < 2 or x1 - x0 < 2:
+            return None
+        parts.append(_hist(small[y0:y1, x0:x1]))
+    vec = np.concatenate(parts).astype(np.float32)
     return vec / (np.linalg.norm(vec) or 1.0)
 
 
@@ -96,6 +117,7 @@ def features_for(bgr: np.ndarray, detections: list[Detection], usable_face_score
             k = FACE_TO_BODY_AREA ** 0.5
             raw.append(_raw_prominence((fx, fy, fw * k, fh * k)))
     top = max(raw, default=0.0) or 1.0
+    small = outfit_image(bgr)
     out = []
     for det, score in zip(detections, raw):
         rel = score / top
@@ -110,7 +132,7 @@ def features_for(bgr: np.ndarray, detections: list[Detection], usable_face_score
             face_box=_norm(face.box, w, h) if face is not None else None,
             face_score=face.score if face is not None else None,
             face_vector=face.embedding if usable_face else None,
-            outfit_vector=outfit_descriptor(bgr, det.person_box) if det.person_box is not None else None,
+            outfit_vector=outfit_descriptor(small, nbox) if nbox is not None else None,
             prominence=round(rel, 4),
             is_main=is_main,
             crop=avatar_crop(bgr, det),

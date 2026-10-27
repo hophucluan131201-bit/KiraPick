@@ -243,3 +243,54 @@ def test_far_apart_groups_need_a_high_average_face_similarity() -> None:
             _occ(4, 4, bridge, RED, t=hours), _occ(5, 5, c, RED, t=hours + 20), _occ(6, 6, _shot(c, 0.2), RED, t=hours + 40)]
     groups = _members(group(occs).groups, occs)
     assert not any({1, 5} <= set(m) for m in groups)
+
+
+# ---------------------------------------------------------------- outfit descriptor
+
+
+def _figure(top: tuple[int, int, int], body: tuple[int, int, int], legs: tuple[int, int, int],
+            background: tuple[int, int, int] = (40, 40, 40)) -> np.ndarray:
+    """A 400x300 BGR photo with a person-shaped box of three colour bands at x 100-200, y 50-350."""
+    img = np.zeros((400, 300, 3), np.uint8)
+    img[:] = background
+    img[50:125, 100:200] = top
+    img[125:230, 100:200] = body
+    img[230:350, 100:200] = legs
+    return img
+
+
+BOX = (100 / 300, 50 / 400, 100 / 300, 300 / 400)
+
+
+def test_outfit_descriptor_separates_same_colours_in_other_places() -> None:
+    from app.identity.features import outfit_descriptor, outfit_image
+
+    pink, white, purple = (180, 120, 255), (245, 245, 245), (200, 80, 140)
+    pink_hair_white_dress = outfit_descriptor(outfit_image(_figure(pink, white, white)), BOX)
+    again_other_background = outfit_descriptor(outfit_image(_figure(pink, white, white, (90, 160, 30))), BOX)
+    pink_hair_purple_skirt = outfit_descriptor(outfit_image(_figure(pink, white, purple)), BOX)
+    white_hair_pink_dress = outfit_descriptor(outfit_image(_figure(white, pink, pink)), BOX)
+    assert float(pink_hair_white_dress @ again_other_background) > 0.99  # background beside the person ignored
+    assert float(pink_hair_white_dress @ pink_hair_purple_skirt) < 0.8
+    assert float(pink_hair_white_dress @ white_hair_pink_dress) < 0.5  # same colours, other places
+    assert outfit_descriptor(outfit_image(_figure(pink, white, white)), (0.5, 0.5, 0.001, 0.001)) is None
+
+
+def test_old_outfit_vectors_are_recomputed_from_thumbnails(project: Project) -> None:
+    import cv2
+
+    from app.identity.features import OUTFIT_VERSION
+    from app.workers.analyze_job import refresh_outfits
+
+    occ = _add(project, 1, None, outfit=RED)  # stored by the old descriptor ('t')
+    project.conn.execute("UPDATE occurrences SET person_box = ? WHERE id = ?", (json.dumps(BOX), occ))
+    thumbs = project.cache_dir / "thumbs"
+    thumbs.mkdir()
+    cv2.imwrite(str(thumbs / "00000001.jpg"), _figure((180, 120, 255), (245, 245, 245), (245, 245, 245)))
+    project.conn.execute("INSERT INTO previews VALUES (1, 'thumb', 'thumbs/00000001.jpg', 300, 400, 'raster', 1)")
+    _add(project, 2, None)  # no thumbnail, no box change: left alone
+    assert refresh_outfits(project) == 1
+    version, blob = project.conn.execute(
+        "SELECT model_version, vector FROM occurrence_vectors WHERE occurrence_id = ? AND kind = 'outfit'", (occ,)).fetchone()
+    assert version == OUTFIT_VERSION and len(np.frombuffer(blob, "<f4")) == 3 * 16 * 4 * 2
+    assert refresh_outfits(project) == 0  # up to date

@@ -1,10 +1,11 @@
 """Measure the app's person grouping against labelled looks (pairwise precision / recall).
 
-    python scripts/calibration/evaluate_grouping.py snorlu_debug.zip            # or a project.snorlu.db
-    python scripts/calibration/evaluate_grouping.py db --labels labels_test_20261025
+    python scripts/calibration/evaluate_grouping.py snorlu_debug.zip            # or an extracted bundle folder
+    python scripts/calibration/evaluate_grouping.py bundle --labels labels_aki_20261025
 
 Works on a *copy* of the database: manual corrections are cleared so only the
-automatic rules are measured. Each photo counts once, by its most prominent
+automatic rules are measured. Outfit vectors from an older descriptor are
+recomputed from the bundle's thumbnails, exactly as the app does. Each photo counts once, by its most prominent
 main occurrence; photos missing from the labels are ignored.
 Precision = of the photo pairs the app put together, how many really are one
 look. Recall = of the real same-look pairs, how many the app put together.
@@ -28,7 +29,8 @@ sys.path.insert(0, str(HERE.parents[1]))
 sys.path.insert(0, str(HERE))
 
 from app.identity.cluster import merge_suggestions, recluster  # noqa: E402
-from app.storage.project import DB_NAME, Project  # noqa: E402
+from app.storage.project import CACHE_DIR, DB_NAME, Project  # noqa: E402
+from app.workers.analyze_job import refresh_outfits  # noqa: E402
 
 
 def _number(relative_path: str) -> int | None:
@@ -45,6 +47,7 @@ def evaluate(db_path: Path, looks: dict[str, list[int]]) -> dict:
             conn.execute("UPDATE occurrences SET assignment = 'none', subject_id = NULL, excluded_subject_id = NULL")
             conn.execute("DELETE FROM subject_pairs")
             conn.execute("DELETE FROM subjects")
+        refresh_outfits(project)
         recluster(project)
         best: dict[int, tuple[float, int | None, str]] = {}
         for r in conn.execute("""SELECT a.relative_path, o.prominence, o.subject_id, o.assignment
@@ -82,17 +85,24 @@ def evaluate(db_path: Path, looks: dict[str, list[int]]) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("source", type=Path, help="snorlu_debug.zip or a project.snorlu.db")
-    parser.add_argument("--labels", default="labels_test_20261025", help="module in scripts/calibration with LOOKS")
+    parser.add_argument("source", type=Path, help="snorlu_debug.zip or the folder it was extracted to")
+    parser.add_argument("--labels", default="labels_aki_20261025", help="module in scripts/calibration with LOOKS")
     args = parser.parse_args()
     looks = importlib.import_module(args.labels).LOOKS
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / DB_NAME
+        thumbs = Path(tmp) / CACHE_DIR / "thumbs"
+        thumbs.mkdir(parents=True)
         if args.source.suffix == ".zip":
             with zipfile.ZipFile(args.source) as zf:
                 db.write_bytes(zf.read(DB_NAME))
+                for name in zf.namelist():
+                    if name.startswith("thumbs/") and name.endswith(".jpg"):
+                        (thumbs / Path(name).name).write_bytes(zf.read(name))
         else:
-            shutil.copyfile(args.source, db)
+            shutil.copyfile(args.source / DB_NAME, db)
+            for f in (args.source / "thumbs").glob("*.jpg"):
+                shutil.copyfile(f, thumbs / f.name)
         r = evaluate(db, looks)
     print(f"{r['photos']} labelled photos, {r['looks']} looks")
     print(f"precision {r['precision']:.3f}  recall {r['recall']:.3f}  "

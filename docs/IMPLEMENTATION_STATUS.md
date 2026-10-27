@@ -118,7 +118,7 @@ expected for this GPU (to profile: FP16, IO binding, preprocessing share, power 
 |---|---|---|
 | Schema v3: occurrences (normalised boxes, prominence, main/background), vectors, reviewed "different" pairs | tested | migration from v2 in place |
 | Analysis job: prefetch decode, YOLOX + YuNet + SFace, outfit colour, avatar crops, resumable per photo, failures isolated, re-analysis keeps occurrence ids (box IoU) | tested | `tests/gui` real-photo flow, rerun = 0 work |
-| Grouping v2 (look-first): link if face ≥ 0.65 (photos > 5 min apart also need outfit ≥ 0.65, unless face ≥ 0.80); or within ±5 min outfit ≥ 0.85 and faces (if both visible) ≥ 0.55; or within ±5 min face ≥ 0.58 and outfit ≥ 0.70. Groups merge only if mean face similarity ≥ 0.45, or ≥ 0.60 when no photos of the two are within 5 min (no chaining); same-photo cannot-link; manual seeds attract first; user exclusions and "different" pairs respected; face-less members only *suggested* ("?"); a face-less-only group needs ≥ 2 photos; stable subject ids; background people never grouped. Review queue: same outfit within 5 min, or face ≥ 0.45 within 30 min, or face ≥ 0.60 any time (max 30) | tested | `tests/unit/test_identity_cluster.py` (synthetic), `scripts/calibration/evaluate_grouping.py` (real labels) |
+| Grouping v2 (look-first): link if face ≥ 0.65 (photos > 5 min apart also need outfit ≥ 0.65, unless face ≥ 0.80); or within ±5 min outfit ≥ 0.80 and faces (if both visible) ≥ 0.55; or within ±5 min face ≥ 0.55 and outfit ≥ 0.78. Outfit = HSV histograms of 3 bands (hair, upper, lower body) of the central 60% of the person box at 400 px; older vectors are recomputed from cached thumbnails before regrouping (no models needed). Groups merge only if mean face similarity ≥ 0.45, or ≥ 0.60 when no photos of the two are within 5 min (no chaining); same-photo cannot-link; manual seeds attract first; user exclusions and "different" pairs respected; face-less members only *suggested* ("?"); a face-less-only group needs ≥ 2 photos; stable subject ids; background people never grouped. Review queue: same outfit within 5 min, or face ≥ 0.45 within 30 min, or face ≥ 0.60 any time (max 30) | tested | `tests/unit/test_identity_cluster.py` (synthetic), `scripts/calibration/evaluate_grouping.py` (real labels) |
 | UI: "🧠 Nhận diện người" (auto after import, background, pause/resume), NGƯỜI list with face avatars, person filter, "Chưa xác định", "?" badge for suggested photos, rename (double-click), tick people + "🔗 Gộp người" toolbar button (or right-click) to merge, keeping the named person, mark different, grid menu: confirm / remove from person / assign to person, review dialog, inspector lists people in the photo | tested offscreen | `test_people_recognition_flow_on_real_photos` |
 
 ### Grouping calibration (owner's "Test" shoot, 2026-10-25)
@@ -143,14 +143,29 @@ masks; face-less looks (e.g. full-helmet mecha) stay unidentified — needs a bo
 Owner's full shoot (439 NEF, 2026-10-27, screenshots): two pairs of *different* cosplayers hours
 apart were merged (DSC_9664–9678 with DSC_9957–9964; DSC_9771–9788 with DSC_9954–9955) by single
 face pairs ≥ 0.65. Fix: face links across more than 5 min need a compatible outfit, and far-apart
-groups need mean face ≥ 0.60. No effect on the Test-shoot metrics above; not yet re-measured on
-the full shoot (needs its debug bundle).
+groups need mean face ≥ 0.60.
+
+Full shoot debug bundle (2026-10-27): the owner found one more wrong merge, DSC_9754/9757 with
+DSC_9763–9770 (two cosplayers in pink and white, 4 min apart, face 0.58, old outfit histogram
+0.87). The old whole-box histogram was dominated by shared colours and background. The banded
+central-strip descriptor separates looks better on the labelled pairs ≤ 5 min apart
+(AUC 0.896 → 0.945; same look median 0.88, different looks p90 0.74). Labels for the whole shoot:
+`scripts/calibration/labels_aki_20261025.py` (46 looks, 431 photos; owner's groups + visual).
+
+| Full shoot, 431 labelled photos | Precision | Recall | Groups for 46 looks |
+|---|---|---|---|
+| before (whole-box histogram) | 0.996 | 0.830 | 67 |
+| now (banded descriptor, retuned) | **1.000** | 0.817 | 73 |
+
+The Test subset (old labels) measures 1.000 / 0.725 now. Remaining splits are mostly 1–3 photo
+stragglers (profile, motion blur, hands over face) that the owner can merge with the tick boxes +
+"🔗 Gộp người".
 
 ## Test run
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-233 passed in 60.87s
+235 passed in 53.66s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):
