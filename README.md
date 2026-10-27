@@ -2,7 +2,8 @@
 
 Offline, non-destructive photo culling for cosplay/street photographers (Windows desktop).
 **Status: early development** — desktop culling app (import, grid, loupe with 100% zoom,
-keyboard culling, copy export) works; AI subject grouping and scoring are not built yet. See
+keyboard culling, copy export) works; offline AI groups photos by person (first version, thresholds
+not yet calibrated); quality scoring and best-shot selection are not built yet. See
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 Specification: [`docs/TECHNICAL_SPEC_v1.1.md`](docs/TECHNICAL_SPEC_v1.1.md).
@@ -58,6 +59,14 @@ Export copies the chosen photos (Kept, Favorites, ≥ N stars, or the selection)
 together, never overwrites (a different file with the same name gets " (1)"), skips photos already
 exported there (identical bytes), refuses the shoot folder itself as destination, and writes a
 CSV/JSON list into the `_snorlu_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\Snorlu\AI Culling\logs`.
+
+**People (🧠 Nhận diện người)** runs automatically after an import (GPU if available, CPU otherwise),
+in the background. The **NGƯỜI** list shows each recognised person with a face thumbnail; click to
+filter, double-click to name, select several + right-click to merge. Photos where the face is not
+clearly visible are only *suggested* (a "?" badge) or listed under **Chưa xác định**. **Cần xem lại**
+asks about pairs that look alike but are not certain. Right-click photos to confirm, remove from a
+person, or assign to another person. All corrections survive re-analysis. Models: see
+`docs/model-licenses.md`; fetch once with `python scripts/fetch_models.py`.
 
 ## Check your own photo folder (read-only)
 

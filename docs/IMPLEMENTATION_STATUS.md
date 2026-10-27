@@ -19,7 +19,7 @@ required — a listed provider does not prove inference works).
 |---|---|---|
 | M0 Feasibility + safety | **tested** | RAW feasibility; AI runtime (offline-only providers, telemetry off, GPU→CPU fallback); model manifest + licenses. **CUDA verified on the RTX 2080 Super Max-Q** (2026-10-27, see below). OSNet/DINOv2 not fetched yet |
 | M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
-| M2 Identity | not started | |
+| M2 Identity | **implemented + tested (synthetic + 7 real photos)** | Detection, face embeddings, conservative grouping, people panel, review queue, manual corrections that survive re-analysis. **Thresholds not calibrated on labelled data**; no body re-ID model yet (OSNet/DINOv2 blocked from dev container); outfit-colour cue only suggests |
 | M3 Quality | not started | |
 | M4 Best shot | not started | |
 | M5 Local VLM | not started | |
@@ -111,6 +111,19 @@ TensorRT, CUDA, CPU (TensorRT is not used). Person detector session ran on **CUD
 GPU memory: +337 MiB. Timings include pre/post-processing; YOLOX-M on CUDA is slower than
 expected for this GPU (to profile: FP16, IO binding, preprocessing share, power state). Estimated
 ~0.25 s/photo → ~2 min for 439 photos (estimate from these medians, not a measured full run).
+
+## Done — M2 identity (`app/identity/`, `app/workers/analyze_job.py`, people UI)
+
+| Feature | Status | Evidence |
+|---|---|---|
+| Schema v3: occurrences (normalised boxes, prominence, main/background), vectors, reviewed "different" pairs | tested | migration from v2 in place |
+| Analysis job: prefetch decode, YOLOX + YuNet + SFace, outfit colour, avatar crops, resumable per photo, failures isolated, re-analysis keeps occurrence ids (box IoU) | tested | `tests/gui` real-photo flow, rerun = 0 work |
+| Grouping: auto-merge only if best pair ≥ 0.55 AND group average ≥ 0.45; same-photo cannot-link; no chaining; manual seeds fixed; user exclusions and "different" pairs respected; face-less photos only *suggested* by outfit within ±10 min; stable subject ids; background people never grouped | tested | `tests/unit/test_identity_cluster.py` (synthetic ground truth) |
+| UI: "🧠 Nhận diện người" (auto after import, background, pause/resume), NGƯỜI list with face avatars, person filter, "Chưa xác định", "?" badge for suggested photos, rename (double-click), merge selected, mark different, grid menu: confirm / remove from person / assign to person, review dialog, inspector lists people in the photo | tested offscreen | `test_people_recognition_flow_on_real_photos` |
+
+On the owner's 7 sample NEFs: 7 people, 2 photos unidentified (face hidden by hands; second person
+without face), 3 review suggestions (best 0.49). Accuracy on a full shoot is **not measured**: needs
+the owner's labels (spec §10: Dataset A).
 
 ## Test run
 

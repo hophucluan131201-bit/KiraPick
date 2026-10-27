@@ -68,3 +68,41 @@ class ExportThread(QThread):
         except Exception as exc:  # noqa: BLE001
             log.exception("export failed")
             self.failed.emit(f"{type(exc).__name__}: {exc}")
+
+
+class AnalyzeThread(QThread):
+    """Runs AnalyzeJob (people/faces + grouping) with its own database connection."""
+
+    progress = Signal(str, int, int)
+    succeeded = Signal(dict)
+    failed = Signal(str)
+
+    def __init__(self, project_folder: Path) -> None:
+        super().__init__()
+        self.project_folder = project_folder
+        self._cancel = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel.set()
+
+    @property
+    def cancel_requested(self) -> bool:
+        return self._cancel.is_set()
+
+    def run(self) -> None:
+        from app.ai.models import ModelUnavailableError
+        from app.workers.analyze_job import AnalyzeJob, AnalyzeProgress
+
+        def emit(p: AnalyzeProgress) -> None:
+            self.progress.emit(p.phase, p.done, p.total)
+
+        try:
+            with Project.open(self.project_folder) as project:
+                summary = AnalyzeJob(project).run(progress=emit, should_cancel=self._cancel.is_set)
+            self.succeeded.emit(asdict(summary))
+        except ModelUnavailableError as exc:
+            self.failed.emit(f"{exc}\n\nChạy lệnh sau một lần (cần Internet):\n"
+                             ".\\.venv\\Scripts\\python .\\scripts\\fetch_models.py")
+        except Exception as exc:  # noqa: BLE001
+            log.exception("analysis failed")
+            self.failed.emit(f"{type(exc).__name__}: {exc}")

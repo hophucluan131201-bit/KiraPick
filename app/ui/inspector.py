@@ -66,7 +66,7 @@ class Inspector(QWidget):
         outer.addStretch(1)
         self.show_record(None)
 
-    def show_record(self, rec: AssetRecord | None, view_source: str | None = None) -> None:
+    def show_record(self, rec: AssetRecord | None, view_source: str | None = None, people: str | None = None) -> None:
         f = self.fields
         if rec is None:
             for label in f.values():
@@ -86,8 +86,8 @@ class Inspector(QWidget):
         f["Đánh dấu"].setText(flag)
         f["Sao"].setText("★" * rec.rating if rec.rating else "chưa chấm")
         f["Yêu thích"].setText("♥ có" if rec.favorite else "không")
-        # Honest status: these engines are not installed yet (milestones M2/M3).
-        f["Chủ thể"].setText("chưa cài mô hình nhận diện (M2)")
+        f["Chủ thể"].setText(people or "chưa phân tích — bấm 🧠 Nhận diện người")
+        # Honest status: quality scoring is not built yet (milestone M3).
         f["Điểm chất lượng"].setText("chưa có — chưa cài bộ phân tích (M3)")
         source = view_source or rec.preview_source
         f["Nguồn ảnh"].setText(_SOURCE_VI.get(source or "", source or "—"))

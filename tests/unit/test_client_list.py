@@ -100,7 +100,7 @@ def test_save_list_and_delete_keep_photos_and_decisions(project: Project) -> Non
     assert decisions.get(project.conn, 3).flag == "reject"
 
 
-def test_v1_project_upgrades_to_v2_keeping_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v1_project_upgrades_to_latest_keeping_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "old.db"
     monkeypatch.setattr(db, "MIGRATIONS", db.MIGRATIONS[:1])
     monkeypatch.setattr(db, "SCHEMA_VERSION", 1)
@@ -109,7 +109,7 @@ def test_v1_project_upgrades_to_v2_keeping_data(tmp_path: Path, monkeypatch: pyt
     conn.close()
     monkeypatch.undo()
     conn = db.connect(path)
-    assert db.current_version(conn) == 2
+    assert db.current_version(conn) == db.SCHEMA_VERSION  # v1 -> latest in one go
     assert conn.execute("SELECT name FROM project").fetchone()[0] == "Aki"
     conn.execute("INSERT INTO collections (name, created_at) VALUES ('x', 'n')")
     with pytest.raises(sqlite3.IntegrityError):

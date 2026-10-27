@@ -45,6 +45,8 @@ class Filter(str, Enum):
     RATED = "rated"  # rating >= min_rating
     ERRORS = "errors"
     COLLECTION = "collection"  # photos of one client list
+    SUBJECT = "subject"  # photos where one person was recognised
+    UNIDENTIFIED = "unidentified"  # photos with a main person not yet assigned
 
 
 @dataclass(slots=True)
@@ -68,6 +70,7 @@ class AssetRecord:
     flag: str | None = None
     rating: int = 0
     favorite: bool = False
+    uncertain: bool = False  # in a person view: only suggested (no clear face), needs a look
 
     @property
     def name(self) -> str:
@@ -97,7 +100,9 @@ _FILTER_SQL = {
     Filter.FAVORITE: " AND d.favorite = 1",
     Filter.RATED: " AND COALESCE(d.rating, 0) >= :min_rating",
     Filter.ERRORS: " AND a.status = 'error'",
-    Filter.COLLECTION: " AND a.id IN (SELECT asset_id FROM collection_items WHERE collection_id = :collection_id)",
+    Filter.COLLECTION: " AND a.id IN (SELECT asset_id FROM collection_items WHERE collection_id = :target_id)",
+    Filter.SUBJECT: " AND a.id IN (SELECT asset_id FROM occurrences WHERE subject_id = :target_id)",
+    Filter.UNIDENTIFIED: " AND a.id IN (SELECT asset_id FROM occurrences WHERE is_main = 1 AND subject_id IS NULL)",
 }
 
 
@@ -144,7 +149,7 @@ class AssetListModel(QAbstractListModel):
         self._filter = Filter.ALL
         self._min_rating = 1
         self._source_id: int | None = None
-        self._collection_id: int | None = None
+        self._target_id: int | None = None  # collection or subject id, depending on the filter
         self._search: list[str] = []
         self._pixmaps: OrderedDict[int, QPixmap] = OrderedDict()
         self._pending: set[int] = set()
@@ -162,13 +167,14 @@ class AssetListModel(QAbstractListModel):
 
     def set_filter(
         self, flt: Filter, *, min_rating: int | None = None, source_id: int | None = -1,
-        collection_id: int | None = None,
+        collection_id: int | None = None, subject_id: int | None = None,
     ) -> None:
         self._filter = flt
-        if flt is not Filter.COLLECTION:
-            self._collection_id = None
-        elif collection_id is not None:
-            self._collection_id = collection_id  # otherwise keep (e.g. only the folder changed)
+        target = collection_id if flt is Filter.COLLECTION else subject_id if flt is Filter.SUBJECT else None
+        if flt not in (Filter.COLLECTION, Filter.SUBJECT):
+            self._target_id = None
+        elif target is not None:
+            self._target_id = target  # otherwise keep (e.g. only the folder changed)
         if min_rating is not None:
             self._min_rating = min_rating
         if source_id != -1:
@@ -186,6 +192,10 @@ class AssetListModel(QAbstractListModel):
         return self._filter
 
     @property
+    def current_target(self) -> int | None:
+        return self._target_id
+
+    @property
     def is_filtered(self) -> bool:
         return self._filter is not Filter.ALL or bool(self._search) or self._source_id is not None
 
@@ -193,7 +203,12 @@ class AssetListModel(QAbstractListModel):
         rows: list[AssetRecord] = []
         if self._project is not None:
             sql = _QUERY + _FILTER_SQL[self._filter]
-            params: dict[str, Any] = {"min_rating": self._min_rating, "collection_id": self._collection_id}
+            params: dict[str, Any] = {"min_rating": self._min_rating, "target_id": self._target_id}
+            uncertain: set[int] = set()
+            if self._filter is Filter.SUBJECT:
+                uncertain = {r[0] for r in self._project.conn.execute(
+                    """SELECT asset_id FROM occurrences WHERE subject_id = ? GROUP BY asset_id
+                       HAVING SUM(assignment != 'suggested') = 0""", (self._target_id,))}
             if self._source_id is not None:
                 sql += " AND a.source_id = :source_id"
                 params["source_id"] = self._source_id
@@ -218,6 +233,7 @@ class AssetListModel(QAbstractListModel):
                         paired_with=pairs.get(r["pair_group_id"], {}).get(r["id"], []),
                         preview_source=r["preview_source"],
                         flag=r["flag"], rating=int(r["rating"]), favorite=bool(r["favorite"]),
+                        uncertain=r["id"] in uncertain,
                     )
                 )
         self.beginResetModel()

@@ -181,6 +181,52 @@ CREATE TABLE collection_items (
 CREATE INDEX collection_items_asset ON collection_items (asset_id);
 """,
     ),
+    (
+        3,
+        """
+-- One person (or lone face) found in one photo. Boxes are JSON [x, y, w, h]
+-- normalised to 0..1 of the display-oriented photo.
+CREATE TABLE occurrences (
+    id                   INTEGER PRIMARY KEY,
+    asset_id             INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    person_box           TEXT,
+    person_score         REAL,
+    face_box             TEXT,
+    face_score           REAL,
+    prominence           REAL NOT NULL,       -- relative to the most prominent person in the photo
+    is_main              INTEGER NOT NULL,    -- 0 = background passer-by
+    crop_file            TEXT,                -- avatar crop in the session cache
+    subject_id           INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+    assignment           TEXT NOT NULL DEFAULT 'none'
+                         CHECK (assignment IN ('none', 'auto', 'suggested', 'manual')),
+    confidence           REAL,
+    excluded_subject_id  INTEGER REFERENCES subjects(id) ON DELETE SET NULL,  -- user said "not this person"
+    analysis_version     INTEGER NOT NULL,
+    created_at           TEXT NOT NULL
+);
+CREATE INDEX occurrences_asset ON occurrences (asset_id);
+CREATE INDEX occurrences_subject ON occurrences (subject_id);
+
+-- Embeddings per occurrence: 'face' (SFace 128-d) and 'outfit' (colour histogram).
+CREATE TABLE occurrence_vectors (
+    occurrence_id  INTEGER NOT NULL REFERENCES occurrences(id) ON DELETE CASCADE,
+    kind           TEXT NOT NULL,
+    model_version  TEXT NOT NULL,
+    vector         BLOB NOT NULL,       -- float32 little-endian
+    PRIMARY KEY (occurrence_id, kind)
+);
+
+-- User answers in the review queue: these two subjects are different people.
+CREATE TABLE subject_pairs (
+    a           INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    b           INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    relation    TEXT NOT NULL CHECK (relation IN ('different')),
+    created_at  TEXT NOT NULL,
+    PRIMARY KEY (a, b),
+    CHECK (a < b)
+);
+""",
+    ),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

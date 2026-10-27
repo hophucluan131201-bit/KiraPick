@@ -79,6 +79,13 @@ class ThumbnailDelegate(QStyledItemDelegate):
         if rec.favorite:
             p.setPen(QColor(theme.FAVORITE))
             p.drawText(QRect(area.right() - 26, area.top() + 2, 24, 24), Qt.AlignmentFlag.AlignCenter, "♥")
+        if rec.uncertain:
+            badge = QRect(area.right() - 26, area.bottom() - 26, 22, 22)
+            p.setBrush(QColor(theme.ERROR))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(badge)
+            p.setPen(QColor("#1e1f22"))
+            p.drawText(badge, Qt.AlignmentFlag.AlignCenter, "?")
         if rec.status == "error":
             p.setPen(QColor(theme.ERROR))
             p.drawText(QRect(area.right() - 26, area.bottom() - 26, 24, 24), Qt.AlignmentFlag.AlignCenter, "!")

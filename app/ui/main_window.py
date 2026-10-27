@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelectionModel, QModelIndex, QSettings, QStandardPaths, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QKeySequence, QShortcut, QShowEvent
+from PySide6.QtCore import QItemSelectionModel, QModelIndex, QSettings, QSize, QStandardPaths, Qt, QTimer
+from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -32,13 +33,17 @@ from app import __version__
 from app.storage import decisions
 from app.storage.project import Project
 from app.storage.sessions import delete_session, open_session, purge_old_sessions
+from app.ai.models import ModelRegistry, ModelState
+from app.identity import actions
+from app.identity.cluster import merge_suggestions
 from app.selection.client_list import delete_collection, list_collections
 from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter
 from app.ui.client_list_dialog import ClientListDialog
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
 from app.ui.inspector import Inspector
-from app.ui.jobs import ImportThread
+from app.ui.review_dialog import ReviewDialog
+from app.ui.jobs import AnalyzeThread, ImportThread
 from app.ui.viewer import ImageViewer
 
 log = logging.getLogger(__name__)
@@ -70,6 +75,9 @@ class MainWindow(QMainWindow):
         self._session_root: Path | None = None
         self._restored_note = ""
         self.import_thread: ImportThread | None = None
+        self.analyze_thread: AnalyzeThread | None = None
+        self._paused_job: str | None = None  # "import" | "analyze"
+        self._registry: ModelRegistry | None = None
         self._last_import_root: Path | None = None
         self.model = AssetListModel(self)
 
@@ -123,6 +131,9 @@ class MainWindow(QMainWindow):
         self.act_import.setToolTip("Nhập một thư mục ảnh (Ctrl+I)")
         self.act_import.setShortcut(QKeySequence("Ctrl+I"))
         self.act_import.triggered.connect(self.choose_and_import)
+        self.act_analyze = QAction("🧠 Nhận diện người", self)
+        self.act_analyze.setToolTip("AI tìm người trong ảnh và gom ảnh theo từng người (chạy nền, offline)")
+        self.act_analyze.triggered.connect(self.start_analysis)
         self.act_reset = QAction("↺ Làm lại", self)
         self.act_reset.setToolTip("Quên các dấu Giữ/Loại/sao và danh sách khách của thư mục này, nhập lại từ đầu")
         self.act_reset.triggered.connect(self.reset_current_folder)
@@ -144,7 +155,8 @@ class MainWindow(QMainWindow):
         self.act_client_list.setToolTip("Dán danh sách ảnh khách chọn, app tự chọn ảnh theo tên (Ctrl+L)")
         self.act_client_list.setShortcut(QKeySequence("Ctrl+L"))
         self.act_client_list.triggered.connect(self.open_client_list_dialog)
-        for act in (self.act_import, self.act_client_list, self.act_export, self.act_loupe, self.act_reset):
+        for act in (self.act_import, self.act_analyze, self.act_client_list, self.act_export, self.act_loupe,
+                    self.act_reset):
             tb.addAction(act)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
@@ -184,7 +196,18 @@ class MainWindow(QMainWindow):
         self.filters.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.filters.customContextMenuRequested.connect(self._filter_context_menu)
         self._fill_filters()
-        for w in (t1, self.sources, t2, self.filters):
+        t3 = QLabel("NGƯỜI")
+        t3.setObjectName("sectionTitle")
+        self.people = QListWidget()
+        self.people.setIconSize(QSize(36, 36))
+        self.people.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.people.setToolTip("Bấm để xem ảnh của người này. Nháy đúp để đặt tên. "
+                               "Chọn nhiều người + chuột phải để gộp.")
+        self.people.currentRowChanged.connect(self._on_person_changed)
+        self.people.itemDoubleClicked.connect(lambda _item: self.rename_current_person())
+        self.people.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.people.customContextMenuRequested.connect(self._people_context_menu)
+        for w in (t1, self.sources, t2, self.filters, t3, self.people):
             side_layout.addWidget(w)
         side_layout.addStretch(1)
         side.setMinimumWidth(190)
@@ -201,6 +224,8 @@ class MainWindow(QMainWindow):
         self.grid.setModel(self.model)
         self.grid.selectionModel().currentChanged.connect(self._on_current_changed)
         self.grid.doubleClicked.connect(lambda _: self.toggle_loupe())
+        self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.grid.customContextMenuRequested.connect(self._grid_context_menu)
 
         loupe = QWidget()
         loupe_layout = QVBoxLayout(loupe)
@@ -277,12 +302,14 @@ class MainWindow(QMainWindow):
         self.model.set_search("")
         self.model.set_project(project)
         self._fill_filters()
+        self._fill_people()
         self._refresh_sidebar()
         self._update_empty_state()
         if self.model.rowCount():
             self.select_row(0)
 
     def _close_session(self) -> None:
+        self._stop_analysis()
         for dialog in self.findChildren(QDialog):
             dialog.close()
         self.viewer.show_photo(None)
@@ -293,6 +320,8 @@ class MainWindow(QMainWindow):
             self.project.close()
         self.project = None
         self._session_root = None
+        self._paused_job = None
+        self._fill_people()
 
     def _remembered_summary(self) -> str:
         assert self.project is not None
@@ -337,6 +366,8 @@ class MainWindow(QMainWindow):
     def start_import(self, root: Path) -> ImportThread | None:
         if self.import_thread is not None:
             return None
+        self._stop_analysis()
+        self._paused_job = None
         root = root.resolve()
         if self.project is None or self._session_root != root:
             # One session per photo folder: switching folders closes the current one.
@@ -376,6 +407,8 @@ class MainWindow(QMainWindow):
             self.status.setText(label)
 
     def _on_import_done(self, summary: dict) -> None:
+        if self.sender() is not self.import_thread:
+            return
         if summary["cancelled"]:
             self.status.setText(f"Đã tạm dừng nhập ảnh ({summary['ingested']} ảnh xong). Bấm “Tiếp tục” để làm tiếp.")
         else:
@@ -396,12 +429,15 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Lỗi khi nhập ảnh", message)
 
     def _on_import_thread_finished(self) -> None:
+        if self.sender() is not self.import_thread or self.project is None:
+            return  # window closed meanwhile
         cancelled = self.import_thread is not None and self.import_thread.cancel_requested
         self.import_thread = None
         self._reload_timer.stop()
         self.progress.setVisible(False)
         self.act_import.setEnabled(True)
         if cancelled:
+            self._paused_job = "import"
             self.pause_button.setText("Tiếp tục")
             self.pause_button.setEnabled(True)
         else:
@@ -411,12 +447,17 @@ class MainWindow(QMainWindow):
         self._update_empty_state()
         if not self.grid.currentIndex().isValid() and self.model.rowCount():
             self.select_row(0)
+        if not cancelled and self.settings.value("auto_analyze", True, bool) and self.models_ready():
+            self.start_analysis()
 
     def _pause_or_resume(self) -> None:
-        if self.import_thread is not None:
-            self.import_thread.cancel()
+        running = self.import_thread or self.analyze_thread
+        if running is not None:
+            running.cancel()
             self.pause_button.setEnabled(False)
             self.status.setText("Đang tạm dừng…")
+        elif self._paused_job == "analyze":
+            self.start_analysis()
         elif self._last_import_root is not None:
             self.start_import(self._last_import_root)
 
@@ -425,12 +466,270 @@ class MainWindow(QMainWindow):
         for dialog in self.findChildren(QDialog):  # they use the project database
             dialog.close()
         if self.import_thread is not None:
-            self.import_thread.cancel()
-            self.import_thread.wait(15000)  # resumable: unfinished files continue next time
+            thread, self.import_thread = self.import_thread, None
+            thread.cancel()
+            thread.wait(15000)  # resumable: unfinished files continue next time
+        self._stop_analysis()
         self.viewer.wait_idle(5000)
         if self.project is not None:
             self.project.close()
         super().closeEvent(event)
+
+    # ------------------------------------------------------------ people (AI)
+    def models_ready(self) -> bool:
+        if self._registry is None:
+            self._registry = ModelRegistry()
+        return all(st.state is ModelState.READY for st in self._registry.all_status())
+
+    def start_analysis(self) -> AnalyzeThread | None:
+        if self.project is None or self.import_thread is not None or self.analyze_thread is not None:
+            return None
+        thread = AnalyzeThread(self.project.folder)
+        thread.progress.connect(self._on_analyze_progress)
+        thread.succeeded.connect(self._on_analyze_done)
+        thread.failed.connect(lambda msg: QMessageBox.warning(self, "Nhận diện người", msg))
+        thread.finished.connect(self._on_analyze_thread_finished)
+        self.analyze_thread = thread
+        self._paused_job = None
+        self.progress.setVisible(True)
+        self.progress.setRange(0, 0)
+        self.pause_button.setText("Tạm dừng")
+        self.pause_button.setVisible(True)
+        self.pause_button.setEnabled(True)
+        self.act_analyze.setEnabled(False)
+        thread.start()
+        return thread
+
+    def _stop_analysis(self) -> None:
+        """Stop and forget the analysis thread; its queued signals are ignored afterwards."""
+        thread = self.analyze_thread
+        if thread is None:
+            return
+        self.analyze_thread = None
+        thread.cancel()
+        thread.wait(30000)
+        self.act_analyze.setEnabled(True)
+        if self.import_thread is None:
+            self.progress.setVisible(False)
+            self.pause_button.setVisible(False)
+
+    def _on_analyze_progress(self, phase: str, done: int, total: int) -> None:
+        label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện người…",
+                 "group": "Đang gom ảnh theo người…"}.get(phase, phase)
+        if total and phase == "detect":
+            self.progress.setRange(0, total)
+            self.progress.setValue(done)
+            self.status.setText(f"{label} {done}/{total}")
+        else:
+            self.progress.setRange(0, 0)
+            self.status.setText(label)
+
+    def _on_analyze_done(self, summary: dict) -> None:
+        if self.sender() is not self.analyze_thread or self.project is None:
+            return  # a stopped thread (closing window / switching folder)
+        if summary["cancelled"]:
+            self.status.setText(f"Đã tạm dừng nhận diện ({summary['analysed']} ảnh xong). Bấm “Tiếp tục” để làm tiếp.")
+            return
+        assert self.project is not None
+        people = self.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
+        unknown = self.project.conn.execute(
+            "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE is_main = 1 AND subject_id IS NULL").fetchone()[0]
+        review = len(merge_suggestions(self.project.conn))
+        device = "GPU" if summary["device"] == "cuda" else "CPU"
+        parts = [f"Nhận diện xong ({device}): {people} người", f"{unknown} ảnh chưa xác định"]
+        if review:
+            parts.append(f"{review} gợi ý cần xem lại")
+        if summary["failed"]:
+            parts.append(f"{summary['failed']} ảnh lỗi")
+        note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
+        self.status.setText(", ".join(parts) + "." + note)
+
+    def _on_analyze_thread_finished(self) -> None:
+        if self.sender() is not self.analyze_thread:
+            return  # stopped via _stop_analysis; the window may already have closed the database
+        cancelled = self.analyze_thread is not None and self.analyze_thread.cancel_requested
+        self.analyze_thread = None
+        self.act_analyze.setEnabled(True)
+        if self.import_thread is None:
+            self.progress.setVisible(False)
+            if cancelled and self.project is not None:
+                self._paused_job = "analyze"
+                self.pause_button.setText("Tiếp tục")
+                self.pause_button.setEnabled(True)
+            else:
+                self.pause_button.setVisible(False)
+        if self.project is not None:
+            self._fill_people()
+            self.reload_preserving_view()
+            self._show_inspector(self.current_record())
+
+    def _fill_people(self) -> None:
+        current = self.people.currentItem().data(Qt.ItemDataRole.UserRole) if self.people.currentItem() else None
+        self.people.blockSignals(True)
+        self.people.clear()
+        if self.project is not None:
+            for r in actions.subjects_summary(self.project.conn):
+                text = f"{r['display_name'] or f'Người {r[0]}'}  ·  {r['photos']} ảnh"
+                if r["suggested"]:
+                    text += f"  ·  {r['suggested']}?"
+                item = QListWidgetItem(text)
+                if r["avatar"]:
+                    item.setIcon(QIcon(str(self.project.cache_dir / r["avatar"])))
+                item.setData(Qt.ItemDataRole.UserRole, ("subject", r["id"]))
+                self.people.addItem(item)
+            unknown = self.project.conn.execute(
+                "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE is_main = 1 AND subject_id IS NULL").fetchone()[0]
+            if unknown:
+                item = QListWidgetItem(f"❔ Chưa xác định  ·  {unknown} ảnh")
+                item.setData(Qt.ItemDataRole.UserRole, ("unidentified", None))
+                self.people.addItem(item)
+            review = len(merge_suggestions(self.project.conn))
+            if review:
+                item = QListWidgetItem(f"🔎 Cần xem lại  ·  {review} gợi ý")
+                item.setData(Qt.ItemDataRole.UserRole, ("review", None))
+                self.people.addItem(item)
+        for i in range(self.people.count()):
+            if self.people.item(i).data(Qt.ItemDataRole.UserRole) == current:
+                self.people.setCurrentRow(i)
+        self.people.blockSignals(False)
+
+    def _on_person_changed(self, row: int) -> None:
+        item = self.people.item(row)
+        data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if data is None:
+            return
+        kind, subject_id = data
+        if kind == "review":
+            self.open_review()
+            return
+        self.filters.blockSignals(True)
+        self.filters.clearSelection()
+        self.filters.setCurrentRow(-1)
+        self.filters.blockSignals(False)
+        if kind == "subject":
+            self.model.set_filter(Filter.SUBJECT, subject_id=subject_id)
+        else:
+            self.model.set_filter(Filter.UNIDENTIFIED)
+        self._after_filter()
+
+    def _selected_subjects(self) -> list[int]:
+        out = []
+        for item in self.people.selectedItems():
+            kind, sid = item.data(Qt.ItemDataRole.UserRole)
+            if kind == "subject":
+                out.append(sid)
+        return out
+
+    def rename_current_person(self) -> None:
+        item = self.people.currentItem()
+        if self.project is None or item is None or item.data(Qt.ItemDataRole.UserRole)[0] != "subject":
+            return
+        sid = item.data(Qt.ItemDataRole.UserRole)[1]
+        name, ok = QInputDialog.getText(self, "Đặt tên", "Tên người này (để trống = bỏ tên):",
+                                        text=actions.subject_label(self.project.conn, sid))
+        if ok:
+            with self.project.transaction() as conn:
+                actions.rename_subject(conn, sid, name)
+            self._fill_people()
+
+    def merge_selected_people(self) -> None:
+        ids = self._selected_subjects()
+        if self.project is None or len(ids) < 2:
+            return
+        counts = {r["id"]: r["photos"] for r in actions.subjects_summary(self.project.conn)}
+        keep = max(ids, key=lambda i: counts.get(i, 0))
+        names = ", ".join(actions.subject_label(self.project.conn, i) for i in ids)
+        if QMessageBox.question(self, "Gộp người", f"Gộp {names} thành một người?") != QMessageBox.StandardButton.Yes:
+            return
+        with self.project.transaction() as conn:
+            for other in ids:
+                actions.merge_subjects(conn, keep, other)
+        self._after_people_change()
+
+    def open_review(self) -> ReviewDialog | None:
+        if self.project is None:
+            return None
+        dialog = ReviewDialog(self.project, self)
+        dialog.changed.connect(self._after_people_change)
+        dialog.show()
+        return dialog
+
+    def _after_people_change(self) -> None:
+        self._fill_people()
+        self.reload_preserving_view()
+        self._show_inspector(self.current_record())
+
+    def _people_context_menu(self, pos: object) -> None:
+        ids = self._selected_subjects()
+        if self.project is None or not ids:
+            return
+        menu = QMenu(self)
+        rename = menu.addAction("Đặt tên…") if len(ids) == 1 else None
+        merge = menu.addAction(f"Gộp {len(ids)} người này thành một") if len(ids) >= 2 else None
+        different = menu.addAction("Đây là hai người khác nhau") if len(ids) == 2 else None
+        chosen = menu.exec(self.people.mapToGlobal(pos))  # type: ignore[arg-type]
+        if chosen is None:
+            return
+        if chosen is rename:
+            self.rename_current_person()
+        elif chosen is merge:
+            self.merge_selected_people()
+        elif chosen is different:
+            with self.project.transaction() as conn:
+                actions.mark_different(conn, ids[0], ids[1])
+            self._fill_people()
+
+    def _grid_context_menu(self, pos: object) -> None:
+        if self.project is None:
+            return
+        assets = [r.id for r in self.selected_records()]
+        if not assets:
+            return
+        menu = QMenu(self)
+        flt, target = self.model.current_filter, self.model.current_target
+        remove = confirm = None
+        if flt is Filter.SUBJECT and target is not None:
+            name = actions.subject_label(self.project.conn, target)
+            confirm = menu.addAction(f"Đúng là {name}")
+            remove = menu.addAction(f"Không phải {name} — bỏ khỏi người này")
+        assign_menu = menu.addMenu("Gán cho người…")
+        targets = {}
+        for r in actions.subjects_summary(self.project.conn):
+            if r["id"] != target:
+                targets[assign_menu.addAction(r["display_name"] or f"Người {r['id']}")] = r["id"]
+        assign_menu.setEnabled(bool(targets))
+        chosen = menu.exec(self.grid.viewport().mapToGlobal(pos))  # type: ignore[arg-type]
+        if chosen is None:
+            return
+        with self.project.transaction() as conn:
+            if chosen is remove:
+                actions.remove_photos_from_subject(conn, target, assets)  # type: ignore[arg-type]
+            elif chosen is confirm:
+                actions.assign_photos_to_subject(conn, target, assets)  # type: ignore[arg-type]
+            elif chosen in targets:
+                actions.assign_photos_to_subject(conn, targets[chosen], assets)
+        self._after_people_change()
+
+    def _people_text(self, asset_id: int) -> str | None:
+        if self.project is None:
+            return None
+        analysed = self.project.conn.execute(
+            "SELECT 1 FROM stage_status WHERE asset_id = ? AND stage = 'detect' AND state = 'done'", (asset_id,)
+        ).fetchone()
+        if not analysed:
+            return None
+        rows = self.project.conn.execute(
+            """SELECT o.subject_id, o.assignment, o.is_main FROM occurrences o WHERE o.asset_id = ?
+               ORDER BY o.prominence DESC""", (asset_id,)).fetchall()
+        names = [actions.subject_label(self.project.conn, r["subject_id"]) + ("?" if r["assignment"] == "suggested" else "")
+                 for r in rows if r["subject_id"] is not None]
+        unknown = sum(1 for r in rows if r["subject_id"] is None and r["is_main"])
+        background = sum(1 for r in rows if not r["is_main"])
+        parts = names + ([f"{unknown} chưa xác định"] if unknown else []) + ([f"{background} người phía sau"] if background else [])
+        return ", ".join(parts) if parts else "không thấy người"
+
+    def _show_inspector(self, rec: AssetRecord | None) -> None:
+        self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None)
 
     # ------------------------------------------------------- navigation
     def reload_preserving_view(self) -> None:
@@ -473,7 +772,7 @@ class MainWindow(QMainWindow):
 
     def _on_current_changed(self, current: QModelIndex, _prev: QModelIndex) -> None:
         rec = self.model.record(current)
-        self.inspector.show_record(rec)
+        self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None)
         if rec is not None and self.center.currentIndex() == 2:
             self.viewer.show_photo(rec.path, self.model.pixmap(rec))
 
@@ -509,6 +808,10 @@ class MainWindow(QMainWindow):
         self.filters.blockSignals(False)
 
     def _on_filter_changed(self, row: int) -> None:
+        self.people.blockSignals(True)
+        self.people.clearSelection()
+        self.people.setCurrentRow(-1)
+        self.people.blockSignals(False)
         item = self.filters.item(row)
         data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
         if data is not None:
@@ -650,8 +953,7 @@ class MainWindow(QMainWindow):
                 fn(conn, rec)  # type: ignore[operator]
         for rec in targets:
             self.model.refresh_record(rec.id)
-        current = self.current_record()
-        self.inspector.show_record(current)
+        self._show_inspector(self.current_record())
         self._update_counts()
         if advance and len(targets) == 1 and self.act_auto_advance.isChecked():
             self.step(1)

@@ -35,7 +35,10 @@ def _window(qtbot, env: dict) -> mw.MainWindow:
     from PySide6.QtWidgets import QApplication
 
     apply_dark_theme(QApplication.instance())
-    w = mw.MainWindow(settings=QSettings(env["ini"], QSettings.Format.IniFormat))
+    settings = QSettings(env["ini"], QSettings.Format.IniFormat)
+    if settings.value("auto_analyze") is None:
+        settings.setValue("auto_analyze", env.get("auto_analyze", False))  # AI has its own tests
+    w = mw.MainWindow(settings=settings)
     qtbot.addWidget(w)
     w.show()
     return w
@@ -277,3 +280,73 @@ def test_closing_window_with_open_dialog_is_safe(qtbot, env: dict) -> None:
     w.close()  # closes the dialog and then the database
     qtbot.wait(400)  # the timer would have fired here
     assert not dialog.isVisible()
+
+
+def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path, monkeypatch) -> None:
+    """Import -> automatic analysis -> people list -> filter -> rename -> merge -> remove photo."""
+    import shutil
+
+    from PySide6.QtWidgets import QMessageBox
+
+    from app.identity import actions
+    from tests.conftest import PHOTOS
+
+    photos = sorted((PHOTOS / "user_nikon").glob("*.NEF"))
+    if len(photos) < 3:
+        pytest.skip("owner's sample NEFs absent")
+    shoot = tmp_path / "Aki"
+    shoot.mkdir()
+    for f in photos:
+        shutil.copy2(f, shoot / f.name)
+
+    env["auto_analyze"] = True
+    w = _window(qtbot, env)
+    if not w.models_ready():
+        pytest.skip("AI models not fetched")
+    w.start_import(shoot)
+    qtbot.waitUntil(lambda: w.import_thread is None and w.analyze_thread is None
+                    and "Nhận diện xong" in w.status.text(), timeout=120000)
+    subjects = actions.subjects_summary(w.project.conn)
+    assert len(subjects) >= 3  # distinct cosplayers with clear faces
+    kinds = [w.people.item(i).data(Qt.ItemDataRole.UserRole)[0] for i in range(w.people.count())]
+    assert kinds.count("subject") == len(subjects) and "unidentified" in kinds  # DSC_0198: face hidden by hands
+
+    w.people.setCurrentRow(0)  # filter the grid to the first person
+    first = w.people.item(0).data(Qt.ItemDataRole.UserRole)[1]
+    assert w.model.rowCount() == subjects[0]["photos"]
+    assert w.inspector.fields["Chủ thể"].text().startswith(actions.subject_label(w.project.conn, first))
+
+    monkeypatch.setattr(mw.QInputDialog, "getText", lambda *a, **k: ("Aki", True))
+    w.rename_current_person()
+    assert w.people.item(0).text().startswith("Aki")
+
+    w.people.item(0).setSelected(True)
+    w.people.item(1).setSelected(True)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    w.merge_selected_people()
+    merged = actions.subjects_summary(w.project.conn)
+    assert len(merged) == len(subjects) - 1
+    aki = next(r for r in merged if r["display_name"] == "Aki")
+    assert aki["photos"] == subjects[0]["photos"] + subjects[1]["photos"]
+
+    # Re-running the analysis/grouping keeps the user's merge and name.
+    w.start_analysis()
+    qtbot.waitUntil(lambda: w.analyze_thread is None, timeout=60000)
+    again = {r["id"]: r for r in actions.subjects_summary(w.project.conn)}
+    assert again[aki["id"]]["display_name"] == "Aki" and again[aki["id"]]["photos"] == aki["photos"]
+
+    # Remove one photo from Aki; it must not come back after regrouping.
+    asset = w.project.conn.execute("SELECT asset_id FROM occurrences WHERE subject_id = ? LIMIT 1",
+                                   (aki["id"],)).fetchone()[0]
+    with w.project.transaction() as conn:
+        actions.remove_photos_from_subject(conn, aki["id"], [asset])
+    w.start_analysis()
+    qtbot.waitUntil(lambda: w.analyze_thread is None, timeout=60000)
+    assert not w.project.conn.execute("SELECT 1 FROM occurrences WHERE subject_id = ? AND asset_id = ?",
+                                      (aki["id"], asset)).fetchone()
+    w.close()
+
+    w2 = _window(qtbot, env)  # new session: re-import remembers people and names
+    w2.start_import(shoot)
+    qtbot.waitUntil(lambda: w2.import_thread is None and w2.analyze_thread is None, timeout=60000)
+    assert any(r["display_name"] == "Aki" for r in actions.subjects_summary(w2.project.conn))
