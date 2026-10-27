@@ -6,12 +6,17 @@ import sqlite3
 
 from app.storage.project import utc_now
 
+# Photos with people in them but no subject at all ("Chưa xác định"). A photo whose main
+# subject is known but has a second, unknown person is NOT in this list.
+UNIDENTIFIED_ASSETS = """SELECT asset_id FROM occurrences WHERE is_main = 1
+                         GROUP BY asset_id HAVING COUNT(subject_id) = 0"""
+
 
 def subject_label(conn: sqlite3.Connection, subject_id: int) -> str:
     row = conn.execute("SELECT display_name FROM subjects WHERE id = ?", (subject_id,)).fetchone()
     if row is None:
         return "?"
-    return row["display_name"] or f"Người {subject_id}"
+    return row["display_name"] or f"Chủ thể {subject_id}"
 
 
 def rename_subject(conn: sqlite3.Connection, subject_id: int, name: str) -> None:
@@ -27,11 +32,26 @@ def merge_subjects(conn: sqlite3.Connection, keep: int, drop: int) -> None:
     conn.execute("UPDATE occurrences SET subject_id = ?, assignment = 'manual', confidence = NULL WHERE subject_id = ?",
                  (keep, drop))
     conn.execute("UPDATE occurrences SET excluded_subject_id = ? WHERE excluded_subject_id = ?", (keep, drop))
+    keep_one_per_photo(conn, keep)
     row = conn.execute("SELECT display_name FROM subjects WHERE id = ?", (keep,)).fetchone()
     other = conn.execute("SELECT display_name FROM subjects WHERE id = ?", (drop,)).fetchone()
     if row is not None and row["display_name"] is None and other is not None and other["display_name"]:
         rename_subject(conn, keep, other["display_name"])  # keep a name the user gave
     conn.execute("DELETE FROM subjects WHERE id = ?", (drop,))
+
+
+def keep_one_per_photo(conn: sqlite3.Connection, subject_id: int | None = None) -> int:
+    """A person appears once per photo: where a subject has several people in one photo (after a
+    merge, or an older version's mistake), the most prominent stays and the others (usually someone
+    in the background) are released. ``None`` = every subject. Returns occurrences released."""
+    where = "subject_id IS NOT NULL" if subject_id is None else "subject_id = :sid"
+    cur = conn.execute(
+        f"""UPDATE occurrences AS o SET excluded_subject_id = o.subject_id, subject_id = NULL,
+                assignment = 'none', confidence = NULL
+            WHERE o.{where} AND o.id != (
+                SELECT o2.id FROM occurrences o2 WHERE o2.asset_id = o.asset_id AND o2.subject_id = o.subject_id
+                ORDER BY o2.is_main DESC, o2.prominence DESC, o2.id LIMIT 1)""", {"sid": subject_id})
+    return cur.rowcount
 
 
 def mark_different(conn: sqlite3.Connection, a: int, b: int) -> None:

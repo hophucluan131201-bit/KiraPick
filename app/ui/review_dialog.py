@@ -29,7 +29,7 @@ class ReviewDialog(QDialog):
 
     def __init__(self, project: Project, parent: QWidget | None = None, teacher: Teacher | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Cần xem lại: có phải cùng một người?")
+        self.setWindowTitle("Cần xem lại: có phải cùng một chủ thể?")
         self.project = project
         self.teacher = teacher
         self.queue: list[Suggestion] = merge_suggestions(project.conn)
@@ -57,8 +57,8 @@ class ReviewDialog(QDialog):
         layout.addWidget(self.similarity)
 
         buttons = QHBoxLayout()
-        self.same = QPushButton("✓ Cùng một người")
-        self.different = QPushButton("✗ Hai người khác nhau")
+        self.same = QPushButton("✓ Cùng một chủ thể")
+        self.different = QPushButton("✗ Hai chủ thể khác nhau")
         self.skip = QPushButton("Bỏ qua")
         close = QPushButton("Đóng")
         self.same.clicked.connect(self.answer_same)
@@ -88,7 +88,7 @@ class ReviewDialog(QDialog):
             for col in range(2):
                 self.pics[col].clear()
                 self.names[col].clear()
-            self.similarity.setText("Mọi cặp có thể là cùng một người đã được xem.")
+            self.similarity.setText("Mọi cặp có thể là cùng một chủ thể đã được xem.")
             return
         self.counter.setText(f"GỢI Ý {self.index + 1}/{len(self.queue)}")
         for col, sid in enumerate((s.a, s.b)):

@@ -343,3 +343,54 @@ def test_real_arcface_and_reid_produce_unit_vectors() -> None:
     assert face.shape == (512,) and body.shape == (768,)
     assert abs(float(np.linalg.norm(face)) - 1) < 1e-4 and abs(float(np.linalg.norm(body)) - 1) < 1e-4
     assert models.body.embed(img, (0.0, 0.0, 0.05, 0.05)) is None  # too small to describe a person
+
+
+# ------------------------------------------------------------------ owner's report 2026-10-27 (bundle 3)
+
+
+def test_person_never_prominent_in_a_small_group_is_background(project: Project) -> None:
+    """A blurred person behind the cosplayer in 2 photos must not become a subject of their own."""
+    lead, behind = _person(), _person()
+    for asset in (1, 2):
+        _add(project, asset, _shot(lead), minute=asset, outfit=RED)
+        occ = _add(project, asset, _shot(behind), minute=asset, outfit=RED)
+        project.conn.execute("UPDATE occurrences SET prominence = 0.5 WHERE id = ?", (occ,))
+    recluster(project)
+    assert sorted(_subjects(project).values()) == [[1, 2]]
+    duo = []  # a duo partner close to the lead's size, or in many photos, stays a subject
+    for asset in range(10, 15):
+        _add(project, asset, _shot(lead), minute=20 + asset, outfit=RED)
+        duo.append(_add(project, asset, _shot(behind), minute=20 + asset, outfit=RED))
+    project.conn.executemany("UPDATE occurrences SET prominence = 0.6 WHERE id = ?", [(o,) for o in duo])
+    recluster(project)
+    assert len(_subjects(project)) == 2
+
+
+def test_merging_keeps_one_occurrence_per_photo(project: Project) -> None:
+    from app.identity import actions
+
+    a, b = _person(), _person()
+    main = _add(project, 1, _shot(a), outfit=RED)
+    behind = _add(project, 1, _shot(b), outfit=RED)
+    _add(project, 2, _shot(a), outfit=RED)
+    project.conn.execute("UPDATE occurrences SET prominence = 0.5 WHERE id = ?", (behind,))
+    with project.transaction() as conn:
+        for sid, occ in ((1, main), (2, behind)):
+            conn.execute("INSERT INTO subjects (id, created_at) VALUES (?, 'n')", (sid,))
+            conn.execute("UPDATE occurrences SET subject_id = ?, assignment = 'auto' WHERE id = ?", (sid, occ))
+        actions.merge_subjects(conn, 1, 2)
+    rows = dict(project.conn.execute("SELECT id, subject_id FROM occurrences WHERE asset_id = 1").fetchall())
+    assert rows == {main: 1, behind: None}
+    assert project.conn.execute("SELECT excluded_subject_id FROM occurrences WHERE id = ?", (behind,)).fetchone()[0] == 1
+
+
+def test_unidentified_lists_only_photos_without_any_subject(project: Project) -> None:
+    from app.identity.actions import UNIDENTIFIED_ASSETS
+
+    a = _person()
+    _add(project, 1, _shot(a), outfit=RED)
+    _add(project, 1, None)  # an unknown second person next to the known one
+    _add(project, 2, _shot(a), outfit=RED)
+    _add(project, 3, None)  # nobody known in this photo
+    recluster(project)
+    assert [r[0] for r in project.conn.execute(UNIDENTIFIED_ASSETS)] == [3]

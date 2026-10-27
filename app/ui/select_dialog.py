@@ -36,7 +36,7 @@ class SelectDialog(QDialog):
             warn = QLabel("⚠ Chưa có ảnh nào được chấm điểm. Hãy bấm 📊 Phân tích ảnh trước.")
             warn.setWordWrap(True)
             layout.addWidget(warn)
-        self.per_person = QRadioButton(f"Mỗi người một số ảnh — tất cả {people} người trong thư mục")
+        self.per_person = QRadioButton(f"Mỗi chủ thể một số ảnh — tất cả {people} chủ thể trong thư mục")
         self.in_view = QRadioButton(f"Chỉ chọn trong {view_name} ({in_view} ảnh)")
         group = QButtonGroup(self)
         for b in (self.per_person, self.in_view):
@@ -69,4 +69,4 @@ class SelectDialog(QDialog):
         layout.addWidget(buttons)
 
     def _update_label(self) -> None:
-        self.count_label.setText("Số ảnh cho mỗi người:" if self.per_person.isChecked() else "Số ảnh cần chọn:")
+        self.count_label.setText("Số ảnh cho mỗi chủ thể:" if self.per_person.isChecked() else "Số ảnh cần chọn:")

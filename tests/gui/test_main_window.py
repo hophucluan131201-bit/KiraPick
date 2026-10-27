@@ -336,7 +336,7 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     # Step by step: importing does not start the AI; each later step waits for the previous one.
     w.start_import(shoot)
     qtbot.waitUntil(lambda: w.import_thread is None, timeout=60000)
-    assert w.analyze_thread is None and "🧠 Nhận diện người" in w.status.text()
+    assert w.analyze_thread is None and "🧠 Nhận diện chủ thể" in w.status.text()
     assert w.act_analyze.isEnabled() and not w.act_quality.isEnabled() and not w.act_select.isEnabled()
     w.start_analysis("people")
     qtbot.waitUntil(lambda: w.analyze_thread is None and "Nhận diện xong" in w.status.text(), timeout=120000)
@@ -424,7 +424,7 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     items[1].setCheckState(Qt.CheckState.Checked)
     assert not w.act_merge.isEnabled()  # one ticked person: nothing to merge
     items[3].setCheckState(Qt.CheckState.Checked)
-    assert w.act_merge.isEnabled() and w.act_merge.text() == "🔗 Gộp 2 người"
+    assert w.act_merge.isEnabled() and w.act_merge.text() == "🔗 Gộp 2 chủ thể"
 
     asked = []
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: asked.append(a[2]) or QMessageBox.StandardButton.Yes)
@@ -442,7 +442,7 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     assert "Chưa có lần sửa nào" in w.learning_text()  # these photos have no face / outfit numbers
     w.teacher.store.add_identity("merge", True, [PairEvidence(0.7, 0.9, 30.0)], "sface-2021dec", "x")
     text = w.learning_text()
-    assert "Đã ghi 1 cặp ảnh “cùng người”" in text and "Cần thêm lần sửa" in text
+    assert "Đã ghi 1 cặp ảnh “cùng chủ thể”" in text and "Cần thêm lần sửa" in text
 
     class _Box(QMessageBox):  # press "Xoá dữ liệu học…" without showing the dialog
         def exec(self) -> int:  # noqa: A003
@@ -510,14 +510,14 @@ def test_per_person_selection_covers_everyone_even_from_a_person_view(qtbot, env
     def per_person_two(d) -> None:  # noqa: ANN001
         d.per_person.setChecked(True)
         d.count.setValue(2)
-        assert d.count_label.text() == "Số ảnh cho mỗi người:" and d.count.prefix() == ""
+        assert d.count_label.text() == "Số ảnh cho mỗi chủ thể:" and d.count.prefix() == ""
 
     w.open_select_dialog(accept=True, configure=per_person_two)
     chosen = {r[0]: r[1] for r in w.project.conn.execute("SELECT asset_id, subject_id FROM picks")}
     assert sorted(set(chosen.values())) == [1, 2, 3]  # every person got photos
     assert len(chosen) == 5  # 2 + 2 + 1 (person 3 has a single photo)
     assert w.model.current_filter is Filter.ALL  # the grid shows everyone's picks
-    assert "cho 3 người" in w.status.text()
+    assert "cho 3 chủ thể" in w.status.text()
     first = [r.id for r in w.model.records()][:5]
     assert set(first) == set(chosen)
     w.select_row(0)

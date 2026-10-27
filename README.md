@@ -16,7 +16,7 @@ những tấm đẹp, khác dáng nhau để bạn duyệt lại.
 - **Không bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc.** Xuất ảnh = sao chép.
 - Đọc RAW (Nikon NEF ưu tiên, Canon CR2/CR3, Sony ARW, …) và JPEG.
 - Bản **0.3.0b1 (nhánh `beta`)** có thêm *gợi ý thẩm mỹ* bằng AI (TOPIQ, phi thương mại).
-- Bản **0.3.0b2 (nhánh `beta`)** nhận diện người tốt hơn bằng khuôn mặt **ArcFace** (InsightFace, chỉ dùng
+- Bản **0.3.0b2 (nhánh `beta`)** nhận diện chủ thể tốt hơn bằng khuôn mặt **ArcFace** (InsightFace, chỉ dùng
   phi thương mại / nghiên cứu) và dáng người **YoutuReID**, và **tự học** từ các lần bạn gộp / tách người
   (xem [Lưu ý miễn trừ](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer)).
 - Tình trạng: **bản thử nghiệm (beta)**. Có phát hiện mắt nhắm / nhìn xuống; chưa đánh giá được độ đẹp nghệ thuật.
@@ -38,8 +38,8 @@ DirectML; không có thì chạy bằng CPU.
 ### Cách dùng: 4 bước, mỗi bước xong sẽ dừng chờ bạn
 
 1. **📂 Nhập ảnh** — chọn thư mục ảnh của một buổi chụp.
-2. **🧠 Nhận diện người** — AI gom ảnh theo từng người. Kiểm tra danh sách **NGƯỜI** bên trái:
-   tick ô vuông của nhiều người rồi bấm **🔗 Gộp người** nếu một người bị tách thành nhiều nhóm;
+2. **🧠 Nhận diện chủ thể** — AI gom ảnh theo từng người. Kiểm tra danh sách **CHỦ THỂ** bên trái:
+   tick ô vuông của nhiều người rồi bấm **🔗 Gộp chủ thể** nếu một người bị tách thành nhiều nhóm;
    chuột phải vào ảnh để bỏ ảnh khỏi một người hoặc gán cho người khác.
 3. **📊 Phân tích ảnh** — chấm điểm từng người trong từng ảnh. Bảng bên phải liệt kê
    **Điểm mạnh**, **Điểm yếu** và **Chưa đánh giá**.
@@ -126,8 +126,8 @@ DirectML; otherwise on the CPU.
 ### Use: 4 steps, each one waits for you
 
 1. **📂 Nhập ảnh** (Import) — pick the folder of one shoot.
-2. **🧠 Nhận diện người** (Find people) — AI groups photos by person. Check the **NGƯỜI** (people)
-   list: tick several people and press **🔗 Gộp người** (merge) if one person was split; right-click
+2. **🧠 Nhận diện chủ thể** (Find people) — AI groups photos by person. Check the **CHỦ THỂ** (people)
+   list: tick several people and press **🔗 Gộp chủ thể** (merge) if one person was split; right-click
    photos to remove them from a person or assign them to another.
 3. **📊 Phân tích ảnh** (Analyse) — scores every person in every photo. The right panel lists
    **strengths**, **weaknesses** and what was **not judged**.

@@ -28,6 +28,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QImage, QPixmap
 
+from app.identity.actions import UNIDENTIFIED_ASSETS
 from app.quality.score import Score, photo_scores
 from app.storage.project import Project
 
@@ -111,7 +112,7 @@ _FILTER_SQL = {
     Filter.ERRORS: " AND a.status = 'error'",
     Filter.COLLECTION: " AND a.id IN (SELECT asset_id FROM collection_items WHERE collection_id = :target_id)",
     Filter.SUBJECT: " AND a.id IN (SELECT asset_id FROM occurrences WHERE subject_id = :target_id)",
-    Filter.UNIDENTIFIED: " AND a.id IN (SELECT asset_id FROM occurrences WHERE is_main = 1 AND subject_id IS NULL)",
+    Filter.UNIDENTIFIED: f" AND a.id IN ({UNIDENTIFIED_ASSETS})",
 }
 
 

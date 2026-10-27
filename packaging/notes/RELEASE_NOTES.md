@@ -1,11 +1,16 @@
 ## KiraPick – bản thử nghiệm (beta)
 
-> **0.3.0b2 – nhận diện người tốt hơn và tự học.**
+> **0.3.0b3 – sửa theo góp ý.** Người đứng phía sau (mờ, quay lưng) không còn thành chủ thể riêng;
+> một chủ thể chỉ giữ một người trong mỗi ảnh (tự sửa cả dữ liệu cũ); "Chưa xác định" chỉ còn những ảnh
+> chưa có chủ thể nào; chữ "Người" đổi thành "Chủ thể"; ngưỡng gom chỉnh theo số đo thật trên ảnh lớn
+> (buổi chụp thử: gom đúng 92%, không gộp nhầm).
+>
+> **0.3.0b2 – nhận diện chủ thể tốt hơn và tự học.**
 > - Khuôn mặt **ArcFace** (InsightFace) và dáng người **YoutuReID**: gom đúng người hơn, nhất là ảnh chụp
 >   cách xa nhau về thời gian và ảnh không thấy mặt. Lần đầu mở lại một thư mục cũ, bấm
->   **🧠 Nhận diện người**: app tính thêm cho các ảnh đã có, không phải nhận diện lại từ đầu.
+>   **🧠 Nhận diện chủ thể**: app tính thêm cho các ảnh đã có, không phải nhận diện lại từ đầu.
 > - **Tự học từ các lần bạn sửa**: mỗi lần gộp / tách / bỏ ảnh khỏi một người, app ghi lại và
->   chỉnh nhẹ mức gộp ở lần **🧠 Nhận diện người** sau. Có kiểm tra an toàn, chỉ học trên máy của bạn;
+>   chỉnh nhẹ mức gộp ở lần **🧠 Nhận diện chủ thể** sau. Có kiểm tra an toàn, chỉ học trên máy của bạn;
 >   xem hoặc xoá bằng nút **🎓 AI đã học**.
 > - Bộ cài nặng hơn khoảng 280 MB.
 >

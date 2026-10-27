@@ -34,9 +34,9 @@ hoặc trong menu Start.
 BƯỚC 3 - DÙNG THỬ (4 nút trên thanh công cụ, làm lần lượt)
 -----------------------------------------------------------------
 1. 📂 Nhập ảnh        -> chọn thư mục ảnh của một buổi chụp (RAW hoặc JPEG).
-2. 🧠 Nhận diện người -> chờ AI gom ảnh theo từng người.
-                        Cột trái "NGƯỜI": nếu một người bị tách làm 2 nhóm,
-                        tick 2 ô vuông của họ rồi bấm "🔗 Gộp người".
+2. 🧠 Nhận diện chủ thể -> chờ AI gom ảnh theo từng người.
+                        Cột trái "CHỦ THỂ": nếu một người bị tách làm 2 nhóm,
+                        tick 2 ô vuông của họ rồi bấm "🔗 Gộp chủ thể".
 3. 📊 Phân tích ảnh    -> chờ AI chấm điểm (nét, mặt, sáng, bố cục).
 4. ⭐ Chọn ảnh         -> nhập số ảnh muốn chọn cho mỗi người -> "Chọn ảnh".
 Sau đó xem lại: phím K = giữ, X = loại, U = bỏ đánh dấu.

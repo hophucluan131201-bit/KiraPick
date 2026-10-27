@@ -36,9 +36,12 @@ from datetime import datetime
 
 import numpy as np
 
+from app.identity.actions import keep_one_per_photo
 from app.storage.project import Project, utc_now
 
 REVIEW_LIMIT = 30
+LEAD_PROMINENCE = 0.75  # a small group must be (nearly) the most prominent person of one of its photos ...
+BACKGROUND_MAX_PHOTOS = 4  # ... unless it has at least this many photos
 FACE_CHUNK = 1024  # rows per block when comparing all faces (bounded memory)
 
 
@@ -82,14 +85,14 @@ SFACE_HSV = Thresholds(
     "sface+hsv", face_strong=0.65, face_certain=0.80, far_outfit=0.65, outfit_link=0.80, face_with_outfit=0.55,
     face_mid=0.55, outfit_mid=0.78, average_guard=0.45, far_average=0.60, outfit_suggest=0.85,
     review_face=0.45, review_face_anytime=0.60, review_face_floor=0.35)
-# ArcFace (512-d) + look = HSV histograms mixed with YoutuReID. Calibrated on the
-# same shoot from 400 px thumbnails (the app embeds at 1600 px) — see docs/IMPLEMENTATION_STATUS.md.
-# Pairwise precision 1.00, recall 0.91 (SFace profile on the same data: 1.00 / 0.82). The two
-# pink-and-white cosplayers 4 min apart reach ArcFace 0.52 / look 0.69, hence face_mid 0.53 AND
-# outfit_mid 0.70 (looser settings reach recall 0.94 but merge them).
+# ArcFace (512-d) + look = HSV histograms mixed 50/50 with YoutuReID. Calibrated on the owner's
+# shoot with the vectors the app itself computed at 1600 px (debug bundle 3, 2026-10-27):
+# pairwise precision 1.00, recall 0.92 (SFace profile on the same data: 1.00 / 0.81). Different
+# people a few minutes apart reach ArcFace 0.45 at most (face_mid 0.50); far apart 0.68 (a face
+# link there also needs a compatible look unless >= face_certain 0.70).
 ARCFACE_REID = Thresholds(
-    "arcface+reid", face_strong=0.63, face_certain=0.70, far_outfit=0.55, outfit_link=0.72, face_with_outfit=0.35,
-    face_mid=0.53, outfit_mid=0.70, average_guard=0.20, far_average=0.42, outfit_suggest=0.78,
+    "arcface+reid", face_strong=0.58, face_certain=0.70, far_outfit=0.55, outfit_link=0.72, face_with_outfit=0.35,
+    face_mid=0.50, outfit_mid=0.66, average_guard=0.20, far_average=0.42, outfit_suggest=0.78,
     review_face=0.35, review_face_anytime=0.50, review_face_floor=0.20, body_weight=0.5)
 PROFILES = {t.name: t for t in (SFACE_HSV, ARCFACE_REID)}
 # Old names (tests, scripts): the SFace profile.
@@ -111,6 +114,7 @@ class Occ:
     body: np.ndarray | None = None  # whole-body ReID vector (ArcFace sessions only)
     face_sface: np.ndarray | None = None
     face_arc: np.ndarray | None = None
+    prominence: float = 1.0  # 1.0 = the most prominent person of its photo
 
 
 @dataclass(slots=True)
@@ -154,7 +158,7 @@ def session_profile(conn: sqlite3.Connection) -> Thresholds:
 def load_occurrences(conn: sqlite3.Connection, profile: Thresholds | None = None) -> list[Occ]:
     profile = profile or session_profile(conn)
     rows = conn.execute(
-        """SELECT o.id, o.asset_id, o.assignment, o.subject_id, o.excluded_subject_id, a.capture_time,
+        """SELECT o.id, o.asset_id, o.assignment, o.subject_id, o.excluded_subject_id, a.capture_time, o.prominence,
                   fv.vector AS face, av.vector AS face_arc, ov.vector AS outfit, bv.vector AS body
            FROM occurrences o JOIN assets a ON a.id = o.asset_id
            LEFT JOIN occurrence_vectors fv ON fv.occurrence_id = o.id AND fv.kind = 'face'
@@ -171,7 +175,8 @@ def load_occurrences(conn: sqlite3.Connection, profile: Thresholds | None = None
         sface, face_arc = vec(r["face"]), vec(r["face_arc"])
         out.append(Occ(r["id"], r["asset_id"], _ts(r["capture_time"]), face_arc if arc else sface, vec(r["outfit"]),
                        r["assignment"], r["subject_id"], r["excluded_subject_id"],
-                       body=vec(r["body"]) if arc else None, face_sface=sface, face_arc=face_arc))
+                       body=vec(r["body"]) if arc else None, face_sface=sface, face_arc=face_arc,
+                       prominence=r["prominence"]))
     return out
 
 
@@ -342,9 +347,14 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset(), profil
             if fi is not None and not _conflict(groups[fi], g, different):
                 absorb(fi, gi)
 
-    # A lone face-less photo is not a person of its own.
+    # A lone face-less photo is not a person of its own. Neither is someone who is never (nearly)
+    # the main person of any photo in a small group: a passer-by or a blurred person behind the
+    # cosplayer. A partner in a duo shoot stays (close to the lead's size, or many photos).
     for g in groups:
-        if g.members and not g.faces and g.fixed_subject is None and len(g.members) < 2:
+        if g.members and g.fixed_subject is None and (
+                (not g.faces and len(g.members) < 2)
+                or (len(g.members) < BACKGROUND_MAX_PHOTOS
+                    and max(occs[m].prominence for m in g.members) < LEAD_PROMINENCE)):
             for m in g.members:
                 del owner[m]
             g.members, g.assets = [], set()
@@ -377,6 +387,8 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset(), profil
 def recluster(project: Project, tune: Callable[[Thresholds], Thresholds] | None = None) -> ClusterReport:
     """Regroup the session. ``tune`` may adjust the thresholds (this user's learnt corrections)."""
     conn = project.conn
+    with project.transaction():
+        keep_one_per_photo(conn)  # repairs sessions where one subject holds two people of a photo
     profile = session_profile(conn)
     if tune is not None:
         profile = tune(profile)

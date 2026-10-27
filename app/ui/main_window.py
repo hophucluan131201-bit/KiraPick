@@ -172,8 +172,8 @@ class MainWindow(QMainWindow):
         self.act_import.setShortcut(QKeySequence("Ctrl+I"))
         self.act_import.triggered.connect(self.choose_and_import)
         # The workflow goes step by step; each step waits for the user (and their corrections).
-        self.act_analyze = QAction("🧠 Nhận diện người", self)
-        self.act_analyze.setToolTip("Bước 2: AI tìm người trong ảnh và gom theo từng người. Xong thì dừng để bạn "
+        self.act_analyze = QAction("🧠 Nhận diện chủ thể", self)
+        self.act_analyze.setToolTip("Bước 2: AI tìm các chủ thể trong ảnh và gom ảnh theo từng chủ thể. Xong thì dừng để bạn "
                                     "kiểm tra, gộp/tách cho đúng.")
         self.act_analyze.triggered.connect(lambda: self.start_analysis("people"))
         self.act_quality = QAction("📊 Phân tích ảnh", self)
@@ -213,8 +213,8 @@ class MainWindow(QMainWindow):
         self.act_client_list.setToolTip("Dán danh sách ảnh khách chọn, app tự chọn ảnh theo tên (Ctrl+L)")
         self.act_client_list.setShortcut(QKeySequence("Ctrl+L"))
         self.act_client_list.triggered.connect(self.open_client_list_dialog)
-        self.act_merge = QAction("🔗 Gộp người", self)
-        self.act_merge.setToolTip("Tick ô vuông cạnh 2 người trở lên trong danh sách NGƯỜI, rồi bấm để gộp thành một người")
+        self.act_merge = QAction("🔗 Gộp chủ thể", self)
+        self.act_merge.setToolTip("Tick ô vuông cạnh 2 chủ thể trở lên trong danh sách CHỦ THỂ, rồi bấm để gộp thành một chủ thể")
         self.act_merge.setEnabled(False)
         self.act_merge.triggered.connect(lambda: self.merge_selected_people())
         self.act_select = QAction("⭐ Chọn ảnh", self)
@@ -275,13 +275,13 @@ class MainWindow(QMainWindow):
         self.filters.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.filters.customContextMenuRequested.connect(self._filter_context_menu)
         self._fill_filters()
-        t3 = QLabel("NGƯỜI")
+        t3 = QLabel("CHỦ THỂ")
         t3.setObjectName("sectionTitle")
         self.people = QListWidget()
         self.people.setIconSize(QSize(36, 36))
         self.people.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.people.setToolTip("Bấm để xem ảnh của người này. Nháy đúp để đặt tên. "
-                               "Tick ô vuông cạnh nhiều người rồi bấm 🔗 Gộp người để gộp.")
+        self.people.setToolTip("Bấm để xem ảnh của chủ thể này. Nháy đúp để đặt tên. "
+                               "Tick ô vuông cạnh nhiều chủ thể rồi bấm 🔗 Gộp chủ thể để gộp.")
         self.people.itemChanged.connect(lambda _item: self._update_merge_action())
         self.people.itemSelectionChanged.connect(self._update_merge_action)
         self.people.currentRowChanged.connect(self._on_person_changed)
@@ -553,7 +553,7 @@ class MainWindow(QMainWindow):
             self.select_row(0)
         self._update_steps()
         if not cancelled and self.project is not None:
-            self.status.setText(self.status.text().rstrip(". ") + ". Bước tiếp theo: bấm 🧠 Nhận diện người.")
+            self.status.setText(self.status.text().rstrip(". ") + ". Bước tiếp theo: bấm 🧠 Nhận diện chủ thể.")
 
     def _pause_or_resume(self) -> None:
         running = self.import_thread or self.analyze_thread
@@ -579,16 +579,16 @@ class MainWindow(QMainWindow):
             ARCFACE_REID if (self._registry or ModelRegistry()).ready("identity_plus") else SFACE_HSV)
         tuning = tune(store.identity_examples(), base)
         lines = [
-            "<b>Nhận diện người</b>",
-            f"Đã ghi {counts['same']} cặp ảnh “cùng người” và {counts['different']} cặp “khác người” "
+            "<b>Nhận diện chủ thể</b>",
+            f"Đã ghi {counts['same']} cặp ảnh “cùng chủ thể” và {counts['different']} cặp “khác chủ thể” "
             "từ các lần bạn gộp / tách / bỏ ảnh.",
             tuning.describe() if tuning.applied else tuning.reason,
-            "Áp dụng ở lần bấm 🧠 Nhận diện người tiếp theo.",
+            "Áp dụng ở lần bấm 🧠 Nhận diện chủ thể tiếp theo.",
             "",
             "<b>Gu chọn ảnh</b>",
             f"Đã ghi {store.culling_count()} lần bạn bấm Giữ/Loại (dùng cho các bản sau).",
             "",
-            "Dữ liệu học chỉ có số đo độ giống, không có ảnh, tên file hay tên người, "
+            "Dữ liệu học chỉ có số đo độ giống, không có ảnh, tên file hay tên chủ thể, "
             "và chỉ nằm trên máy này.",
         ]
         return "<br>".join(lines)
@@ -610,7 +610,7 @@ class MainWindow(QMainWindow):
             "Ảnh và các thư mục đã nhập không bị ảnh hưởng.")
         if sure == QMessageBox.StandardButton.Yes:
             self.teacher.store.forget()
-            self.status.setText("Đã xoá dữ liệu học. Bấm 🧠 Nhận diện người để gom lại theo mức mặc định.")
+            self.status.setText("Đã xoá dữ liệu học. Bấm 🧠 Nhận diện chủ thể để gom lại theo mức mặc định.")
 
     @staticmethod
     def _learning_dir() -> Path:
@@ -668,8 +668,8 @@ class MainWindow(QMainWindow):
         self.act_quality.setEnabled(not busy and detected > 0)
         self.act_select.setEnabled(not busy and scored > 0)
         self.act_quality.setToolTip(
-            "Bước 3: chấm điểm từng người trong ảnh (nét ở mắt, mặt, sáng, bố cục)."
-            + ("" if detected else " Hãy bấm 🧠 Nhận diện người trước."))
+            "Bước 3: chấm điểm từng chủ thể trong ảnh (nét ở mắt, mặt, sáng, bố cục)."
+            + ("" if detected else " Hãy bấm 🧠 Nhận diện chủ thể trước."))
         self.act_select.setToolTip(
             "Bước 4: AI chọn N ảnh đẹp, khác dáng nhau; bạn xem lại rồi ⤴ Xuất ảnh."
             + ("" if scored else " Hãy bấm 📊 Phân tích ảnh trước."))
@@ -682,7 +682,7 @@ class MainWindow(QMainWindow):
         self._run_device = None
         thread.progress.connect(self._on_analyze_progress)
         thread.succeeded.connect(self._on_analyze_done)
-        title = "Nhận diện người" if mode == "people" else "Phân tích ảnh"
+        title = "Nhận diện chủ thể" if mode == "people" else "Phân tích ảnh"
         thread.failed.connect(lambda msg: QMessageBox.warning(self, title, msg))
         thread.finished.connect(self._on_analyze_thread_finished)
         self.analyze_thread = thread
@@ -713,10 +713,10 @@ class MainWindow(QMainWindow):
         if phase.startswith("device:"):  # where the AI runs, shown with every progress message
             self._run_device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(phase[7:], "CPU")
             return
-        label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện người…",
+        label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện chủ thể…",
                  "embed": "Đang so khuôn mặt và dáng người (ArcFace + ReID)…",
                  "quality": "Đang chấm điểm ảnh (độ nét đo trên ảnh gốc)…",
-                 "group": "Đang gom ảnh theo người…"}.get(phase, phase)
+                 "group": "Đang gom ảnh theo chủ thể…"}.get(phase, phase)
         if total and phase in ("detect", "embed", "quality"):
             self.progress.setRange(0, total)
             self.progress.setValue(done)
@@ -744,11 +744,11 @@ class MainWindow(QMainWindow):
             return
         people = self.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
         unknown = self.project.conn.execute(
-            "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE is_main = 1 AND subject_id IS NULL").fetchone()[0]
+            f"SELECT COUNT(*) FROM ({actions.UNIDENTIFIED_ASSETS})").fetchone()[0]
         review = len(merge_suggestions(self.project.conn))
         device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(summary["device"], "CPU")
         device += f", {_duration(time.monotonic() - getattr(self, '_analysis_started', time.monotonic()))}"
-        parts = [f"Nhận diện xong ({device}): {people} người", f"{unknown} ảnh chưa xác định"]
+        parts = [f"Nhận diện xong ({device}): {people} chủ thể", f"{unknown} ảnh chưa xác định"]
         if review:
             parts.append(f"{review} gợi ý cần xem lại")
         if summary["failed"]:
@@ -757,7 +757,7 @@ class MainWindow(QMainWindow):
         if summary.get("learning"):
             note += f" {summary['learning']}"
         self.status.setText(", ".join(parts) + "." + note
-                            + " Hãy kiểm tra, gộp/tách người cho đúng, rồi bấm 📊 Phân tích ảnh.")
+                            + " Hãy kiểm tra, gộp/tách chủ thể cho đúng, rồi bấm 📊 Phân tích ảnh.")
 
     def _on_analyze_thread_finished(self) -> None:
         if self.sender() is not self.analyze_thread:
@@ -786,7 +786,7 @@ class MainWindow(QMainWindow):
         self.people.clear()
         if self.project is not None:
             for r in actions.subjects_summary(self.project.conn):
-                text = f"{r['display_name'] or f'Người {r[0]}'}  ·  {r['photos']} ảnh"
+                text = f"{r['display_name'] or f'Chủ thể {r[0]}'}  ·  {r['photos']} ảnh"
                 if r["suggested"]:
                     text += f"  ·  {r['suggested']}?"
                 item = QListWidgetItem(text)
@@ -797,7 +797,7 @@ class MainWindow(QMainWindow):
                 item.setCheckState(Qt.CheckState.Checked if r["id"] in checked else Qt.CheckState.Unchecked)
                 self.people.addItem(item)
             unknown = self.project.conn.execute(
-                "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE is_main = 1 AND subject_id IS NULL").fetchone()[0]
+                f"SELECT COUNT(*) FROM ({actions.UNIDENTIFIED_ASSETS})").fetchone()[0]
             if unknown:
                 item = QListWidgetItem(f"❔ Chưa xác định  ·  {unknown} ảnh")
                 item.setData(Qt.ItemDataRole.UserRole, ("unidentified", None))
@@ -848,7 +848,7 @@ class MainWindow(QMainWindow):
     def _update_merge_action(self) -> None:
         n = len(self._people_to_merge())
         self.act_merge.setEnabled(self.project is not None and n >= 2)
-        self.act_merge.setText(f"🔗 Gộp {n} người" if n >= 2 else "🔗 Gộp người")
+        self.act_merge.setText(f"🔗 Gộp {n} chủ thể" if n >= 2 else "🔗 Gộp chủ thể")
 
     def _selected_subjects(self) -> list[int]:
         out = []
@@ -863,7 +863,7 @@ class MainWindow(QMainWindow):
         if self.project is None or item is None or item.data(Qt.ItemDataRole.UserRole)[0] != "subject":
             return
         sid = item.data(Qt.ItemDataRole.UserRole)[1]
-        name, ok = QInputDialog.getText(self, "Đặt tên", "Tên người này (để trống = bỏ tên):",
+        name, ok = QInputDialog.getText(self, "Đặt tên", "Tên chủ thể này (để trống = bỏ tên):",
                                         text=actions.subject_label(self.project.conn, sid))
         if ok:
             with self.project.transaction() as conn:
@@ -881,8 +881,8 @@ class MainWindow(QMainWindow):
         names = ", ".join(actions.subject_label(self.project.conn, i) for i in ids)
         total = sum(summary[i]["photos"] for i in ids if i in summary)
         if QMessageBox.question(
-                self, "Gộp người",
-                f"Gộp {names} thành một người ({total} ảnh), giữ tên \"{actions.subject_label(self.project.conn, keep)}\"?\n"
+                self, "Gộp chủ thể",
+                f"Gộp {names} thành một chủ thể ({total} ảnh), giữ tên \"{actions.subject_label(self.project.conn, keep)}\"?\n"
                 "App sẽ nhớ việc gộp này cả khi nhận diện lại.") != QMessageBox.StandardButton.Yes:
             return
         with self.project.transaction() as conn:
@@ -917,8 +917,8 @@ class MainWindow(QMainWindow):
             return
         menu = QMenu(self)
         rename = menu.addAction("Đặt tên…") if len(ids) == 1 else None
-        merge = menu.addAction(f"Gộp {len(ids)} người này thành một") if len(ids) >= 2 else None
-        different = menu.addAction("Đây là hai người khác nhau") if len(ids) == 2 else None
+        merge = menu.addAction(f"Gộp {len(ids)} chủ thể này thành một") if len(ids) >= 2 else None
+        different = menu.addAction("Đây là hai chủ thể khác nhau") if len(ids) == 2 else None
         chosen = menu.exec(self.people.mapToGlobal(pos))  # type: ignore[arg-type]
         if chosen is None:
             return
@@ -944,12 +944,12 @@ class MainWindow(QMainWindow):
         if flt is Filter.SUBJECT and target is not None:
             name = actions.subject_label(self.project.conn, target)
             confirm = menu.addAction(f"Đúng là {name}")
-            remove = menu.addAction(f"Không phải {name} — bỏ khỏi người này")
-        assign_menu = menu.addMenu("Gán cho người…")
+            remove = menu.addAction(f"Không phải {name} — bỏ khỏi chủ thể này")
+        assign_menu = menu.addMenu("Gán cho chủ thể…")
         targets = {}
         for r in actions.subjects_summary(self.project.conn):
             if r["id"] != target:
-                targets[assign_menu.addAction(r["display_name"] or f"Người {r['id']}")] = r["id"]
+                targets[assign_menu.addAction(r["display_name"] or f"Chủ thể {r['id']}")] = r["id"]
         assign_menu.setEnabled(bool(targets))
         chosen = menu.exec(self.grid.viewport().mapToGlobal(pos))  # type: ignore[arg-type]
         if chosen is None:
@@ -1332,7 +1332,7 @@ class MainWindow(QMainWindow):
         self._update_counts()
         chosen = len({p.asset_id for p in picks})
         persons = len({p.subject_id for p in picks if p.subject_id is not None})
-        self.status.setText(f"AI đã chọn {chosen} ảnh" + (f" cho {persons} người" if per_person else "")
+        self.status.setText(f"AI đã chọn {chosen} ảnh" + (f" cho {persons} chủ thể" if per_person else "")
                             + (f", đánh dấu Giữ {marked} ảnh" if marked else "")
                             + ". Ảnh được chọn ở đầu danh sách (nhãn AI) — hãy xem lại, rồi ⤴ Xuất ảnh.")
         self.grid.scrollToTop()
@@ -1357,7 +1357,7 @@ class MainWindow(QMainWindow):
             "Space / Enter   xem lớn ↔ lưới,  Esc   về lưới\n"
             "Z   zoom 100% (ảnh độ phân giải đầy đủ) ↔ vừa khung\n"
             "+ / −   phóng to / thu nhỏ (tới 800%),  cuộn chuột: phóng tại vị trí chuột\n"
-            "E   phóng tới mắt của người chính (xem nét),  nháy đúp: 100% tại chỗ đó\n"
+            "E   phóng tới mắt của chủ thể chính (xem nét),  nháy đúp: 100% tại chỗ đó\n"
             "K   Giữ      X   Loại      U   bỏ đánh dấu\n"
             "1 – 5   chấm sao,  0   xoá sao\n"
             "F   Yêu thích\n"

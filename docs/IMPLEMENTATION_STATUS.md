@@ -282,7 +282,23 @@ the 431 labelled photos (AUC, same look vs different): SFace full-res 0.945 → 
 |---|---|---|
 | SFace + colours (0.2.x, still used without the new models) | 1.000 | 0.817 |
 | ArcFace + ReID, best recall found | 0.9965 (merges DSC_9754/9757 with 9763–9770 again) | 0.944 |
-| ArcFace + ReID, **shipped** (face_mid 0.53 and outfit_mid 0.70 keep that pair apart) | **1.000** | **0.911** |
+| ArcFace + ReID, 0.3.0b2 (face_mid 0.53 and outfit_mid 0.70 keep that pair apart) | **1.000** | **0.911** |
+| ArcFace + ReID, **0.3.0b3**, recalibrated on the app's own 1600 px vectors (debug bundle 3) | **1.000** | **0.922** |
+
+Debug bundle 3 (owner, 2026-10-27, vectors computed by the app at 1600 px): ArcFace separates better
+than on thumbnails — different people ≤ 5 min apart reach 0.45 at most (thumbnails 0.52), far apart
+0.68; same look median 0.77 near, 0.66 far. Thumbnail calibration had predicted 1.000 / 0.911 and the
+real vectors gave 1.000 / 0.910 with the same thresholds. 0.3.0b3 thresholds: face_strong 0.58,
+face_mid 0.50, outfit_mid 0.66 (rest unchanged). SFace on the same bundle: 1.000 / 0.808.
+
+Owner's report on bundle 3, fixed in 0.3.0b3: (1) a blurred person behind the cosplayer (back of the
+head; YuNet "face" not re-found at full resolution) formed a 2-photo subject, and after manual
+corrections two people of one photo sat in one subject → small groups that are never (nearly) the lead
+of any photo (prominence < 0.75, < 4 photos) are not subjects; a subject keeps one person per photo
+(merge + repair on every grouping); (2) "Chưa xác định" listed photos whose lead was known but had a
+second unknown person → it now lists only photos with no subject at all; (3) UI says "Chủ thể"
+instead of "Người". A sharpness ratio (background blur) was tried and rejected: on thumbnails and
+crops it did not separate the background people (ratios 0.57–1.06 vs 0.56–1.0 for real subjects).
 
 Caveats: ArcFace/ReID vectors were computed from the bundle's 400 px thumbnails (faces ~60 px); the
 app computes them at 1600 px, where similarities differ — **re-calibrate from a new debug bundle**

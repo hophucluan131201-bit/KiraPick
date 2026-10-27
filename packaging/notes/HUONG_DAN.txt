@@ -15,8 +15,8 @@ CÀI ĐẶT
 
 CÁCH DÙNG (4 BƯỚC, MỖI BƯỚC XONG SẼ DỪNG CHỜ BẠN)
 1. 📂 Nhập ảnh       : chọn thư mục ảnh của buổi chụp (RAW NEF/CR2/CR3/ARW..., JPEG).
-2. 🧠 Nhận diện người : AI gom ảnh theo từng người. Kiểm tra danh sách NGƯỜI bên trái,
-                       tick ô vuông + "🔗 Gộp người" nếu một người bị tách làm nhiều nhóm.
+2. 🧠 Nhận diện chủ thể : AI gom ảnh theo từng người. Kiểm tra danh sách CHỦ THỂ bên trái,
+                       tick ô vuông + "🔗 Gộp chủ thể" nếu một người bị tách làm nhiều nhóm.
 3. 📊 Phân tích ảnh   : chấm điểm kỹ thuật (nét ở mắt, mặt, ánh sáng, bố cục).
 4. ⭐ Chọn ảnh        : nhập số ảnh muốn chọn cho mỗi người; ảnh AI chọn có nhãn "AI".
 Xem lại bằng phím K (giữ) / X (loại) / U (bỏ đánh dấu), rồi "⤴ Xuất ảnh" -> "Ảnh đã Giữ".
@@ -31,9 +31,9 @@ LƯU Ý CỦA BẢN THỬ NGHIỆM
 - Có đánh giá mắt nhắm/mở và một "gợi ý thẩm mỹ" nhỏ bằng AI (TOPIQ); điểm chủ yếu là điểm kỹ thuật.
 - Mỗi máy có "bộ nhớ học" riêng (các lần bạn sửa nhóm người, giữ/loại ảnh) - chỉ là
   các con số, lưu trên máy bạn, không chia sẻ với ai. Sau vài lần gộp/tách người, lần
-  "🧠 Nhận diện người" sau sẽ chỉnh nhẹ mức gộp theo cách bạn sửa. Nút "🎓 AI đã học"
+  "🧠 Nhận diện chủ thể" sau sẽ chỉnh nhẹ mức gộp theo cách bạn sửa. Nút "🎓 AI đã học"
   cho xem app đã học gì và xoá để học lại từ đầu.
-- Nhận diện người dùng mô hình ArcFace (InsightFace) và YoutuReID. ArcFace và mô hình
+- Nhận diện chủ thể dùng mô hình ArcFace (InsightFace) và YoutuReID. ArcFace và mô hình
   chấm thẩm mỹ TOPIQ CHỈ ĐƯỢC DÙNG PHI THƯƠNG MẠI / NGHIÊN CỨU: chỉ dùng cá nhân, không
   bán, không dùng để nhận diện người cho dịch vụ hay giám sát (xem phần giấy phép).
 

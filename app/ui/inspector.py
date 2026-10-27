@@ -108,7 +108,7 @@ class Inspector(QWidget):
         f["Đánh dấu"].setText(flag)
         f["Sao"].setText("★" * rec.rating if rec.rating else "chưa chấm")
         f["Yêu thích"].setText("♥ có" if rec.favorite else "không")
-        f["Chủ thể"].setText(people or "chưa nhận diện — bấm 🧠 Nhận diện người")
+        f["Chủ thể"].setText(people or "chưa nhận diện — bấm 🧠 Nhận diện chủ thể")
         if rec.score is None:
             f["Điểm chất lượng"].setText("chưa chấm — bấm 📊 Phân tích ảnh")
         else:

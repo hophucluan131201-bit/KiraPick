@@ -145,7 +145,7 @@ def why_not_picked(conn: sqlite3.Connection, asset_id: int) -> str | None:
         "SELECT DISTINCT subject_id FROM occurrences WHERE asset_id = ? AND subject_id IS NOT NULL", (asset_id,))]
     subject = params.get("subject_id") if params.get("mode") == "in_view" else (subjects[0] if subjects else None)
     if params.get("mode") == "per_person" and subject is None:
-        return "Không được chọn: chưa thuộc người nào (Chưa xác định)."
+        return "Không được chọn: chưa thuộc chủ thể nào (Chưa xác định)."
     picked = [r[0] for r in conn.execute(
         "SELECT asset_id FROM picks WHERE subject_id IS ?" if subject is None else
         "SELECT asset_id FROM picks WHERE subject_id = ?", (subject,))]
@@ -160,7 +160,7 @@ def why_not_picked(conn: sqlite3.Connection, asset_id: int) -> str | None:
         return (f"Không được chọn: gần giống {name.rsplit('/', 1)[-1]} ({better}) — "
                 "cùng dáng/khung hoặc chụp liên tiếp.")
     return (f"Không được chọn: đã đủ {params.get('n')} ảnh"
-            + (" cho người này" if params.get("mode") == "per_person" else "")
+            + (" cho chủ thể này" if params.get("mode") == "per_person" else "")
             + ", các ảnh được chọn có điểm cao hơn hoặc khác dáng hơn.")
 
 
