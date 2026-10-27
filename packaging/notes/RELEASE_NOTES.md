@@ -1,5 +1,9 @@
 ## KiraPick 2.0 – bản chính thức
 
+> **2.0.2 – "Cần xem lại" hỏi ít mà trúng hơn.** Chỉ hỏi khi hai chủ thể có trang phục khá giống nhau;
+> mặt hơi giống (do makeup) mà trang phục khác hẳn thì không hỏi nữa. Buổi chụp thử: từ 64 câu hỏi (7 câu đúng là
+> cùng một bộ) xuống 14 câu (6 câu đúng).
+>
 > **2.0.1 – bộ cài nhẹ hơn khoảng 370 MB.** Các mô hình AI lớn được lưu ở dạng nửa độ chính xác
 > (FP16); kết quả gom chủ thể trên buổi chụp thử giống hệt bản 2.0.0. Bỏ thêm vài thành phần Qt không dùng.
 

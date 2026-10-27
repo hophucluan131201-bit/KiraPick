@@ -197,17 +197,27 @@ def test_recluster_is_stable_and_respects_corrections(project: Project) -> None:
 def test_review_suggestions_and_mark_different(project: Project) -> None:
     a = _person()
     near = _blend(a, 0.50)  # similar-ish face (heavy makeup?), below the automatic level
-    _add(project, 1, a)
-    _add(project, 2, near)
+    _add(project, 1, a, outfit=RED)
+    _add(project, 2, near, minute=1, outfit=_blend(RED, 0.78))  # outfit close, but not enough to link
     recluster(project)
     subjects = list(_subjects(project))
     assert len(subjects) == 2
     sims = merge_suggestions(project.conn)
-    assert len(sims) == 1 and sims[0].similarity < FACE_STRONG and not sims[0].same_outfit
+    assert len(sims) == 1 and sims[0].similarity < FACE_STRONG and sims[0].look == pytest.approx(0.78, abs=0.01)
     actions.mark_different(project.conn, *subjects)
     assert merge_suggestions(project.conn) == []
     recluster(project)
     assert len(_subjects(project)) == 2
+
+
+def test_lookalike_faces_in_different_costumes_are_not_asked_about(project: Project) -> None:
+    """Owner's report: face 0.55, clearly different costumes -> do not ask."""
+    a = _person()
+    _add(project, 1, a, outfit=RED)
+    _add(project, 2, _blend(a, 0.55), minute=1, outfit=BLUE)
+    recluster(project)
+    assert len(_subjects(project)) == 2
+    assert merge_suggestions(project.conn) == []
 
 
 def test_recluster_marks_faceless_members_as_suggested(project: Project) -> None:

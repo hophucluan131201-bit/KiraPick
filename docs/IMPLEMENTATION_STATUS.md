@@ -314,6 +314,17 @@ The Test subset (old labels) measures 1.000 / 0.725 now. Remaining splits are mo
 stragglers (profile, motion blur, hands over face) that the owner can merge with the tick boxes +
 "🔗 Gộp người".
 
+## Release 2.0.2: review queue asks about looks, not faces (2026-10-27)
+
+Owner's report: "Cần xem lại" asked about two subjects in clearly different costumes because their
+faces reached 0.55 (makeup). On debug bundle 3 (1710 subject pairs, 10 really the same look) the old
+queue asked 64 questions, 7 of them the same look: face-only suggestions (face ≥ 0.35 within 30 min,
+or ≥ 0.50 anytime) were almost all different people. Now a pair is asked about when the median look
+similarity over their photos reaches `review_look` (ArcFace profile 0.63, SFace profile 0.75) and the
+faces, if both visible, reach `review_face_floor`; without any look to compare, faces must reach
+`review_face_anytime`. ArcFace profile: 14 questions, 6 the same look; SFace profile: 22 questions,
+12 the same look. Ranked by look + ½ face; the dialog shows both numbers.
+
 ## Release 2.0.1: size review (2026-10-27)
 
 - Repository: 9 MB, nothing large tracked (the two converted MediaPipe models, 6.8 MB, are needed).

@@ -100,11 +100,11 @@ class ReviewDialog(QDialog):
                 self.pics[col].setText("(không có ảnh mặt)")
             self.names[col].setText(f"<b>{actions.subject_label(self.project.conn, sid)}</b><br>{photos} ảnh")
         reason = f"Độ giống khuôn mặt AI: {s.similarity:.2f}" if s.similarity else "Không so được khuôn mặt"
-        if s.same_outfit:
-            reason += " · trang phục giống nhau, chụp cách nhau vài phút"
+        if s.look is not None:
+            reason += f" · trang phục / dáng người: {s.look:.2f}"
         self.similarity.setText(
-            f"{reason} — chưa đủ chắc để tự gộp. "
-            "Hai người trùng trang phục/makeup cũng có thể giống nhau; bạn quyết định."
+            f"{reason} — trang phục khá giống nhau nhưng chưa đủ chắc để tự gộp. "
+            "Có thể là cùng một bộ cosplay bị tách ra; bạn quyết định."
         )
 
     def next(self) -> None:

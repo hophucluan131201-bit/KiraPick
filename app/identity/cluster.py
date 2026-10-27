@@ -63,6 +63,7 @@ class Thresholds:
     review_face: float  # review queue: closest faces reach this and photos close in time ...
     review_face_anytime: float  # ... or faces this similar at any time
     review_face_floor: float  # review by look+time only if faces (when visible) reach this
+    review_look: float = 0.75  # review queue: typical look similarity two subjects need to be asked about
     body_weight: float = 0.0  # share of the whole-body (ReID) similarity in the look similarity
     window_s: float = 300  # look cues only within +-5 minutes (same look, same set)
     outfit_margin: float = 0.05  # best look match must beat the runner-up by this much
@@ -93,7 +94,7 @@ SFACE_HSV = Thresholds(
 ARCFACE_REID = Thresholds(
     "arcface+reid", face_strong=0.58, face_certain=0.70, far_outfit=0.55, outfit_link=0.72, face_with_outfit=0.35,
     face_mid=0.50, outfit_mid=0.66, average_guard=0.20, far_average=0.42, outfit_suggest=0.78,
-    review_face=0.35, review_face_anytime=0.50, review_face_floor=0.20, body_weight=0.5)
+    review_face=0.35, review_face_anytime=0.50, review_face_floor=0.20, review_look=0.63, body_weight=0.5)
 PROFILES = {t.name: t for t in (SFACE_HSV, ARCFACE_REID)}
 # Old names (tests, scripts): the SFace profile.
 FACE_STRONG = SFACE_HSV.face_strong
@@ -460,11 +461,17 @@ class Suggestion:
     a: int
     b: int
     similarity: float  # closest face similarity between the two subjects (0 if no faces to compare)
-    same_outfit: bool = False  # suggested because of the same look a few minutes apart
+    same_outfit: bool = False  # the looks are as close as the same costume's usually are
+    look: float | None = None  # typical (median) look similarity between their photos; None = not comparable
 
 
 def merge_suggestions(conn: sqlite3.Connection, limit: int = REVIEW_LIMIT) -> list[Suggestion]:
-    """Subject pairs that may be one person: faces fairly similar, or the same look within the window."""
+    """Subject pairs that may be one look the grouping split: similar outfits (and faces not against it).
+
+    A look is a costume: two subjects whose outfits are clearly different are not asked about,
+    however alike the faces (cosplay makeup makes different people look alike — owner's report:
+    face 0.55, different costumes, 57 of 64 such questions were different people).
+    """
     p = session_profile(conn)
     occs = [o for o in load_occurrences(conn, p) if o.subject_id is not None]
     different = _different_pairs(conn)
@@ -484,14 +491,12 @@ def merge_suggestions(conn: sqlite3.Connection, limit: int = REVIEW_LIMIT) -> li
             if assets_a & {o.asset_id for o in by_subject[b]}:
                 continue  # in one photo together -> two people
             face = float((faces[a] @ faces[b].T).max()) if a in faces and b in faces else None
-            look = max((look_similarity(q, r, p) or 0.0 for q in by_subject[a] for r in by_subject[b]
-                        if q.time is not None and r.time is not None and abs(q.time - r.time) <= p.window_s),
-                       default=0.0)
-            gap = min((abs(q.time - r.time) for q in by_subject[a] for r in by_subject[b]
-                       if q.time is not None and r.time is not None), default=float("inf"))
-            same_outfit = look >= p.outfit_link and (face is None or face >= p.review_face_floor)
-            similar_face = face is not None and (face >= p.review_face_anytime or
-                                                 (face >= p.review_face and gap <= p.review_near_s))
-            if similar_face or same_outfit:
-                out.append(Suggestion(a, b, round(face or 0.0, 3), same_outfit))
-    return sorted(out, key=lambda s: -(s.similarity + (0.2 if s.same_outfit else 0.0)))[:limit]
+            sims = [v for q in by_subject[a] for r in by_subject[b] if (v := look_similarity(q, r, p)) is not None]
+            look = float(np.median(sims)) if sims else None
+            if look is None:
+                ok = face is not None and face >= p.review_face_anytime  # nothing to compare but faces
+            else:
+                ok = look >= p.review_look and (face is None or face >= p.review_face_floor)
+            if ok:
+                out.append(Suggestion(a, b, round(face or 0.0, 3), look is not None, None if look is None else round(look, 3)))
+    return sorted(out, key=lambda s: -((s.look or 0.0) + 0.5 * s.similarity))[:limit]
