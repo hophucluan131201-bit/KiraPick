@@ -22,6 +22,9 @@ from app.ai.models import ModelRegistry, ModelState, sha256_of  # noqa: E402
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):  # Vietnamese messages on cp1252 consoles
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="report only, download nothing")
     parser.add_argument("--purpose", help="comma-separated purposes to fetch (default: all)")

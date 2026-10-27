@@ -15,6 +15,10 @@ Output: dist\installer\
 #>
 param([switch]$NonInteractive)
 $ErrorActionPreference = "Stop"
+# Python must print Vietnamese text even where the console code page is cp1252 (e.g. CI machines).
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 Set-Location (Split-Path -Parent $PSScriptRoot)
 $Root = (Get-Location).Path
 
