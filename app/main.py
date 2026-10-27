@@ -39,6 +39,11 @@ def _install_excepthook() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
+    if "--self-test" in argv:  # packaged app check, no window: Snorlu.exe --self-test report.json
+        from app.selftest import run
+
+        rest = argv[argv.index("--self-test") + 1:]
+        return run(Path(rest[0]) if rest else Path.cwd() / "snorlu-selftest.json")
     app = QApplication(argv)
     app.setApplicationName("Snorlu AI Culling")
     app.setOrganizationName("Snorlu")

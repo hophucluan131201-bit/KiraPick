@@ -47,7 +47,7 @@
    "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_m.onnx",
    "provenance": "Megvii-BaseDetection/YOLOX release 0.1.1rc0 (LICENSE: Apache-2.0). More accurate, used on GPU.",
    "runtime": "onnxruntime",
-   "purpose": "identity"
+   "purpose": "gpu"
   },
   {
    "id": "face_quality",

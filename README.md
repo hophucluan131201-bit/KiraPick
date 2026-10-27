@@ -103,6 +103,21 @@ Reports, per file: camera, which preview is used, timings, orientation cross-che
 with SHA-256 that no source file changed. Add `--full` to also time full-resolution loading.
 Nothing is written next to your photos.
 
+## Build the installer (Windows, for sharing)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+```
+
+Uses a separate `.venv-build` (Python 3.12, exact versions in `packaging/requirements-installer.txt`,
+CPU ONNX Runtime — no CUDA, works on any PC), copies the SHA-256-verified models, builds the app with
+PyInstaller (`packaging/snorlu.spec`), runs `Snorlu.exe --self-test` with the network blocked, then
+writes `dist\installer\Snorlu-AI-Culling-<version>-portable.zip` and, if Inno Setup 6 is installed
+(`winget install --id JRSoftware.InnoSetup -e`), `Snorlu-AI-Culling-Setup-<version>.exe` (per-user, no admin).
+GitHub Actions can build the same on a clean Windows machine (`.github/workflows/build-windows.yml`,
+run it from the Actions tab). Guide for testers: `packaging/notes/HUONG_DAN.txt`; notices:
+`packaging/notes/LICENSES.txt`. The installer is not code-signed: Windows SmartScreen shows a warning.
+
 ## Tests
 
 ```powershell

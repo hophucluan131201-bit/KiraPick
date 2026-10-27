@@ -23,7 +23,7 @@ required — a listed provider does not prove inference works).
 | M3 Quality | **implemented + tested (synthetic + 7 real NEF)** | Per-person technical score: eye/face/body sharpness on the full-resolution image, eDifFIQA face quality, face/person exposure, framing; N/A redistribution + confidence; warnings. **Not measured: eyes closed, aesthetics** (no suitable offline model yet). Rubric mappings are starting values, not calibrated on the owner's choices |
 | M4 Best shot | **implemented + tested (synthetic)** | ⭐ Chọn ảnh: N per person or N in the current view, greedy MMR (λ 0.75) over score vs near-copy redundancy (layout similarity rescaled 0.85→0.97, same burst = copy), picks first then by score, optional Keep marks (never overrides user flags). No compare view yet; no burst table (bursts = same person ≤ 1.5 s apart) |
 | M5 Local VLM | not started | |
-| M6 Release | not started | |
+| M6 Release | **implemented; Windows build not yet run** | CPU installer: PyInstaller onedir + Inno Setup per-user, verified models (YuNet, SFace, YOLOX-S, eDifFIQA; YOLOX-M GPU-only not shipped), `--self-test` with network blocked, portable zip, CI workflow. Verified here: Linux PyInstaller build launches and passes the self-test offline. **Not verified: the Windows build/installer itself** (no Windows machine in this environment); unsigned (SmartScreen warning); no GPU variant yet; no app license chosen yet |
 
 ## Done in this session — RAW/JPEG ingest (`app/ingest/`)
 

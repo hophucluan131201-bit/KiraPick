@@ -1,0 +1,43 @@
+﻿SNORLU AI CULLING - BẢN THỬ NGHIỆM (BETA)
+=========================================
+
+Ứng dụng lọc ảnh cosplay / đường phố chạy hoàn toàn trên máy tính của bạn.
+- KHÔNG cần Internet sau khi cài. Ứng dụng không gửi ảnh hay dữ liệu đi đâu cả.
+- KHÔNG bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc. Xuất ảnh = sao chép.
+
+CÀI ĐẶT
+1. Chạy file Snorlu-AI-Culling-Setup-....exe.
+2. Nếu Windows hiện "Windows protected your PC" (Windows đã bảo vệ máy tính):
+   bấm "More info" (Thông tin thêm) -> "Run anyway" (Vẫn chạy).
+   Lý do: bộ cài thử nghiệm chưa có chữ ký số trả phí, không phải virus.
+3. Bấm Next cho tới khi xong. Không cần quyền Administrator.
+   Ứng dụng cài vào: %LOCALAPPDATA%\Programs\Snorlu AI Culling
+
+CÁCH DÙNG (4 BƯỚC, MỖI BƯỚC XONG SẼ DỪNG CHỜ BẠN)
+1. 📂 Nhập ảnh       : chọn thư mục ảnh của buổi chụp (RAW NEF/CR2/CR3/ARW..., JPEG).
+2. 🧠 Nhận diện người : AI gom ảnh theo từng người. Kiểm tra danh sách NGƯỜI bên trái,
+                       tick ô vuông + "🔗 Gộp người" nếu một người bị tách làm nhiều nhóm.
+3. 📊 Phân tích ảnh   : chấm điểm kỹ thuật (nét ở mắt, mặt, ánh sáng, bố cục).
+4. ⭐ Chọn ảnh        : nhập số ảnh muốn chọn cho mỗi người; ảnh AI chọn có nhãn "AI".
+Xem lại bằng phím K (giữ) / X (loại) / U (bỏ đánh dấu), rồi "⤴ Xuất ảnh" -> "Ảnh đã Giữ".
+
+Phím tắt hiện ở thanh nhỏ dưới khu vực ảnh; F1 để xem đầy đủ.
+Xem ảnh lớn: Space. Về lưới: Esc. Phóng tới mắt để xem nét: E. Phóng to: + / cuộn chuột.
+
+LƯU Ý CỦA BẢN THỬ NGHIỆM
+- Bản này chạy AI bằng CPU (không cần card đồ hoạ). Nhận diện + phân tích khoảng
+  vài phút cho 400-500 ảnh, tuỳ máy.
+- Chưa đánh giá được: mắt nhắm/mở và độ đẹp nghệ thuật. Điểm chỉ là điểm kỹ thuật.
+- Mỗi máy có "bộ nhớ học" riêng (các lần bạn sửa nhóm người, giữ/loại ảnh) - chỉ là
+  các con số, lưu trên máy bạn, không chia sẻ với ai.
+
+DỮ LIỆU CỦA ỨNG DỤNG
+- %LOCALAPPDATA%\Snorlu\Snorlu AI Culling\sessions : ghi nhớ từng thư mục ảnh (tự xoá sau 30 ngày không mở)
+- %LOCALAPPDATA%\Snorlu\Snorlu AI Culling\learning : bộ nhớ học
+- %LOCALAPPDATA%\Snorlu\Snorlu AI Culling\logs     : file log (gửi kèm khi báo lỗi)
+Gỡ cài đặt (Settings -> Apps) chỉ xoá chương trình; ảnh và dữ liệu trên vẫn giữ nguyên.
+
+KIỂM TRA KHI CÓ LỖI
+Mở PowerShell trong thư mục cài đặt và chạy:
+  .\Snorlu.exe --self-test "$env:USERPROFILE\Desktop\snorlu-selftest.json"
+rồi gửi file snorlu-selftest.json (trên Desktop) và thư mục logs cho người chia sẻ ứng dụng.

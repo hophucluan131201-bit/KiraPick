@@ -36,7 +36,8 @@ class ModelSpec:
     url: str
     provenance: str
     runtime: str
-    purpose: str = "identity"  # "identity": needed to group people; "quality": optional scoring
+    purpose: str = "identity"  # "identity": needed to group people; "quality": optional scoring;
+    # "gpu": larger model used only when CUDA really runs (not shipped in the CPU installer)
 
 
 @dataclass(frozen=True, slots=True)

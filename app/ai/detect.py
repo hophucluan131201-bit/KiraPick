@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from app.ai.models import ModelRegistry
+from app.ai.models import ModelRegistry, ModelState
 from app.ai.runtime import Session, create_session
 
 Box = tuple[float, float, float, float]
@@ -63,7 +63,7 @@ class PersonDetector:
     @classmethod
     def load(cls, registry: ModelRegistry, *, prefer_gpu: bool = True) -> PersonDetector:
         session = create_session(registry.require("person_detector_s"), prefer_gpu=False)
-        if prefer_gpu:
+        if prefer_gpu and registry.status("person_detector_m").state is ModelState.READY:  # optional (GPU builds)
             gpu = create_session(registry.require("person_detector_m"), prefer_gpu=True)
             if gpu.device == "cuda":
                 session = gpu  # the larger model only when it really runs on the GPU

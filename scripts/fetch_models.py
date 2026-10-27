@@ -2,6 +2,7 @@
 
     python scripts/fetch_models.py            # fetch missing/corrupt files
     python scripts/fetch_models.py --check    # only report
+    python scripts/fetch_models.py --purpose identity,quality --dest build/models   # installer set
 
 Every file is verified against the SHA-256 in configs/model-manifest.json; a
 mismatch is deleted (only the .part file we wrote) and reported. The app
@@ -23,8 +24,13 @@ from app.ai.models import ModelRegistry, ModelState, sha256_of  # noqa: E402
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="report only, download nothing")
+    parser.add_argument("--purpose", help="comma-separated purposes to fetch (default: all)")
+    parser.add_argument("--dest", type=Path, help="folder for the weights (default: the app's models folder)")
     args = parser.parse_args()
-    registry = ModelRegistry()
+    registry = ModelRegistry(args.dest)
+    if args.purpose:
+        wanted = set(args.purpose.split(","))
+        registry.specs = {k: v for k, v in registry.specs.items() if v.purpose in wanted}
     registry.models_dir.mkdir(parents=True, exist_ok=True)
     failures = 0
     for status in registry.all_status():

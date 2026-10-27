@@ -1,0 +1,36 @@
+# Builds the Windows installer on a clean Windows machine and keeps it as a downloadable artifact.
+# Runs on demand (Actions -> "Build Windows installer" -> Run workflow) and for version tags (v*).
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Build, self-test (network blocked), package
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snorlu-windows-installer
+          path: |
+            dist/installer/*.exe
+            dist/installer/*.zip
+            dist/selftest.json
+          retention-days: 30
