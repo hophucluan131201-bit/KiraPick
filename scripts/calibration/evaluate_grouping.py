@@ -38,7 +38,34 @@ def _number(relative_path: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def evaluate(db_path: Path, looks: dict[str, list[int]]) -> dict:
+def add_plus_vectors(project: Project) -> int:
+    """ArcFace + ReID vectors from the cached thumbnails, for bundles made before those models.
+
+    Approximation: the app computes them on 1600 px images; thumbnails are 400 px.
+    """
+    import cv2
+    import numpy as np
+
+    from app.ai.models import ModelRegistry
+    from app.workers import embed_job
+
+    conn = project.conn
+    if conn.execute("SELECT 1 FROM occurrence_vectors WHERE kind = 'face_arc' LIMIT 1").fetchone():
+        return 0
+    models = embed_job.Embedders(ModelRegistry(), prefer_gpu=False)
+    done = 0
+    for p in conn.execute("SELECT asset_id, file_name FROM previews WHERE kind = 'thumb'").fetchall():
+        img = cv2.imdecode(np.fromfile(project.cache_dir / p["file_name"], dtype=np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            continue
+        rows = conn.execute("SELECT id, person_box, face_box, face_score FROM occurrences WHERE asset_id = ?",
+                            (p["asset_id"],)).fetchall()
+        embed_job.store(project, p["asset_id"], embed_job.vectors_for(img, rows, models))
+        done += 1
+    return done
+
+
+def evaluate(db_path: Path, looks: dict[str, list[int]], tune=None, plus: bool = False) -> dict:  # noqa: ANN001
     look_of = {n: look for look, numbers in looks.items() for n in numbers}
     project = Project.open(db_path.parent)
     try:
@@ -48,7 +75,12 @@ def evaluate(db_path: Path, looks: dict[str, list[int]]) -> dict:
             conn.execute("DELETE FROM subject_pairs")
             conn.execute("DELETE FROM subjects")
         refresh_outfits(project)
-        recluster(project)
+        if plus:
+            add_plus_vectors(project)
+        else:  # measure the SFace profile even if the bundle has ArcFace vectors
+            with project.transaction():
+                conn.execute("DELETE FROM occurrence_vectors WHERE kind IN ('face_arc', 'body')")
+        profile = recluster(project, tune).profile
         best: dict[int, tuple[float, int | None, str]] = {}
         for r in conn.execute("""SELECT a.relative_path, o.prominence, o.subject_id, o.assignment
                                  FROM occurrences o JOIN assets a ON a.id = o.asset_id
@@ -73,7 +105,7 @@ def evaluate(db_path: Path, looks: dict[str, list[int]]) -> dict:
         subject_look = {sid: {look_of[n] for n in ns} for sid, ns in groups.items() if sid is not None}
         useful = sum(1 for s in suggestions if subject_look.get(s.a, set()) & subject_look.get(s.b, set()))
         return {
-            "photos": len(best), "looks": len({look_of[n] for n in best}),
+            "profile": profile, "photos": len(best), "looks": len({look_of[n] for n in best}),
             "precision": tp / (tp + fp) if tp + fp else 1.0, "recall": tp / (tp + fn) if tp + fn else 1.0,
             "wrong_pairs": wrong, "groups": groups,
             "suggested": sum(1 for v in best.values() if v[2] == "suggested"),
@@ -87,6 +119,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("source", type=Path, help="kirapick_debug.zip or the folder it was extracted to")
     parser.add_argument("--labels", default="labels_aki_20261025", help="module in scripts/calibration with LOOKS")
+    parser.add_argument("--plus", action="store_true",
+                        help="ArcFace + ReID profile (vectors from the bundle, else computed from its thumbnails)")
     args = parser.parse_args()
     looks = importlib.import_module(args.labels).LOOKS
     with tempfile.TemporaryDirectory() as tmp:
@@ -103,8 +137,8 @@ def main() -> int:
             shutil.copyfile(args.source / DB_NAME, db)
             for f in (args.source / "thumbs").glob("*.jpg"):
                 shutil.copyfile(f, thumbs / f.name)
-        r = evaluate(db, looks)
-    print(f"{r['photos']} labelled photos, {r['looks']} looks")
+        r = evaluate(db, looks, plus=args.plus)
+    print(f"{r['photos']} labelled photos, {r['looks']} looks, profile {r['profile']}")
     print(f"precision {r['precision']:.3f}  recall {r['recall']:.3f}  "
           f"suggested(?) {r['suggested']}  review pairs {r['review']} ({r['review_useful']} really same look)")
     for x, y in r["wrong_pairs"]:

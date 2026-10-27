@@ -73,7 +73,7 @@ New-Item -ItemType Directory -Force -Path $models | Out-Null
 Get-ChildItem "models\weights\*.onnx" -ErrorAction SilentlyContinue | ForEach-Object {
     if (-not (Test-Path (Join-Path $models $_.Name))) { Copy-Item $_.FullName $models }
 }
-Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", "identity,quality,gpu", "--dest", $models)
+Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", "identity,identity_plus,quality,gpu", "--dest", $models)
 
 # Aesthetic hint (TOPIQ): converted from the PyTorch checkpoint in a separate, build-only venv.
 if (-not (Test-Path (Join-Path $models "topiq_iaa_res50.onnx.sha256"))) {

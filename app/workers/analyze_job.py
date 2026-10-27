@@ -56,6 +56,7 @@ class AnalyzeSummary:
     cancelled: bool = False
     device: str = "cpu"
     fallback_reason: str | None = None
+    learning: str | None = None  # what the grouping learnt from this user's corrections
 
 
 def _box_json(box: tuple[float, float, float, float] | None) -> str | None:
@@ -67,10 +68,12 @@ def _vec(v: np.ndarray) -> bytes:
 
 
 class AnalyzeJob:
-    def __init__(self, project: Project, registry: ModelRegistry | None = None, *, prefer_gpu: bool = True) -> None:
+    def __init__(self, project: Project, registry: ModelRegistry | None = None, *, prefer_gpu: bool = True,
+                 learning_dir: Path | None = None) -> None:
         self.project = project
         self.registry = registry or ModelRegistry()
         self.prefer_gpu = prefer_gpu
+        self.learning_dir = learning_dir  # this user's learning data (app.learning), optional
         self.crop_dir = project.cache_dir / "crops"
 
     # ----------------------------------------------------------- queue
@@ -118,6 +121,17 @@ class AnalyzeJob:
             summary.fallback_reason = persons.session.fallback_reason
             self.crop_dir.mkdir(parents=True, exist_ok=True)
             self._detect_all(todo, persons, faces, embedder, summary, progress, should_cancel)
+            del persons, faces, embedder  # one heavy model set at a time
+        if not summary.cancelled and mode != "quality":
+            from app.workers import embed_job
+
+            def embed_progress(phase: str, done: int, total: int) -> None:
+                if phase.startswith("device:") and not todo:
+                    summary.device = phase[len("device:"):]  # only this stage ran
+                progress(AnalyzeProgress(phase, done, total))
+
+            _, _, summary.cancelled = embed_job.run(self.project, self.registry, embed_progress, should_cancel,
+                                                    prefer_gpu=self.prefer_gpu)
         if not summary.cancelled and mode != "people":
             from app.workers import quality_job  # local import: avoids a cycle through app.quality
 
@@ -130,9 +144,17 @@ class AnalyzeJob:
         if not summary.cancelled and mode != "quality":
             from app.identity.cluster import recluster  # local import: clustering is pure, no models
 
+            from app.learning.tuning import tune_from_store
+
             progress(AnalyzeProgress("group", 0, 1))
             refresh_outfits(self.project)
-            recluster(self.project)
+
+            def tune(base):  # noqa: ANN001, ANN202 - this user's corrections shift the thresholds a little
+                tuning = tune_from_store(self.learning_dir, base)
+                summary.learning = tuning.describe()
+                return tuning.apply(base)
+
+            recluster(self.project, tune)
             progress(AnalyzeProgress("group", 1, 1))
         return summary
 
@@ -227,8 +249,8 @@ class AnalyzeJob:
                 conn.execute("DELETE FROM occurrences WHERE id = ?", (occ_id,))
             # New boxes: the quality measurements of this photo must be redone.
             conn.execute("DELETE FROM measurements WHERE asset_id = ? AND extractor = 'quality'", (asset_id,))
-            conn.execute("UPDATE stage_status SET state = 'pending', attempts = 0 WHERE asset_id = ? AND stage = 'quality'",
-                         (asset_id,))
+            conn.execute("""UPDATE stage_status SET state = 'pending', attempts = 0
+                            WHERE asset_id = ? AND stage IN ('quality', 'embed')""", (asset_id,))
             conn.execute(
                 """UPDATE stage_status SET state = 'done', stage_version = ?, attempts = attempts + 1, error = NULL,
                    updated_at = ? WHERE asset_id = ? AND stage = ?""",

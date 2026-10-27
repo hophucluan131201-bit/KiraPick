@@ -4,7 +4,7 @@ Statuses: **not started** / **implemented** (code exists, not fully tested) / **
 tests pass in the dev container) / **blocked**. "Tested" here never means "verified on the target
 Windows laptop" unless stated.
 
-Last update: 2026-10-27 — dev container: Linux x86-64, Python 3.13.17, no GPU, no display. First Windows field test received (see raw-support-matrix.md).
+Last update: 2026-10-27 (beta 0.3.0b2: ArcFace + ReID grouping, per-user tuning) — dev container: Linux x86-64, Python 3.13.17, no GPU, no display. First Windows field test received (see raw-support-matrix.md).
 
 ## Target machine (from `scripts/diagnose_hardware.py`, 2026-10-27)
 
@@ -19,7 +19,7 @@ required — a listed provider does not prove inference works).
 |---|---|---|
 | M0 Feasibility + safety | **tested** | RAW feasibility; AI runtime (offline-only providers, telemetry off, GPU→CPU fallback); model manifest + licenses. **CUDA verified on the RTX 2080 Super Max-Q** (2026-10-27, see below). OSNet/DINOv2 not fetched yet |
 | M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
-| M2 Identity | **implemented + tested (synthetic + 7 real photos)** | Detection, face embeddings, look-first grouping (face + outfit within 5 min), people panel, review queue, manual corrections that survive re-analysis. **Calibrated on one labelled shoot only** (precision 1.00 / recall 0.76, thin margin); no body re-ID model yet (OSNet/DINOv2 blocked from dev container) |
+| M2 Identity | **implemented + tested (synthetic + 7 real photos)** | Detection, face embeddings, look-first grouping (face + outfit within 5 min), people panel, review queue, manual corrections that survive re-analysis. **Calibrated on one labelled shoot only** (SFace: precision 1.00 / recall 0.82). Beta 0.3.0b2: optional ArcFace (non-commercial, owner-approved) + YoutuReID body vectors → 1.00 / 0.91 on the same shoot (from thumbnails; to re-check at app resolution), per-user threshold tuning with safety checks, 🎓 view/forget |
 | M3 Quality | **implemented + tested (synthetic + 7 real NEF)** | Per-person technical score: eye/face/body sharpness on the full-resolution image, eDifFIQA face quality, face/person exposure, framing; N/A redistribution + confidence; warnings. **Eyes open/closed measured since 0.2.0b4** (MediaPipe blendshapes); **aesthetics not measured** (no suitable offline model yet). Rubric mappings are starting values, not calibrated on the owner's choices |
 | M4 Best shot | **implemented + tested (synthetic)** | ⭐ Chọn ảnh: N per person or N in the current view, greedy MMR (λ 0.75) over score vs near-copy redundancy (layout similarity rescaled 0.85→0.97, same burst = copy), picks first then by score, optional Keep marks (never overrides user flags). No compare view yet; no burst table (bursts = same person ≤ 1.5 s apart) |
 | M5 Local VLM | not started | |
@@ -212,9 +212,28 @@ the user's answer. They are stored per Windows user in
 30-day session purge, are never part of an installer (each friend starts from the defaults), and
 contain no images, file names, paths, names or capture dates. Errors there never block a
 correction. Tested: `tests/unit/test_learning.py`.
-**Not yet:** using the examples (per-user threshold tuning with a safety check against past
-answers), a "forget what was learnt" button, and taste learning from Keep/Reject/stars (needs M3
-quality measurements first).
+**Step 2 (beta 0.3.0b2): using the examples** — `app/learning/tuning.py`. Before each grouping
+(🧠 Nhận diện người) the face and look link thresholds of the session's profile are shifted from this
+user's answers: stricter by up to 0.06, looser by up to 0.02, in steps of 0.02. Safety: ≥ 2 "same"
+and ≥ 2 "different" answers measured with the current models; a shift may never wrongly link more
+"different" pairs than the defaults; it must win a 5-fold cross-validation by answer; wrong links
+cost 3× a missed link; every answer weighs the same however many pairs it has. Store v5 keeps every
+cue (SFace, ArcFace, outfit colours, ReID) with versions and an answer id, so a later model change
+does not throw learning away. The 🎓 AI đã học button shows what was learnt and forgets it
+(confirmation). Taste learning from Keep/Reject is still recording only.
+
+Simulation on the labelled Aki shoot (`scripts/calibration/simulate_learning.py`: the "user" corrects one half —
+removes wrong photos, answers the review queue, merges split looks — and the learnt tuning is measured
+on the other half; ArcFace profile, thumbnail vectors):
+
+| Learn on → test on | Answers | First version (loosen ≤ 0.06) | Shipped (loosen ≤ 0.02) |
+|---|---|---|---|
+| first half → second | 10 merge, 13 different | face −0.06, look −0.06: **P 1.00 → 0.88**, R 0.954 → 0.978 | no shift (cross-validation): P 1.00, R 0.954 |
+| second half → first | 4 merge, 27 different | — | look −0.02: P 1.00, R 0.902 → 0.915 |
+
+The first version showed that "same person" answers alone push the thresholds down until unseen
+people merge — the pair-level proxy cannot see those people; hence the small loosening bound. Gains
+from learning are modest; its main job is to make the app stricter for users who often split people.
 
 ### Grouping calibration (owner's "Test" shoot, 2026-10-25)
 
@@ -251,6 +270,25 @@ central-strip descriptor separates looks better on the labelled pairs ≤ 5 min 
 |---|---|---|---|
 | before (whole-box histogram) | 0.996 | 0.830 | 67 |
 | now (banded descriptor, retuned) | **1.000** | 0.817 | 73 |
+
+**Beta 0.3.0b2: ArcFace + YoutuReID profile** (`app/ai/identity_plus.py`, embed stage
+`app/workers/embed_job.py`, profile `ARCFACE_REID` in `app/identity/cluster.py`). Pair separation on
+the 431 labelled photos (AUC, same look vs different): SFace full-res 0.945 → ArcFace on thumbnails
+0.959; photos > 5 min apart 0.858 → 0.925. Look = 0.5 × outfit colours + 0.5 × ReID: AUC far apart
+0.835 → 0.910. Thresholds by coordinate search + grids with precision 1.000 required
+(`python scripts/calibration/evaluate_grouping.py --plus bundle`):
+
+| Full shoot, 431 labelled photos | Precision | Recall |
+|---|---|---|
+| SFace + colours (0.2.x, still used without the new models) | 1.000 | 0.817 |
+| ArcFace + ReID, best recall found | 0.9965 (merges DSC_9754/9757 with 9763–9770 again) | 0.944 |
+| ArcFace + ReID, **shipped** (face_mid 0.53 and outfit_mid 0.70 keep that pair apart) | **1.000** | **0.911** |
+
+Caveats: ArcFace/ReID vectors were computed from the bundle's 400 px thumbnails (faces ~60 px); the
+app computes them at 1600 px, where similarities differ — **re-calibrate from a new debug bundle**
+(it contains the app's own vectors). One shoot only; the margin on the pink-and-white pair is thin
+(ArcFace 0.52 vs face_mid 0.53, look 0.69 vs 0.70). Old sessions get the new vectors on the next
+🧠 click without re-detection or re-measuring quality (embed stage only adds vectors).
 
 The Test subset (old labels) measures 1.000 / 0.725 now. Remaining splits are mostly 1–3 photo
 stragglers (profile, motion blur, hands over face) that the owner can merge with the tick boxes +

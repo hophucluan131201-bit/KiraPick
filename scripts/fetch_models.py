@@ -12,8 +12,10 @@ itself never downloads anything.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 import urllib.request
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -60,15 +62,22 @@ def main() -> int:
                 continue
         else:
             print(f"Đang tải {spec.file} ({spec.size / 1e6:.0f} MB) …", flush=True)
+            download = part.with_suffix(".zip.part") if spec.archive_member else part
             try:
-                with urllib.request.urlopen(spec.url, timeout=120) as resp, open(part, "wb") as out:  # noqa: S310
+                with urllib.request.urlopen(spec.url, timeout=120) as resp, open(download, "wb") as out:  # noqa: S310
                     while chunk := resp.read(1 << 20):
                         out.write(chunk)
-            except OSError as exc:
+                if spec.archive_member:  # only the one pinned member is extracted
+                    with zipfile.ZipFile(download) as zf, zf.open(spec.archive_member) as src, open(part, "wb") as out:
+                        shutil.copyfileobj(src, out, 1 << 20)
+            except (OSError, zipfile.BadZipFile, KeyError) as exc:
                 part.unlink(missing_ok=True)
                 print(f"  LỖI tải: {exc}")
                 failures += 1
                 continue
+            finally:
+                if download != part:
+                    download.unlink(missing_ok=True)
         if sha256_of(part) != spec.sha256:
             part.unlink()
             print("  LỖI: SHA-256 không khớp, đã bỏ file tải về")

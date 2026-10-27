@@ -25,6 +25,12 @@ AI model weights (bundled, verified by SHA-256; see docs/model-licenses.md in th
 - TOPIQ image aesthetics (CFANet, ResNet50, AVA) from IQA-PyTorch - PolyForm Noncommercial 1.0.0,
   Copyright (c) 2022 Chaofeng Chen; C. Chen et al., "TOPIQ: A Top-down Approach from Semantics to
   Distortions for Image Quality Assessment", IEEE TIP 2024. Non-commercial use only.
+- ArcFace face recognition (ResNet50, WebFace600K; w600k_r50.onnx from InsightFace buffalo_l,
+  release v0.7) - InsightFace pretrained models are "available for non-commercial research
+  purposes only". Deng et al., "ArcFace: Additive Angular Margin Loss for Deep Face Recognition",
+  CVPR 2019; https://github.com/deepinsight/insightface. Non-commercial use only.
+- YoutuReID person re-identification 2021nov (OpenCV Zoo, Tencent Youtu Lab) - Apache-2.0.
+  Trained on the research datasets Market-1501, DukeMTMC-reID and MSMT17.
 - eDifFIQA(T) face image quality jun2024 (OpenCV Zoo) - CC BY 4.0.
   Attribution: Ž. Babnik, P. Peer, V. Štruc, "eDifFIQA: Towards Efficient Face Image
   Quality Assessment based on Denoising Diffusion Probabilistic Models",

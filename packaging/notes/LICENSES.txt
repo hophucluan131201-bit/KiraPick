@@ -11,6 +11,26 @@ Required Notice: Copyright 2026 KiraPick (https://github.com/hophucluan131201-bi
 - Các thành phần của bên thứ ba bên dưới giữ nguyên giấy phép của họ; ghi chú
   "phi thương mại" ở trên chỉ áp dụng cho mã nguồn của KiraPick.
 
+LƯU Ý MIỄN TRỪ TRÁCH NHIỆM (bản beta)
+- Bản này có mô hình AI CHỈ ĐƯỢC DÙNG PHI THƯƠNG MẠI / NGHIÊN CỨU:
+  khuôn mặt ArcFace của InsightFace ("non-commercial research purposes only") và
+  chấm thẩm mỹ TOPIQ (PolyForm Noncommercial). Mô hình dáng người YoutuReID
+  (Apache-2.0) được huấn luyện trên dữ liệu nghiên cứu (Market-1501, DukeMTMC-reID,
+  MSMT17). Bản quyền các mô hình thuộc tác giả của chúng.
+- Khi cài và dùng bản này, bạn đồng ý chỉ dùng cho mục đích cá nhân, phi thương mại;
+  không bán lại, không dùng để kiếm tiền, không dùng để nhận diện người cho dịch vụ,
+  giám sát hay theo dõi ai.
+- Nhận diện người chỉ để gom ảnh bạn tự chụp, trên máy của bạn, hoàn toàn offline.
+  Hãy tôn trọng quyền riêng tư của người được chụp.
+- Kết quả AI có thể sai; hãy tự kiểm tra trước khi giao ảnh.
+
+DISCLAIMER (beta, English)
+This build contains AI model weights licensed for NON-COMMERCIAL / RESEARCH USE ONLY
+(InsightFace ArcFace; TOPIQ, PolyForm Noncommercial). YoutuReID (Apache-2.0) was trained
+on research datasets. By installing it you agree to use it only for personal,
+non-commercial purposes, not to sell it, and not to use it to identify people as a
+service, for surveillance or for tracking. Provided "as is", without warranty.
+
 THÀNH PHẦN BÊN THỨ BA ĐI KÈM (THIRD-PARTY COMPONENTS)
 
 Software
@@ -37,6 +57,12 @@ AI model weights (bundled, verified by SHA-256; see docs/model-licenses.md in th
 - TOPIQ image aesthetics (CFANet, ResNet50, AVA) from IQA-PyTorch - PolyForm Noncommercial 1.0.0,
   Copyright (c) 2022 Chaofeng Chen; C. Chen et al., "TOPIQ: A Top-down Approach from Semantics to
   Distortions for Image Quality Assessment", IEEE TIP 2024. Non-commercial use only.
+- ArcFace face recognition (ResNet50, WebFace600K; w600k_r50.onnx from InsightFace buffalo_l,
+  release v0.7) - InsightFace pretrained models are "available for non-commercial research
+  purposes only". Deng et al., "ArcFace: Additive Angular Margin Loss for Deep Face Recognition",
+  CVPR 2019; https://github.com/deepinsight/insightface. Non-commercial use only.
+- YoutuReID person re-identification 2021nov (OpenCV Zoo, Tencent Youtu Lab) - Apache-2.0.
+  Trained on the research datasets Market-1501, DukeMTMC-reID and MSMT17.
 - eDifFIQA(T) face image quality jun2024 (OpenCV Zoo) - CC BY 4.0.
   Attribution: Ž. Babnik, P. Peer, V. Štruc, "eDifFIQA: Towards Efficient Face Image
   Quality Assessment based on Denoising Diffusion Probabilistic Models",

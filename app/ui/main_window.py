@@ -227,6 +227,10 @@ class MainWindow(QMainWindow):
         tb.addAction(self.act_loupe)
         tb.addSeparator()
         tb.addAction(self.act_reset)
+        self.act_learning = QAction("🎓 AI đã học", self)
+        self.act_learning.setToolTip("Xem AI đã học gì từ các lần bạn sửa (chỉ trên máy này), hoặc xoá để học lại")
+        self.act_learning.triggered.connect(self.show_learning)
+        tb.addAction(self.act_learning)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
         tb.addAction(self.act_help)
@@ -562,11 +566,61 @@ class MainWindow(QMainWindow):
         elif self._last_import_root is not None:
             self.start_import(self._last_import_root)
 
+    def learning_text(self) -> str:
+        """What this user's corrections taught the app (for the 🎓 dialog)."""
+        from app.identity.cluster import ARCFACE_REID, SFACE_HSV, session_profile
+        from app.learning.tuning import tune
+
+        store = self.teacher.store
+        if store is None:
+            return "Không mở được dữ liệu học trên máy này; app dùng mức mặc định."
+        counts = store.identity_counts()
+        base = session_profile(self.project.conn) if self.project is not None else (
+            ARCFACE_REID if (self._registry or ModelRegistry()).ready("identity_plus") else SFACE_HSV)
+        tuning = tune(store.identity_examples(), base)
+        lines = [
+            "<b>Nhận diện người</b>",
+            f"Đã ghi {counts['same']} cặp ảnh “cùng người” và {counts['different']} cặp “khác người” "
+            "từ các lần bạn gộp / tách / bỏ ảnh.",
+            tuning.describe() if tuning.applied else tuning.reason,
+            "Áp dụng ở lần bấm 🧠 Nhận diện người tiếp theo.",
+            "",
+            "<b>Gu chọn ảnh</b>",
+            f"Đã ghi {store.culling_count()} lần bạn bấm Giữ/Loại (dùng cho các bản sau).",
+            "",
+            "Dữ liệu học chỉ có số đo độ giống, không có ảnh, tên file hay tên người, "
+            "và chỉ nằm trên máy này.",
+        ]
+        return "<br>".join(lines)
+
+    def show_learning(self) -> None:
+        box = QMessageBox(self)
+        box.setWindowTitle("AI đã học")
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText(self.learning_text())
+        forget = box.addButton("Xoá dữ liệu học…", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("Đóng", QMessageBox.ButtonRole.RejectRole)
+        forget.setEnabled(self.teacher.store is not None)
+        box.exec()
+        if box.clickedButton() is not forget or self.teacher.store is None:
+            return
+        sure = QMessageBox.question(
+            self, "Xoá dữ liệu học",
+            "Xoá mọi thứ AI đã học từ các lần bạn sửa trên máy này? App sẽ quay về mức mặc định.\n"
+            "Ảnh và các thư mục đã nhập không bị ảnh hưởng.")
+        if sure == QMessageBox.StandardButton.Yes:
+            self.teacher.store.forget()
+            self.status.setText("Đã xoá dữ liệu học. Bấm 🧠 Nhận diện người để gom lại theo mức mặc định.")
+
+    @staticmethod
+    def _learning_dir() -> Path:
+        return sessions_dir().parent / "learning"
+
     @staticmethod
     def _open_learning() -> LearningStore | None:
         """This user's learning data (never shared with the app); optional."""
         try:
-            return LearningStore(sessions_dir().parent / "learning")
+            return LearningStore(MainWindow._learning_dir())
         except Exception:  # noqa: BLE001 - the app works without it
             log.exception("learning data unavailable")
             return None
@@ -623,7 +677,7 @@ class MainWindow(QMainWindow):
     def start_analysis(self, mode: str = "people") -> AnalyzeThread | None:
         if self.project is None or self.import_thread is not None or self.analyze_thread is not None:
             return None
-        thread = AnalyzeThread(self.project.folder, mode)
+        thread = AnalyzeThread(self.project.folder, mode, self._learning_dir())
         self._analysis_started = time.monotonic()
         self._run_device = None
         thread.progress.connect(self._on_analyze_progress)
@@ -660,9 +714,10 @@ class MainWindow(QMainWindow):
             self._run_device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(phase[7:], "CPU")
             return
         label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện người…",
+                 "embed": "Đang so khuôn mặt và dáng người (ArcFace + ReID)…",
                  "quality": "Đang chấm điểm ảnh (độ nét đo trên ảnh gốc)…",
                  "group": "Đang gom ảnh theo người…"}.get(phase, phase)
-        if total and phase in ("detect", "quality"):
+        if total and phase in ("detect", "embed", "quality"):
             self.progress.setRange(0, total)
             self.progress.setValue(done)
             where = f" [{self._run_device}]" if getattr(self, "_run_device", None) else ""
@@ -699,6 +754,8 @@ class MainWindow(QMainWindow):
         if summary["failed"]:
             parts.append(f"{summary['failed']} ảnh lỗi")
         note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
+        if summary.get("learning"):
+            note += f" {summary['learning']}"
         self.status.setText(", ".join(parts) + "." + note
                             + " Hãy kiểm tra, gộp/tách người cho đúng, rồi bấm 📊 Phân tích ảnh.")
 

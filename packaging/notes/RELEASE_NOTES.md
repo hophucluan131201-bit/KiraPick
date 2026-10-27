@@ -1,8 +1,19 @@
 ## KiraPick – bản thử nghiệm (beta)
 
-> **0.3.0b1 – bản thử nghiệm điểm thẩm mỹ.** Thêm *gợi ý thẩm mỹ* bằng AI (TOPIQ, học từ ảnh thi
-> chung AVA, không riêng cosplay; trọng số nhỏ 10/110). Mô hình này chỉ được dùng **phi thương mại**.
-> Bộ cài nặng hơn khoảng 250 MB. Bản ổn định trước đó (0.2.0b4) vẫn giữ nguyên ở dưới.
+> **0.3.0b2 – nhận diện người tốt hơn và tự học.**
+> - Khuôn mặt **ArcFace** (InsightFace) và dáng người **YoutuReID**: gom đúng người hơn, nhất là ảnh chụp
+>   cách xa nhau về thời gian và ảnh không thấy mặt. Lần đầu mở lại một thư mục cũ, bấm
+>   **🧠 Nhận diện người**: app tính thêm cho các ảnh đã có, không phải nhận diện lại từ đầu.
+> - **Tự học từ các lần bạn sửa**: mỗi lần gộp / tách / bỏ ảnh khỏi một người, app ghi lại và
+>   chỉnh nhẹ mức gộp ở lần **🧠 Nhận diện người** sau. Có kiểm tra an toàn, chỉ học trên máy của bạn;
+>   xem hoặc xoá bằng nút **🎓 AI đã học**.
+> - Bộ cài nặng hơn khoảng 280 MB.
+>
+> **Lưu ý:** ArcFace và TOPIQ **chỉ được dùng phi thương mại / nghiên cứu**; YoutuReID được huấn luyện trên
+> dữ liệu nghiên cứu. Chỉ dùng cá nhân, không bán, không dùng để nhận diện người cho dịch vụ hay giám sát.
+> Chi tiết: phần *Lưu ý miễn trừ trách nhiệm* trong README và file giấy phép trong bộ cài.
+>
+> 0.3.0b1: gợi ý thẩm mỹ bằng AI (TOPIQ). Bản ổn định trước đó (0.2.0b4) vẫn giữ nguyên ở dưới.
 
 Ứng dụng lọc ảnh cosplay / đường phố, chạy **hoàn toàn offline** trên Windows 10/11.
 Không cần cài Git hay Python — mọi thứ đã nằm trong bộ cài. Có card đồ hoạ (NVIDIA, AMD, Intel) thì AI tự dùng card qua DirectML; không có thì chạy bằng CPU.

@@ -436,6 +436,28 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     assert all(w.people.item(i).checkState() == Qt.CheckState.Unchecked for i in range(w.people.count()))
     assert not w.act_merge.isEnabled()
 
+    # 🎓: what was learnt, and forgetting it (after a confirmation)
+    from app.learning.store import PairEvidence
+
+    assert "Chưa có lần sửa nào" in w.learning_text()  # these photos have no face / outfit numbers
+    w.teacher.store.add_identity("merge", True, [PairEvidence(0.7, 0.9, 30.0)], "sface-2021dec", "x")
+    text = w.learning_text()
+    assert "Đã ghi 1 cặp ảnh “cùng người”" in text and "Cần thêm lần sửa" in text
+
+    class _Box(QMessageBox):  # press "Xoá dữ liệu học…" without showing the dialog
+        def exec(self) -> int:  # noqa: A003
+            self._clicked = next(b for b in self.buttons() if "Xoá" in b.text())
+            return 0
+
+        def clickedButton(self):  # noqa: ANN201, N802
+            return self._clicked
+
+    monkeypatch.setattr(mw, "QMessageBox", _Box)
+    monkeypatch.setattr(_Box, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    w.act_learning.trigger()
+    assert w.teacher.store.identity_counts() == {"same": 0, "different": 0}
+    assert "Đã xoá dữ liệu học" in w.status.text()
+
 
 def test_ai_selection_puts_picks_first_marks_keep_and_explains(qtbot, env: dict) -> None:
     import numpy as np

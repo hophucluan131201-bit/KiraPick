@@ -26,6 +26,31 @@
    "purpose": "identity"
   },
   {
+   "id": "face_embedder_arcface",
+   "name": "ArcFace face recognition (InsightFace buffalo_l, ResNet50 WebFace600K)",
+   "file": "w600k_r50.onnx",
+   "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
+   "size": 174383860,
+   "license": "InsightFace-NonCommercial-Research",
+   "url": "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip",
+   "archive_member": "w600k_r50.onnx",
+   "provenance": "deepinsight/insightface release v0.7, buffalo_l.zip member w600k_r50.onnx (code MIT; the pretrained models 'are available for non-commercial research purposes only'). 512-d embedding of a 112x112 face aligned to the ArcFace 5-point template, RGB (x-127.5)/127.5. Owner approved its use in this non-commercial app with a disclaimer (2026-10-27). On the owner's labelled shoot (thumbnails) pair AUC 0.959 vs 0.945 for SFace at full resolution.",
+   "runtime": "onnxruntime",
+   "purpose": "identity_plus"
+  },
+  {
+   "id": "body_reid",
+   "name": "YoutuReID person re-identification (2021nov)",
+   "file": "person_reid_youtu_2021nov.onnx",
+   "sha256": "0579683334d4b9440221606dcb461656dd0dc64143b18f48faedaced9b4f580d",
+   "size": 106878407,
+   "license": "Apache-2.0",
+   "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/person_reid_youtureid/person_reid_youtu_2021nov.onnx",
+   "provenance": "opencv/opencv_zoo@48b10fa models/person_reid_youtureid (LICENSE: Apache-2.0, Tencent Youtu Lab). Whole-body appearance embedding of a person crop resized to 128x256, RGB, ImageNet mean/std. Trained on street pedestrians, not cosplay: used only together with time and face cues.",
+   "runtime": "opencv",
+   "purpose": "identity_plus"
+  },
+  {
    "id": "person_detector_s",
    "name": "YOLOX-S (COCO, person class used)",
    "file": "yolox_s.onnx",

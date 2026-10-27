@@ -63,11 +63,13 @@ def run(report_path: Path) -> int:
         report["models_dir"] = str(registry.models_dir)
         report["models"] = {s.spec.id: s.state.value for s in registry.all_status()}
         missing = [i for i, st in report["models"].items()
-                   if st != ModelState.READY.value and registry.specs[i].purpose in ("identity", "quality")]
+                   if st != ModelState.READY.value
+                   and registry.specs[i].purpose in ("identity", "identity_plus", "quality")]
         if missing:
             raise RuntimeError(f"models not ready: {missing}")
         report["steps"].append("models verified (SHA-256)")
         report["aesthetic_model"] = report["models"].get("aesthetic", "not in manifest")
+        report["identity_plus"] = registry.ready("identity_plus")  # ArcFace + YoutuReID
         info = configure()
         report["onnxruntime"] = {"version": info.ort_version, "providers": list(info.available)}
         report["steps"].append("onnxruntime loaded")

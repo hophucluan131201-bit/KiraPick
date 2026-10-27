@@ -17,6 +17,7 @@ import sqlite3
 
 import numpy as np
 
+from app.ai.identity_plus import ARCFACE_VERSION, BODY_VERSION
 from app.identity.cluster import Occ, load_occurrences
 from app.identity.features import OUTFIT_VERSION
 from app.learning.store import LearningStore, PairEvidence
@@ -33,6 +34,10 @@ def _occurrences(conn: sqlite3.Connection, where: str, args: tuple) -> list[Occ]
     return [o for o in load_occurrences(conn) if o.id in ids]
 
 
+def _sim(u: np.ndarray | None, v: np.ndarray | None) -> float | None:
+    return float(u @ v) if u is not None and v is not None else None
+
+
 def evidence(a: list[Occ], b: list[Occ], limit: int = MAX_PAIRS_PER_ANSWER) -> list[PairEvidence]:
     """Pairs across the two sets (never two people of one photo), closest in time first."""
     pairs = []
@@ -41,11 +46,14 @@ def evidence(a: list[Occ], b: list[Occ], limit: int = MAX_PAIRS_PER_ANSWER) -> l
             if x.asset_id == y.asset_id or x.id == y.id:
                 continue
             dt = abs(x.time - y.time) if x.time is not None and y.time is not None else None
-            face = float(x.face @ y.face) if x.face is not None and y.face is not None else None
-            outfit = float(x.outfit @ y.outfit) if x.outfit is not None and y.outfit is not None else None
-            if face is None and outfit is None:
+            sface = _sim(x.face_sface, y.face_sface)
+            if sface is None and x.face_sface is None and x.face_arc is None:
+                sface = _sim(x.face, y.face)  # Occ built by hand (tests): the face it has
+            outfit = _sim(x.outfit, y.outfit)
+            arc, body = _sim(x.face_arc, y.face_arc), _sim(x.body, y.body)
+            if sface is None and outfit is None and arc is None and body is None:
                 continue
-            pairs.append(PairEvidence(face, outfit, dt))
+            pairs.append(PairEvidence(sface, outfit, dt, arc, body))
     pairs.sort(key=lambda p: np.inf if p.dt_s is None else p.dt_s)
     return pairs[:limit]
 
@@ -58,7 +66,8 @@ class Teacher:
         if self.store is None:
             return
         try:
-            self.store.add_identity(kind, same, pairs, FACE_VECTOR_VERSION, OUTFIT_VERSION)
+            self.store.add_identity(kind, same, pairs, FACE_VECTOR_VERSION, OUTFIT_VERSION, ARCFACE_VERSION,
+                                    BODY_VERSION)
         except Exception:  # noqa: BLE001 - learning is optional
             log.exception("could not save a learning example")
 

@@ -16,6 +16,9 @@ những tấm đẹp, khác dáng nhau để bạn duyệt lại.
 - **Không bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc.** Xuất ảnh = sao chép.
 - Đọc RAW (Nikon NEF ưu tiên, Canon CR2/CR3, Sony ARW, …) và JPEG.
 - Bản **0.3.0b1 (nhánh `beta`)** có thêm *gợi ý thẩm mỹ* bằng AI (TOPIQ, phi thương mại).
+- Bản **0.3.0b2 (nhánh `beta`)** nhận diện người tốt hơn bằng khuôn mặt **ArcFace** (InsightFace, chỉ dùng
+  phi thương mại / nghiên cứu) và dáng người **YoutuReID**, và **tự học** từ các lần bạn gộp / tách người
+  (xem [Lưu ý miễn trừ](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer)).
 - Tình trạng: **bản thử nghiệm (beta)**. Có phát hiện mắt nhắm / nhìn xuống; chưa đánh giá được độ đẹp nghệ thuật.
   Chi tiết: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) (tiếng Anh).
 
@@ -101,6 +104,9 @@ open/closed, face, exposure, framing) and picks the best, varied shots for you t
 - **Never edits, deletes, renames or moves original photos.** Export = copy.
 - Reads RAW (Nikon NEF first, Canon CR2/CR3, Sony ARW, …) and JPEG.
 - Version **0.3.0b1 (`beta` branch)** adds an AI *aesthetic hint* (TOPIQ, non-commercial).
+- Version **0.3.0b2 (`beta` branch)** groups people better with **ArcFace** faces (InsightFace,
+  non-commercial research use only) and **YoutuReID** whole-body vectors, and **learns** from your
+  merge / split corrections (see the [disclaimer](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer)).
 - Status: **beta**. Detects closed / downcast eyes; artistic quality is not judged yet.
   Details: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
@@ -200,3 +206,39 @@ any noncommercial purpose; commercial use needs the author's permission. Bundled
 and AI model weights keep their own licenses ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
 [docs/model-licenses.md](docs/model-licenses.md)); all of them allow this free, non-commercial
 distribution.
+
+## Lưu ý miễn trừ trách nhiệm / Disclaimer
+
+**Tiếng Việt.**
+- KiraPick là dự án cá nhân, **phi thương mại**, chia sẻ miễn phí cho bạn bè dùng thử. Không bán, không thu
+  phí, không quảng cáo; không dùng cho mục đích thương mại dưới bất kỳ hình thức nào.
+- Bản beta dùng một số mô hình AI **chỉ được phép dùng phi thương mại / nghiên cứu**:
+  khuôn mặt **ArcFace** của InsightFace (“chỉ dành cho nghiên cứu phi thương mại”) và chấm thẩm mỹ
+  **TOPIQ** (PolyForm Noncommercial). Mô hình dáng người **YoutuReID** có giấy phép Apache-2.0 nhưng được
+  huấn luyện trên các bộ dữ liệu nghiên cứu (Market-1501, DukeMTMC-reID, MSMT17). Bản quyền các mô hình này
+  thuộc tác giả của chúng; KiraPick chỉ dùng lại, không sở hữu.
+- **Ai tải hoặc dùng các bản có những mô hình này phải tự tuân theo giấy phép của chúng** và không được dùng
+  KiraPick (hay mô hình bên trong) để kiếm tiền, nhận diện người cho dịch vụ, giám sát hay theo dõi ai.
+  Muốn dùng thương mại thì phải gỡ các mô hình này và xin phép tác giả của chúng.
+- Nhận diện người chỉ để **gom ảnh của chính bạn chụp** theo từng người trên máy của bạn. App chạy offline:
+  ảnh, vector khuôn mặt và dữ liệu học không rời khỏi máy. Hãy tôn trọng quyền riêng tư của người được chụp.
+- Kết quả AI (gom người, điểm, chọn ảnh) có thể sai; hãy luôn tự kiểm tra trước khi giao ảnh. Phần mềm được
+  cung cấp “nguyên trạng” (as is), không có bảo đảm; tác giả không chịu trách nhiệm cho thiệt hại phát sinh.
+- Nếu bạn là tác giả của một mô hình và không muốn nó được dùng ở đây, hãy mở *Issue* trên GitHub; mô hình sẽ
+  được gỡ.
+
+**English.**
+- KiraPick is a personal, **non-commercial** project shared for free with friends for testing. It is not
+  sold, has no fees or ads, and must not be used for any commercial purpose.
+- The beta uses AI models whose weights are licensed for **non-commercial / research use only**: InsightFace
+  **ArcFace** (“available for non-commercial research purposes only”) and **TOPIQ** aesthetics (PolyForm
+  Noncommercial). The **YoutuReID** whole-body model is Apache-2.0 but was trained on research datasets
+  (Market-1501, DukeMTMC-reID, MSMT17). These models belong to their authors; KiraPick only reuses them.
+- **Anyone who downloads or runs a build containing these models must comply with their licenses** and must
+  not use KiraPick (or the models inside it) to make money, to identify people as a service, or for
+  surveillance or tracking. Commercial use requires removing these models and the authors' permission.
+- Person recognition only **groups your own photos** by person on your own computer. The app runs offline:
+  photos, face vectors and learning data never leave the machine. Respect the privacy of the people you photograph.
+- AI results (grouping, scores, picks) can be wrong; always check before delivering photos. The software is
+  provided “as is”, without warranty of any kind; the authors are not liable for any damage.
+- If you are the author of a model and do not want it used here, open a GitHub *Issue* and it will be removed.

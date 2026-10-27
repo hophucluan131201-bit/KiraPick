@@ -8,53 +8,94 @@ within a few minutes. Rules, in order of authority:
 3. Subjects the user marked as different never merge; an occurrence the user
    removed from a subject never returns to it.
 4. Links between two occurrences (strongest first):
-   - faces very similar (``FACE_STRONG``), at any time;
-   - within ``WINDOW_S``: outfit very similar (``OUTFIT_LINK``) and the faces,
-     if both are visible, at least ``FACE_WITH_OUTFIT``;
-   - within ``WINDOW_S``: faces fairly similar (``FACE_MID``) and outfit
-     similar (``OUTFIT_MID``).
+   - faces very similar (``face_strong``), at any time (far apart in time the
+     look must also be compatible, unless the faces are near-identical);
+   - within ``window_s``: look very similar (``outfit_link``) and the faces,
+     if both are visible, at least ``face_with_outfit``;
+   - within ``window_s``: faces fairly similar (``face_mid``) and look
+     similar (``outfit_mid``).
 5. Two groups only merge if their faces are similar on average
-   (``AVERAGE_GUARD``) — prevents chaining A~B~C with A!~C.
+   (``average_guard``) — prevents chaining A~B~C with A!~C.
 6. Photos without a usable face that joined a group are only *suggested*
    (shown with "?"); a group made only of face-less photos needs >= 2 photos.
 
-Calibration (owner's full shoot, 439 NEF, 46 labelled looks, SFace + banded
-outfit histograms): pairwise precision 1.00, recall 0.82 (first face-only rules:
-precision 0.56 on a subset). Margin is thin: different cosplayers in similar
-colours a few minutes apart reach face 0.58 — re-check on more shoots with
-scripts/calibration/evaluate_grouping.py.
+The thresholds depend on the identity cues a session has (see ``Thresholds``):
+SFace + outfit colours, or — when the optional models are installed — ArcFace +
+outfit colours mixed with a whole-body ReID vector. Each user's corrections can
+shift them a little (app.learning.tuning). Re-check calibration on more shoots
+with scripts/calibration/evaluate_grouping.py.
 """
 
 from __future__ import annotations
 
 import sqlite3
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 import numpy as np
 
 from app.storage.project import Project, utc_now
 
-FACE_STRONG = 0.65  # SFace cosine: same person (photos far apart in time also need FAR_OUTFIT)
-FACE_CERTAIN = 0.80  # near-identical faces link at any time whatever the outfit
-FAR_OUTFIT = 0.65  # outfit similarity a face link needs across more than WINDOW_S
-WINDOW_S = 300  # outfit cues only within +-5 minutes (same look, same set)
-OUTFIT_LINK = 0.80  # outfit-colour similarity that links inside the window ...
-FACE_WITH_OUTFIT = 0.55  # ... unless both faces are visible and less similar than this
-FACE_MID = 0.55  # fairly similar face ...
-OUTFIT_MID = 0.78  # ... plus similar outfit inside the window
-AVERAGE_GUARD = 0.45  # mean face similarity two groups need to merge
-FAR_AVERAGE = 0.60  # ... when no photo of one is within WINDOW_S of a photo of the other
-OUTFIT_SUGGEST = 0.85  # left-over face-less photo: outfit needed for a suggestion
-OUTFIT_MARGIN = 0.05  # best outfit match must beat the runner-up by this much
-SUGGEST_WINDOW_S = 600  # suggestion window for left-over face-less photos
-REVIEW_FACE = 0.45  # review queue: closest faces reach this and photos close in time (REVIEW_NEAR_S) ...
-REVIEW_NEAR_S = 1800
-REVIEW_FACE_ANYTIME = 0.60  # ... or faces this similar at any time
-REVIEW_FACE_FLOOR = 0.35  # review by outfit+time only if faces (when visible) reach this
 REVIEW_LIMIT = 30
 FACE_CHUNK = 1024  # rows per block when comparing all faces (bounded memory)
+
+
+@dataclass(frozen=True, slots=True)
+class Thresholds:
+    """Grouping thresholds for one set of identity cues (face model + look descriptor)."""
+
+    name: str
+    face_strong: float  # face cosine: same person (photos far apart in time also need far_outfit)
+    face_certain: float  # near-identical faces link at any time whatever the look
+    far_outfit: float  # look similarity a face link needs across more than window_s
+    outfit_link: float  # look similarity that links inside the window ...
+    face_with_outfit: float  # ... unless both faces are visible and less similar than this
+    face_mid: float  # fairly similar face ...
+    outfit_mid: float  # ... plus similar look inside the window
+    average_guard: float  # mean face similarity two groups need to merge
+    far_average: float  # ... when no photo of one is within window_s of a photo of the other
+    outfit_suggest: float  # left-over face-less photo: look needed for a suggestion
+    review_face: float  # review queue: closest faces reach this and photos close in time ...
+    review_face_anytime: float  # ... or faces this similar at any time
+    review_face_floor: float  # review by look+time only if faces (when visible) reach this
+    body_weight: float = 0.0  # share of the whole-body (ReID) similarity in the look similarity
+    window_s: float = 300  # look cues only within +-5 minutes (same look, same set)
+    outfit_margin: float = 0.05  # best look match must beat the runner-up by this much
+    suggest_window_s: float = 600  # suggestion window for left-over face-less photos
+    review_near_s: float = 1800
+
+    def shifted(self, face: float = 0.0, look: float = 0.0) -> Thresholds:
+        """Face / look link thresholds moved by the given amounts (per-user tuning)."""
+        return replace(
+            self, face_strong=self.face_strong + face, face_with_outfit=self.face_with_outfit + face,
+            face_mid=self.face_mid + face,
+            far_outfit=self.far_outfit + look, outfit_link=self.outfit_link + look,
+            outfit_mid=self.outfit_mid + look, outfit_suggest=self.outfit_suggest + look)
+
+
+# SFace (128-d) + banded HSV outfit histograms. Owner's full shoot (439 NEF, 46
+# looks): pairwise precision 1.00, recall 0.82 (first face-only rules: 0.56).
+# Margin is thin: different cosplayers in similar colours a few minutes apart reach face 0.58.
+SFACE_HSV = Thresholds(
+    "sface+hsv", face_strong=0.65, face_certain=0.80, far_outfit=0.65, outfit_link=0.80, face_with_outfit=0.55,
+    face_mid=0.55, outfit_mid=0.78, average_guard=0.45, far_average=0.60, outfit_suggest=0.85,
+    review_face=0.45, review_face_anytime=0.60, review_face_floor=0.35)
+# ArcFace (512-d) + look = HSV histograms mixed with YoutuReID. Calibrated on the
+# same shoot from 400 px thumbnails (the app embeds at 1600 px) — see docs/IMPLEMENTATION_STATUS.md.
+# Pairwise precision 1.00, recall 0.91 (SFace profile on the same data: 1.00 / 0.82). The two
+# pink-and-white cosplayers 4 min apart reach ArcFace 0.52 / look 0.69, hence face_mid 0.53 AND
+# outfit_mid 0.70 (looser settings reach recall 0.94 but merge them).
+ARCFACE_REID = Thresholds(
+    "arcface+reid", face_strong=0.63, face_certain=0.70, far_outfit=0.55, outfit_link=0.72, face_with_outfit=0.35,
+    face_mid=0.53, outfit_mid=0.70, average_guard=0.20, far_average=0.42, outfit_suggest=0.78,
+    review_face=0.35, review_face_anytime=0.50, review_face_floor=0.20, body_weight=0.5)
+PROFILES = {t.name: t for t in (SFACE_HSV, ARCFACE_REID)}
+# Old names (tests, scripts): the SFace profile.
+FACE_STRONG = SFACE_HSV.face_strong
+WINDOW_S = SFACE_HSV.window_s
+OUTFIT_LINK = SFACE_HSV.outfit_link
 
 
 @dataclass(slots=True)
@@ -62,11 +103,14 @@ class Occ:
     id: int
     asset_id: int
     time: float | None
-    face: np.ndarray | None
-    outfit: np.ndarray | None
+    face: np.ndarray | None  # the face vector grouping uses (ArcFace when the session has it, else SFace)
+    outfit: np.ndarray | None  # banded HSV histograms
     assignment: str
     subject_id: int | None
     excluded: int | None
+    body: np.ndarray | None = None  # whole-body ReID vector (ArcFace sessions only)
+    face_sface: np.ndarray | None = None
+    face_arc: np.ndarray | None = None
 
 
 @dataclass(slots=True)
@@ -76,6 +120,7 @@ class ClusterReport:
     suggested: int = 0
     unassigned: int = 0
     manual: int = 0
+    profile: str = ""
 
 
 @dataclass(slots=True)
@@ -93,26 +138,70 @@ class _Group:
 class Grouping:
     groups: list[_Group]
     weak: dict[int, float | None]  # occ index -> link strength; face-less members, assigned as 'suggested'
-    suggestions: dict[int, tuple[int, float]]  # left-over occ index -> (group index, outfit similarity)
+    suggestions: dict[int, tuple[int, float]]  # left-over occ index -> (group index, look similarity)
 
 
 def _ts(value: str | None) -> float | None:
     return datetime.fromisoformat(value).timestamp() if value else None
 
 
-def load_occurrences(conn: sqlite3.Connection) -> list[Occ]:
+def session_profile(conn: sqlite3.Connection) -> Thresholds:
+    """ArcFace thresholds when this session has ArcFace vectors, else SFace."""
+    has_arc = conn.execute("SELECT 1 FROM occurrence_vectors WHERE kind = 'face_arc' LIMIT 1").fetchone()
+    return ARCFACE_REID if has_arc else SFACE_HSV
+
+
+def load_occurrences(conn: sqlite3.Connection, profile: Thresholds | None = None) -> list[Occ]:
+    profile = profile or session_profile(conn)
     rows = conn.execute(
         """SELECT o.id, o.asset_id, o.assignment, o.subject_id, o.excluded_subject_id, a.capture_time,
-                  fv.vector AS face, ov.vector AS outfit
+                  fv.vector AS face, av.vector AS face_arc, ov.vector AS outfit, bv.vector AS body
            FROM occurrences o JOIN assets a ON a.id = o.asset_id
            LEFT JOIN occurrence_vectors fv ON fv.occurrence_id = o.id AND fv.kind = 'face'
+           LEFT JOIN occurrence_vectors av ON av.occurrence_id = o.id AND av.kind = 'face_arc'
            LEFT JOIN occurrence_vectors ov ON ov.occurrence_id = o.id AND ov.kind = 'outfit'
+           LEFT JOIN occurrence_vectors bv ON bv.occurrence_id = o.id AND bv.kind = 'body'
            WHERE a.status = 'ok' AND (o.is_main = 1 OR o.assignment = 'manual')
            ORDER BY o.id"""
     ).fetchall()
     vec = lambda b: np.frombuffer(b, dtype="<f4") if b is not None else None  # noqa: E731
-    return [Occ(r["id"], r["asset_id"], _ts(r["capture_time"]), vec(r["face"]), vec(r["outfit"]),
-                r["assignment"], r["subject_id"], r["excluded_subject_id"]) for r in rows]
+    arc = profile.body_weight > 0  # the ArcFace profile; never mix two face models in one grouping
+    out = []
+    for r in rows:
+        sface, face_arc = vec(r["face"]), vec(r["face_arc"])
+        out.append(Occ(r["id"], r["asset_id"], _ts(r["capture_time"]), face_arc if arc else sface, vec(r["outfit"]),
+                       r["assignment"], r["subject_id"], r["excluded_subject_id"],
+                       body=vec(r["body"]) if arc else None, face_sface=sface, face_arc=face_arc))
+    return out
+
+
+def look_similarity(a: Occ, b: Occ, profile: Thresholds) -> float | None:
+    """Outfit colours, mixed with the whole-body vector when both photos have one."""
+    if a.outfit is None or b.outfit is None:
+        return None
+    colours = float(a.outfit @ b.outfit)
+    if profile.body_weight and a.body is not None and b.body is not None:
+        return (1 - profile.body_weight) * colours + profile.body_weight * float(a.body @ b.body)
+    return colours
+
+
+def pair_link(profile: Thresholds, face: float | None, look: float | None, dt: float | None) -> float | None:
+    """Link strength the rules give one pair of photos (None = no direct link).
+
+    Face links score above 1, look links in 0..1. ``dt`` None = unknown capture time,
+    treated like photos far apart.
+    """
+    near = dt is not None and dt <= profile.window_s
+    if face is not None and face >= profile.face_strong and (
+            near or face >= profile.face_certain or (look is not None and look >= profile.far_outfit)):
+        return 1.0 + face
+    if not near or look is None:
+        return None
+    if look >= profile.outfit_link and (face is None or face >= profile.face_with_outfit):
+        return look
+    if face is not None and face >= profile.face_mid and look >= profile.outfit_mid:
+        return (face + look) / 2
+    return None
 
 
 def _different_pairs(conn: sqlite3.Connection) -> set[tuple[int, int]]:
@@ -131,48 +220,46 @@ def _conflict(g1: _Group, g2: _Group, different: set[tuple[int, int]]) -> bool:
     return any((min(a, b), max(a, b)) in different for a in subj1 for b in subj2 if a != b)
 
 
-def _far_face_link_ok(a: Occ, b: Occ, face: float) -> bool:
-    """A strong face link between photos far apart in time also needs a compatible outfit,
-    unless the faces are near-identical: cosplay makeup makes different people look alike."""
-    if a.time is not None and b.time is not None and abs(a.time - b.time) <= WINDOW_S:
-        return True
-    if face >= FACE_CERTAIN:
-        return True
-    return a.outfit is not None and b.outfit is not None and float(a.outfit @ b.outfit) >= FAR_OUTFIT
+def _dt(a: Occ, b: Occ) -> float | None:
+    return abs(a.time - b.time) if a.time is not None and b.time is not None else None
 
 
-def _edges(occs: list[Occ], nodes: list[int]) -> list[tuple[float, int, int]]:
+def _edges(occs: list[Occ], nodes: list[int], p: Thresholds) -> list[tuple[float, int, int]]:
     """Candidate links (score, i, j) between occurrence indexes; higher score = stronger evidence."""
     edges: list[tuple[float, int, int]] = []
+    seen: set[tuple[int, int]] = set()
     faced = [i for i in nodes if occs[i].face is not None]
     if faced:
         F = np.stack([occs[i].face for i in faced])
         for lo in range(0, len(faced), FACE_CHUNK):
             block = F[lo:lo + FACE_CHUNK] @ F.T
-            for r, c in zip(*np.nonzero(block >= FACE_STRONG)):
+            for r, c in zip(*np.nonzero(block >= p.face_strong)):
+                if lo + r >= c:
+                    continue
                 i, j = faced[lo + r], faced[c]
-                if lo + r < c and _far_face_link_ok(occs[i], occs[j], float(block[r, c])):
-                    edges.append((1.0 + float(block[r, c]), i, j))
+                score = pair_link(p, float(block[r, c]), look_similarity(occs[i], occs[j], p), _dt(occs[i], occs[j]))
+                seen.add((i, j))
+                if score is not None:
+                    edges.append((score, i, j))
     timed = sorted((i for i in nodes if occs[i].time is not None and occs[i].outfit is not None),
                    key=lambda i: occs[i].time)
     times = np.array([occs[i].time for i in timed])
     for k, i in enumerate(timed):
         a = occs[i]
-        hi = int(np.searchsorted(times, a.time + WINDOW_S, side="right"))
+        hi = int(np.searchsorted(times, a.time + p.window_s, side="right"))
         for j in timed[k + 1:hi]:
+            if (min(i, j), max(i, j)) in seen:
+                continue  # already judged as a face pair
             b = occs[j]
-            us = float(a.outfit @ b.outfit)
             fs = float(a.face @ b.face) if a.face is not None and b.face is not None else None
-            if fs is not None and fs >= FACE_STRONG:
-                continue  # already a face edge
-            if us >= OUTFIT_LINK and (fs is None or fs >= FACE_WITH_OUTFIT):
-                edges.append((us, i, j))
-            elif fs is not None and fs >= FACE_MID and us >= OUTFIT_MID:
-                edges.append(((fs + us) / 2, i, j))
+            score = pair_link(p, fs, look_similarity(a, b, p), _dt(a, b))
+            if score is not None:
+                edges.append((score, i, j))
     return edges
 
 
-def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset()) -> Grouping:
+def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset(), profile: Thresholds = SFACE_HSV) -> Grouping:
+    p = profile
     groups: list[_Group] = []
     owner: dict[int, int] = {}  # occ index -> group index
 
@@ -208,9 +295,9 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset()) -> Gro
         if not t1 or not len(t2):
             return True  # unknown capture time: do not make it stricter
         pos = np.searchsorted(t2, t1)
-        gaps = [abs(t2[min(p, len(t2) - 1)] - t) for p, t in zip(pos, t1)] + \
-               [abs(t2[p - 1] - t) for p, t in zip(pos, t1) if p > 0]
-        return min(gaps) <= WINDOW_S
+        gaps = [abs(t2[min(q, len(t2) - 1)] - t) for q, t in zip(pos, t1)] + \
+               [abs(t2[q - 1] - t) for q, t in zip(pos, t1) if q > 0]
+        return min(gaps) <= p.window_s
 
     def absorb(keep: int, drop: int) -> None:
         gk, gd = groups[keep], groups[drop]
@@ -230,7 +317,7 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset()) -> Gro
     # Strong face links to photos the user assigned go first: confirmed people attract before
     # free photos pair up among themselves (keeps a removed photo from dragging others away).
     seeded = {i for idx in manual.values() for i in idx}
-    for score, i, j in sorted(_edges(occs, sorted(owner)),
+    for score, i, j in sorted(_edges(occs, sorted(owner), p),
                               key=lambda e: (not (e[0] >= 1.0 and (e[1] in seeded or e[2] in seeded)), -e[0])):
         gi, gj = owner[i], owner[j]
         if gi != gj:
@@ -238,7 +325,7 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset()) -> Gro
             if _conflict(g1, g2, different):
                 continue
             if g1.faces and g2.faces:
-                guard = AVERAGE_GUARD if _near_in_time(g1, g2) else FAR_AVERAGE
+                guard = p.average_guard if _near_in_time(g1, g2) else p.far_average
                 if float(g1.face_sum @ g2.face_sum) / (g1.faces * g2.faces) < guard:
                     continue
             absorb(*((gi, gj) if g2.fixed_subject is None else (gj, gi)))
@@ -263,7 +350,7 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset()) -> Gro
             g.members, g.assets = [], set()
     weak = {i: weak.get(i) for i in owner if occs[i].face is None and occs[i].assignment != "manual"}
 
-    # Left-over face-less main occurrences: outfit + time window, suggestion only.
+    # Left-over face-less main occurrences: look + time window, suggestion only.
     suggestions: dict[int, tuple[int, float]] = {}
     for i, o in enumerate(occs):
         if i in owner or o.assignment == "manual" or o.outfit is None or o.time is None:
@@ -276,23 +363,28 @@ def group(occs: list[Occ], different: set[tuple[int, int]] = frozenset()) -> Gro
             best = 0.0
             for m in g.members:
                 other = occs[m]
-                if other.outfit is not None and other.time is not None and abs(other.time - o.time) <= SUGGEST_WINDOW_S:
-                    best = max(best, float(o.outfit @ other.outfit))
+                if other.outfit is not None and other.time is not None and abs(other.time - o.time) <= p.suggest_window_s:
+                    best = max(best, look_similarity(o, other, p) or 0.0)
             if best > 0:
                 scores[gi] = best
         ranked = sorted(scores.items(), key=lambda kv: -kv[1])
-        if ranked and ranked[0][1] >= OUTFIT_SUGGEST and (len(ranked) == 1 or ranked[0][1] - ranked[1][1] >= OUTFIT_MARGIN):
+        if ranked and ranked[0][1] >= p.outfit_suggest and (
+                len(ranked) == 1 or ranked[0][1] - ranked[1][1] >= p.outfit_margin):
             suggestions[i] = ranked[0]
     return Grouping(groups, weak, suggestions)
 
 
-def recluster(project: Project) -> ClusterReport:
+def recluster(project: Project, tune: Callable[[Thresholds], Thresholds] | None = None) -> ClusterReport:
+    """Regroup the session. ``tune`` may adjust the thresholds (this user's learnt corrections)."""
     conn = project.conn
-    occs = load_occurrences(conn)
+    profile = session_profile(conn)
+    if tune is not None:
+        profile = tune(profile)
+    occs = load_occurrences(conn, profile)
     different = _different_pairs(conn)
-    grouping = group(occs, different)
+    grouping = group(occs, different, profile)
     groups, weak, suggestions = grouping.groups, grouping.weak, grouping.suggestions
-    report = ClusterReport()
+    report = ClusterReport(profile=profile.name)
     now = utc_now()
     with project.transaction():
         # Map groups to subject ids: manual seed, else the previous subject most of its members had.
@@ -356,12 +448,13 @@ class Suggestion:
     a: int
     b: int
     similarity: float  # closest face similarity between the two subjects (0 if no faces to compare)
-    same_outfit: bool = False  # suggested because of the same outfit a few minutes apart
+    same_outfit: bool = False  # suggested because of the same look a few minutes apart
 
 
 def merge_suggestions(conn: sqlite3.Connection, limit: int = REVIEW_LIMIT) -> list[Suggestion]:
-    """Subject pairs that may be one person: faces fairly similar, or the same outfit within the window."""
-    occs = [o for o in load_occurrences(conn) if o.subject_id is not None]
+    """Subject pairs that may be one person: faces fairly similar, or the same look within the window."""
+    p = session_profile(conn)
+    occs = [o for o in load_occurrences(conn, p) if o.subject_id is not None]
     different = _different_pairs(conn)
     by_subject: dict[int, list[Occ]] = defaultdict(list)
     for o in occs:
@@ -379,13 +472,14 @@ def merge_suggestions(conn: sqlite3.Connection, limit: int = REVIEW_LIMIT) -> li
             if assets_a & {o.asset_id for o in by_subject[b]}:
                 continue  # in one photo together -> two people
             face = float((faces[a] @ faces[b].T).max()) if a in faces and b in faces else None
-            outfit = max((float(p.outfit @ q.outfit) for p in by_subject[a] for q in by_subject[b]
-                          if p.outfit is not None and q.outfit is not None and p.time is not None
-                          and q.time is not None and abs(p.time - q.time) <= WINDOW_S), default=0.0)
-            gap = min((abs(p.time - q.time) for p in by_subject[a] for q in by_subject[b]
-                       if p.time is not None and q.time is not None), default=float("inf"))
-            same_outfit = outfit >= OUTFIT_LINK and (face is None or face >= REVIEW_FACE_FLOOR)
-            similar_face = face is not None and (face >= REVIEW_FACE_ANYTIME or (face >= REVIEW_FACE and gap <= REVIEW_NEAR_S))
+            look = max((look_similarity(q, r, p) or 0.0 for q in by_subject[a] for r in by_subject[b]
+                        if q.time is not None and r.time is not None and abs(q.time - r.time) <= p.window_s),
+                       default=0.0)
+            gap = min((abs(q.time - r.time) for q in by_subject[a] for r in by_subject[b]
+                       if q.time is not None and r.time is not None), default=float("inf"))
+            same_outfit = look >= p.outfit_link and (face is None or face >= p.review_face_floor)
+            similar_face = face is not None and (face >= p.review_face_anytime or
+                                                 (face >= p.review_face and gap <= p.review_near_s))
             if similar_face or same_outfit:
                 out.append(Suggestion(a, b, round(face or 0.0, 3), same_outfit))
     return sorted(out, key=lambda s: -(s.similarity + (0.2 if s.same_outfit else 0.0)))[:limit]

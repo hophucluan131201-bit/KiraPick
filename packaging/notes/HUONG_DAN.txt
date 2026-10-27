@@ -28,9 +28,14 @@ LƯU Ý CỦA BẢN THỬ NGHIỆM
 - Có card đồ hoạ (NVIDIA, AMD hay Intel) thì AI tự dùng card qua DirectML, không thì dùng CPU.
   Thanh trạng thái ghi "GPU DirectML" hoặc "CPU". Nhận diện + phân tích khoảng
   vài phút cho 400-500 ảnh, tuỳ máy.
-- Có đánh giá mắt nhắm/mở. Chưa đánh giá được độ đẹp nghệ thuật: điểm chỉ là điểm kỹ thuật.
+- Có đánh giá mắt nhắm/mở và một "gợi ý thẩm mỹ" nhỏ bằng AI (TOPIQ); điểm chủ yếu là điểm kỹ thuật.
 - Mỗi máy có "bộ nhớ học" riêng (các lần bạn sửa nhóm người, giữ/loại ảnh) - chỉ là
-  các con số, lưu trên máy bạn, không chia sẻ với ai.
+  các con số, lưu trên máy bạn, không chia sẻ với ai. Sau vài lần gộp/tách người, lần
+  "🧠 Nhận diện người" sau sẽ chỉnh nhẹ mức gộp theo cách bạn sửa. Nút "🎓 AI đã học"
+  cho xem app đã học gì và xoá để học lại từ đầu.
+- Nhận diện người dùng mô hình ArcFace (InsightFace) và YoutuReID. ArcFace và mô hình
+  chấm thẩm mỹ TOPIQ CHỈ ĐƯỢC DÙNG PHI THƯƠNG MẠI / NGHIÊN CỨU: chỉ dùng cá nhân, không
+  bán, không dùng để nhận diện người cho dịch vụ hay giám sát (xem phần giấy phép).
 
 DỮ LIỆU CỦA ỨNG DỤNG
 - %LOCALAPPDATA%\KiraPick\sessions : ghi nhớ từng thư mục ảnh (tự xoá sau 30 ngày không mở)

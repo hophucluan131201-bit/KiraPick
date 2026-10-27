@@ -37,7 +37,9 @@ class ModelSpec:
     provenance: str
     runtime: str
     purpose: str = "identity"  # "identity": needed to group people; "quality": optional scoring;
-    # "gpu": larger model used only when CUDA really runs (not shipped in the CPU installer)
+    # "gpu": larger model used only when CUDA really runs (not shipped in the CPU installer);
+    # "identity_plus": optional stronger identity cues (grouping falls back without them)
+    archive_member: str = ""  # the file is this member of the zip archive at ``url``
 
 
 @dataclass(frozen=True, slots=True)

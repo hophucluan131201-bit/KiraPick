@@ -77,10 +77,11 @@ class AnalyzeThread(QThread):
     succeeded = Signal(dict)
     failed = Signal(str)
 
-    def __init__(self, project_folder: Path, mode: str = "people") -> None:
+    def __init__(self, project_folder: Path, mode: str = "people", learning_dir: Path | None = None) -> None:
         super().__init__()
         self.project_folder = project_folder
         self.mode = mode
+        self.learning_dir = learning_dir
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
@@ -99,7 +100,8 @@ class AnalyzeThread(QThread):
 
         try:
             with Project.open(self.project_folder) as project:
-                summary = AnalyzeJob(project).run(progress=emit, should_cancel=self._cancel.is_set, mode=self.mode)
+                summary = AnalyzeJob(project, learning_dir=self.learning_dir).run(
+                    progress=emit, should_cancel=self._cancel.is_set, mode=self.mode)
             self.succeeded.emit(asdict(summary) | {"mode": self.mode})
         except ModelUnavailableError as exc:
             self.failed.emit(f"{exc}\n\nChạy lệnh sau một lần (cần Internet):\n"

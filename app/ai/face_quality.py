@@ -35,6 +35,11 @@ class FaceRefiner:
         if det is None:
             det = self._detectors[size] = cv2.FaceDetectorYN.create(self._model, "", size, 0.5, 0.3, 50)
         _, faces = det.detect(small)
+        if faces is not None:  # YuNet can return NaN / huge rows on odd crops: keep faces inside the crop
+            faces = faces.astype(np.float64)
+            faces = faces[np.isfinite(faces).all(axis=1)]
+            cxs, cys = faces[:, 0] + faces[:, 2] / 2, faces[:, 1] + faces[:, 3] / 2
+            faces = faces[(cxs >= 0) & (cxs <= size[0]) & (cys >= 0) & (cys <= size[1])]
         if faces is None or not len(faces):
             return None
         cx, cy = (x + bw / 2 - x0) * scale, (y + bh / 2 - y0) * scale
