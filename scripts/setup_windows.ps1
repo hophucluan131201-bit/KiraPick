@@ -73,15 +73,7 @@ Write-Host "XONG." -ForegroundColor Green
 # 6) Lối tắt trên Desktop (chỉ khi bạn đồng ý).
 $answer = Read-Host "Tạo biểu tượng 'KiraPick' trên Desktop? (Y/N)"
 if ($answer -match '^[YyCc]') {
-    $desktop = [Environment]::GetFolderPath('Desktop')
-    $shell = New-Object -ComObject WScript.Shell
-    $lnk = $shell.CreateShortcut((Join-Path $desktop 'KiraPick.lnk'))
-    $lnk.TargetPath = (Join-Path $root '.venv\Scripts\pythonw.exe')
-    $lnk.Arguments = '-m app'
-    $lnk.WorkingDirectory = $root
-    $lnk.Description = 'KiraPick'
-    $lnk.Save()
-    Write-Host "Đã tạo biểu tượng trên Desktop." -ForegroundColor Green
+    & (Join-Path $PSScriptRoot 'make_shortcut.ps1')
 }
 Write-Host ""
 Write-Host "Mở ứng dụng: bấm đúp KiraPick.cmd trong thư mục dự án (hoặc biểu tượng trên Desktop)."
