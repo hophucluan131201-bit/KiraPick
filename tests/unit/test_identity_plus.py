@@ -540,3 +540,28 @@ def test_gpu_failure_at_run_time_switches_the_model_to_cpu(tmp_path: Path, monke
     cpu_only = runtime.Session(Broken(), "cpu", None, model)
     with pytest.raises(RuntimeError):  # a CPU error is a real error
         cpu_only.run(None, {})
+
+
+def test_gpu_slower_than_cpu_is_not_used(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Laptop with two GPUs: DirectML on the integrated one is slower than the CPU -> use the CPU."""
+    from types import SimpleNamespace
+
+    from app.ai import runtime
+
+    def fake_session(delay_ms: float, device: str) -> SimpleNamespace:
+        import time
+
+        def run(*_a):  # noqa: ANN002, ANN202
+            time.sleep(delay_ms / 1000)
+            return [None]
+        inner = SimpleNamespace(get_inputs=lambda: [SimpleNamespace(name="x", shape=[1, 3, 8, 8])])
+        return SimpleNamespace(session=inner, run=run, device=device, fallback_reason=None)
+
+    for gpu_ms, expected in ((40, False), (2, True)):
+        runtime._speed_cache.clear()
+        monkeypatch.setattr(runtime, "create_session", lambda model, prefer_gpu=True, **k: (
+            fake_session(gpu_ms, "directml") if prefer_gpu else fake_session(10, "cpu")))
+        use, note = runtime.gpu_speed_check(Path("m.onnx"), runs=2)
+        assert use is expected, note
+        assert ("chậm hơn CPU" in note) is (not expected)
+    runtime._speed_cache.clear()

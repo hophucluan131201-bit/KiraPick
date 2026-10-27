@@ -314,6 +314,22 @@ The Test subset (old labels) measures 1.000 / 0.725 now. Remaining splits are mo
 stragglers (profile, motion blur, hands over face) that the owner can merge with the tick boxes +
 "🔗 Gộp người".
 
+## Releases 2.0.5–2.0.6: DirectML in the installer (owner's report, 2026-10-27)
+
+Installer 2.0.4 on the owner's laptop (DirectML): "Nhận diện chủ thể" lagged / "Not responding", much
+slower than the source install with CUDA; 📊 failed for 59 of 59 photos. Not reproducible here (no
+GPU). Verified here: the packaged app (Linux trial build, float16 models) scores real NEFs on the CPU.
+Changes: TOPIQ never on DirectML (dynamic input size; it had only been tried on CUDA); a GPU error at
+run time moves that model to the CPU (`Session.run`); aesthetic/eye failures leave N/A instead of
+failing the photo; the status bar shows the main stage error; toolbar switch ⚡ (GPU on/off);
+`--self-test report.json <photo folder>` runs 3 real photos with the GPU. 2.0.6: the analysis runs in a
+child process (`app/workers/analyze_process.py`, spawn; `freeze_support` in the launcher; checked by
+the self-test) so the window keeps responding; `gpu_speed_check` times YOLOX-S on the GPU vs the CPU
+and uses the GPU only if it takes ≤ 80% of the CPU time (laptops with two GPUs). Not verified on the
+owner's machine yet. A CUDA edition of the installer was sized: the NVIDIA runtime wheels alone are
+~1.85 GB compressed (cuDNN 743 MB, cuBLAS 553 MB, cuFFT 200 MB, ORT-GPU 207 MB …), close to GitHub's
+2 GB per-file limit — not done without the owner's decision.
+
 ## Release 2.0.2: review queue asks about looks, not faces (2026-10-27)
 
 Owner's report: "Cần xem lại" asked about two subjects in clearly different costumes because their

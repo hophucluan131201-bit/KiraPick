@@ -754,7 +754,8 @@ class MainWindow(QMainWindow):
             parts = [f"Phân tích xong ({device}, {took}): {self._step_state()[2]} ảnh có điểm"]
             if summary.get("measure_failed"):
                 parts.append(f"{summary['measure_failed']} ảnh không chấm được ({self._main_error('quality')})")
-            self.status.setText(", ".join(parts) + ". Bước tiếp theo: bấm ⭐ Chọn ảnh, hoặc xếp theo điểm.")
+            note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
+            self.status.setText(", ".join(parts) + "." + note + " Bước tiếp theo: bấm ⭐ Chọn ảnh, hoặc xếp theo điểm.")
             return
         people = self.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
         unknown = self.project.conn.execute(

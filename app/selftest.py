@@ -110,6 +110,10 @@ def run(report_path: Path, photos: Path | None = None) -> int:
                 probe.session.run(None, {inp.name: dummy})
             ms = round((time.perf_counter() - started) / 3 * 1000)
             report["gpu"] = {"device": probe.device, "note": probe.fallback_reason, "yolox_m_ms": ms}
+            from app.ai.runtime import gpu_speed_check
+
+            use, note = gpu_speed_check(registry.require("person_detector_s"))
+            report["gpu"]["faster_than_cpu"], report["gpu"]["speed_check"] = use, note
             report["steps"].append(f"graphics card: {probe.device}")
 
         from app.storage.project import Project
@@ -144,6 +148,11 @@ def run(report_path: Path, photos: Path | None = None) -> int:
 
                 select.select_per_person(project.conn, 3)
                 report["steps"].append("selection ran")
+            # The window runs the AI in a child process of the exe: prove that starts and reports back.
+            from app.workers.analyze_process import run_in_child
+
+            child = run_in_child(Path(tmp) / "session", "people", None, False, lambda *_a: None, lambda: False)
+            report["steps"].append(f"child process: ok ({child['analysed']} new photos)")
         if report["network_attempts"]:
             raise RuntimeError("the app tried to use the network")
         report["ok"] = True

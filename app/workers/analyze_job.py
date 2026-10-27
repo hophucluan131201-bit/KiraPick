@@ -111,6 +111,14 @@ class AnalyzeJob:
             raise ValueError(mode)
         summary = AnalyzeSummary()
         todo = self._queue_and_list() if mode != "quality" else []
+        gpu_note = None
+        if self.prefer_gpu:  # only use the graphics card where it is really faster than the CPU
+            from app.ai.runtime import gpu_speed_check
+
+            progress(AnalyzeProgress("load_models", 0, len(todo)))
+            use_gpu, note = gpu_speed_check(self.registry.require("person_detector_s"))
+            if not use_gpu:
+                self.prefer_gpu, gpu_note = False, note
         if todo:
             progress(AnalyzeProgress("load_models", 0, len(todo)))
             persons = PersonDetector.load(self.registry, prefer_gpu=self.prefer_gpu)
@@ -118,7 +126,7 @@ class AnalyzeJob:
             embedder = FaceEmbedder(self.registry)
             summary.device = persons.device
             progress(AnalyzeProgress("device:" + persons.device, 0, len(todo)))
-            summary.fallback_reason = persons.session.fallback_reason
+            summary.fallback_reason = gpu_note or persons.session.fallback_reason
             self.crop_dir.mkdir(parents=True, exist_ok=True)
             self._detect_all(todo, persons, faces, embedder, summary, progress, should_cancel)
             del persons, faces, embedder  # one heavy model set at a time
@@ -132,6 +140,8 @@ class AnalyzeJob:
 
             _, _, summary.cancelled = embed_job.run(self.project, self.registry, embed_progress, should_cancel,
                                                     prefer_gpu=self.prefer_gpu)
+        if gpu_note and not summary.fallback_reason:
+            summary.fallback_reason = gpu_note
         if not summary.cancelled and mode != "people":
             from app.workers import quality_job  # local import: avoids a cycle through app.quality
 

@@ -1,5 +1,10 @@
 ## KiraPick 2.0 – bản chính thức
 
+> **2.0.6 – hết "Not responding", không bị kẹt ở card đồ hoạ chậm.** AI chạy trong một tiến trình riêng nên
+> cửa sổ luôn phản hồi (kể cả khi đang nạp mô hình). Lúc bắt đầu, app đo thử: nếu card đồ hoạ (DirectML) không
+> nhanh hơn CPU trên máy này — ví dụ laptop có 2 card và DirectML lấy nhầm card Intel đang vẽ màn hình — thì tự
+> dùng CPU và ghi rõ lý do trên thanh trạng thái.
+>
 > **2.0.5 – sửa lỗi "không chấm được" trên card đồ hoạ (DirectML).** Mô hình gợi ý thẩm mỹ không chạy trên
 > DirectML nữa (chạy bằng CUDA hoặc CPU); nếu card đồ hoạ lỗi khi chạy một mô hình, mô hình đó tự chuyển sang CPU
 > thay vì bỏ ảnh; lỗi của một mô hình phụ không làm mất điểm của cả ảnh; thanh trạng thái ghi rõ lỗi. Nút mới

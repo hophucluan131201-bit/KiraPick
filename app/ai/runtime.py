@@ -144,3 +144,48 @@ def create_session(model: Path, *, prefer_gpu: bool = True, gpu_mem_limit_mb: in
         reason = (f"Không dùng được card đồ hoạ ({'; '.join(errors)}); dùng CPU" if errors
                   else "Bản ONNX Runtime đang cài không hỗ trợ card đồ hoạ; dùng CPU")
     return Session(session, "cpu", reason, Path(model), cpu_threads)
+
+
+GPU_MUST_BE_FASTER = 0.8  # the GPU is used only if it takes at most 80% of the CPU's time
+_speed_cache: dict[str, tuple[bool, str]] = {}
+
+
+def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
+    """Is the graphics card really faster than the CPU here? (cached per model for this process)
+
+    A laptop has two GPUs; DirectML can land on the integrated one (which also draws the screen):
+    slower than the CPU and the whole PC stutters. Returns (use the GPU, note for the user / log).
+    """
+    import time
+
+    import numpy as np
+
+    key = str(model)
+    if key in _speed_cache:
+        return _speed_cache[key]
+
+    def timed(session: Session) -> float:
+        inp = session.session.get_inputs()[0]
+        dummy = np.zeros([d if isinstance(d, int) else 1 for d in inp.shape], np.float32)
+        session.run(None, {inp.name: dummy})  # warm-up (DirectML compiles on the first run)
+        start = time.perf_counter()
+        for _ in range(runs):
+            session.run(None, {inp.name: dummy})
+        return (time.perf_counter() - start) / runs * 1000
+
+    try:
+        gpu = create_session(model, prefer_gpu=True)
+        if gpu.device == "cpu":
+            result = (False, gpu.fallback_reason or "Không có card đồ hoạ dùng được; dùng CPU")
+        else:
+            gpu_ms, cpu_ms = timed(gpu), timed(create_session(model, prefer_gpu=False))
+            label = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(gpu.device, gpu.device)
+            if gpu_ms <= cpu_ms * GPU_MUST_BE_FASTER:
+                result = (True, f"{label} {gpu_ms:.0f} ms, CPU {cpu_ms:.0f} ms")
+            else:
+                result = (False, f"{label} chậm hơn CPU trên máy này ({gpu_ms:.0f} ms so với {cpu_ms:.0f} ms); dùng CPU")
+    except Exception as exc:  # noqa: BLE001 - the CPU always works
+        result = (False, f"Kiểm tra card đồ hoạ lỗi ({type(exc).__name__}); dùng CPU")
+    log.info("GPU speed check %s: %s", model.name, result)
+    _speed_cache[key] = result
+    return result

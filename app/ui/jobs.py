@@ -71,7 +71,8 @@ class ExportThread(QThread):
 
 
 class AnalyzeThread(QThread):
-    """Runs AnalyzeJob ('people': detection + grouping, or 'quality': scoring) with its own connection."""
+    """Runs AnalyzeJob ('people': detection + grouping, or 'quality': scoring) in a child process
+    (app.workers.analyze_process), so the window stays responsive."""
 
     progress = Signal(str, int, int)
     succeeded = Signal(dict)
@@ -94,20 +95,12 @@ class AnalyzeThread(QThread):
         return self._cancel.is_set()
 
     def run(self) -> None:
-        from app.ai.models import ModelUnavailableError
-        from app.workers.analyze_job import AnalyzeJob, AnalyzeProgress
-
-        def emit(p: AnalyzeProgress) -> None:
-            self.progress.emit(p.phase, p.done, p.total)
+        from app.workers.analyze_process import run_in_child
 
         try:
-            with Project.open(self.project_folder) as project:
-                summary = AnalyzeJob(project, learning_dir=self.learning_dir, prefer_gpu=self.prefer_gpu).run(
-                    progress=emit, should_cancel=self._cancel.is_set, mode=self.mode)
-            self.succeeded.emit(asdict(summary) | {"mode": self.mode})
-        except ModelUnavailableError as exc:
-            self.failed.emit(f"{exc}\n\nChạy lệnh sau một lần (cần Internet):\n"
-                             ".\\.venv\\Scripts\\python .\\scripts\\fetch_models.py")
-        except Exception as exc:  # noqa: BLE001
-            log.exception("analysis failed")
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
+            summary = run_in_child(self.project_folder, self.mode, self.learning_dir, self.prefer_gpu,
+                                   self.progress.emit, self._cancel.is_set)
+            self.succeeded.emit(summary | {"mode": self.mode})
+        except Exception as exc:  # noqa: BLE001 - the child already logged details
+            log.warning("analysis failed: %s", exc)
+            self.failed.emit(str(exc))
