@@ -1,6 +1,9 @@
-## KiraPick 2.1.0b3 – bản thử nghiệm (beta)
+## KiraPick 2.1.0b4 – bản thử nghiệm (beta)
 
 > **Bản beta, chưa phải bản chính thức.** Bản chính thức mới nhất vẫn là 2.0.6.
+> - **2.1.0b4 – 📊 Phân tích ảnh cũng dùng card đồ hoạ:** mô hình gợi ý thẩm mỹ được chạy trên GPU nếu khi
+>   khởi động nó cho kết quả giống CPU (tự kiểm tra trên ảnh mẫu dọc và ngang); khác hoặc lỗi thì tự dùng CPU.
+>   Thanh trạng thái ghi tên card đang dùng, ví dụ [GPU NVIDIA GeForce RTX 2080 …]; rê chuột lên để xem số đo.
 > - **2.1.0b3 – chọn đúng card đồ hoạ:** laptop có 2 card (Intel + NVIDIA) thì DirectML từng chạy trên card
 >   Intel nên chậm hơn CPU. Giờ app thử từng card, dùng card nhanh nhất và ghi tên card + thời gian đo lên thanh
 >   trạng thái. Tự kiểm tra không còn lỗi khi thư mục Desktop nằm trong OneDrive (báo cáo vào thư mục logs).

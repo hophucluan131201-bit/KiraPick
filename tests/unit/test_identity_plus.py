@@ -588,3 +588,30 @@ def test_fastest_graphics_card_is_chosen_and_slow_ones_are_not_used(monkeypatch:
     finally:
         runtime._speed_cache.clear()
         runtime._dml_device = None
+
+
+def test_aesthetic_runs_on_the_gpu_only_if_it_matches_the_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Owner's self-test: DirectML 11 ms vs CPU 200 ms, yet 📊 ran on the CPU because TOPIQ was barred from
+    DirectML on a guess. Now it may use the GPU, after checking the GPU's answer against the CPU's."""
+    from types import SimpleNamespace
+
+    from app.ai import aesthetic
+
+    def fake(device: str, value: float | None):  # noqa: ANN202
+        def run(*_a):  # noqa: ANN002, ANN202
+            if value is None:
+                raise RuntimeError("DML: unsupported shape")
+            return [np.array([[value]], np.float32)]
+        inner = SimpleNamespace(get_inputs=lambda: [SimpleNamespace(name="x")])
+        return SimpleNamespace(session=inner, run=run, device=device, fallback_reason=None)
+
+    registry = SimpleNamespace(require=lambda _id: Path("topiq.onnx"))
+    for gpu_value, expected_device in ((5.0, "directml"), (5.3, "cpu"), (None, "cpu")):
+        monkeypatch.setattr(aesthetic, "create_session", lambda path, prefer_gpu=True, **k: (
+            fake("directml", gpu_value) if prefer_gpu else fake("cpu", 5.0)))
+        model = aesthetic.AestheticModel(registry, prefer_gpu=True)
+        assert model.session.device == expected_device, gpu_value
+        if expected_device == "cpu":
+            assert "CPU" in model.session.fallback_reason
+    monkeypatch.setattr(aesthetic, "create_session", lambda path, prefer_gpu=True, **k: fake("cpu", 5.0))
+    assert aesthetic.AestheticModel(registry, prefer_gpu=False).session.device == "cpu"

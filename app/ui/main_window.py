@@ -706,6 +706,7 @@ class MainWindow(QMainWindow):
         thread = AnalyzeThread(self.project.folder, mode, self._learning_dir(), self.act_gpu.isChecked())
         self._analysis_started = time.monotonic()
         self._run_device = None
+        self._gpu_name = None
         thread.progress.connect(self._on_analyze_progress)
         thread.succeeded.connect(self._on_analyze_done)
         title = "Nhận diện chủ thể" if mode == "people" else "Phân tích ảnh"
@@ -736,8 +737,14 @@ class MainWindow(QMainWindow):
             self.pause_button.setVisible(False)
 
     def _on_analyze_progress(self, phase: str, done: int, total: int) -> None:
+        if phase.startswith("gpu_name:"):  # the graphics card the speed check picked
+            self._gpu_name = phase[len("gpu_name:"):]
+            return
         if phase.startswith("device:"):  # where the AI runs, shown with every progress message
-            self._run_device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(phase[7:], "CPU")
+            device = phase[len("device:"):]
+            name = getattr(self, "_gpu_name", None)
+            self._run_device = ("CPU" if device == "cpu" else f"GPU {name}" if name
+                                else {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(device, "GPU"))
             return
         label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện chủ thể…",
                  "embed": "Đang so khuôn mặt và dáng người (ArcFace + ReID)…",
@@ -768,6 +775,7 @@ class MainWindow(QMainWindow):
                 parts.append(f"{summary['measure_failed']} ảnh không chấm được ({self._main_error('quality')})")
             note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
             self.status.setText(", ".join(parts) + "." + note + " Bước tiếp theo: bấm ⭐ Chọn ảnh, hoặc xếp theo điểm.")
+            self.status.setToolTip(summary.get("gpu_check") or "")
             return
         people = self.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
         unknown = self.project.conn.execute(
@@ -783,6 +791,7 @@ class MainWindow(QMainWindow):
         note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
         if summary.get("learning"):
             note += f" {summary['learning']}"
+        self.status.setToolTip(summary.get("gpu_check") or "")
         self.status.setText(", ".join(parts) + "." + note
                             + " Hãy kiểm tra, gộp/tách chủ thể cho đúng, rồi bấm 📊 Phân tích ảnh.")
 

@@ -105,10 +105,10 @@ def run(report_path: Path, photos: Path | None = None) -> int:
             inp = probe.session.get_inputs()[0]
             dummy = np.zeros([d if isinstance(d, int) else 1 for d in inp.shape], np.float32)
             probe.session.run(None, {inp.name: dummy})  # warm-up
-            started = time.perf_counter()
+            t0 = time.perf_counter()
             for _ in range(3):
                 probe.session.run(None, {inp.name: dummy})
-            ms = round((time.perf_counter() - started) / 3 * 1000)
+            ms = round((time.perf_counter() - t0) / 3 * 1000)
             report["gpu"] = {"device": probe.device, "note": probe.fallback_reason, "yolox_m_ms": ms}
             from app.ai.runtime import gpu_speed_check
 

@@ -57,6 +57,7 @@ class AnalyzeSummary:
     device: str = "cpu"
     fallback_reason: str | None = None
     learning: str | None = None  # what the grouping learnt from this user's corrections
+    gpu_check: str | None = None  # which graphics card was measured / used, with timings
 
 
 def _box_json(box: tuple[float, float, float, float] | None) -> str | None:
@@ -117,6 +118,11 @@ class AnalyzeJob:
 
             progress(AnalyzeProgress("load_models", 0, len(todo)))
             use_gpu, note = gpu_speed_check(self.registry.require("person_detector_s"))
+            summary.gpu_check = note
+            from app.ai import runtime
+
+            if use_gpu and runtime.gpu_name:
+                progress(AnalyzeProgress("gpu_name:" + runtime.gpu_name, 0, 0))
             if not use_gpu:
                 self.prefer_gpu, gpu_note = False, note
         if todo:

@@ -119,6 +119,7 @@ def _gpu_attempts(available: list[str], gpu_mem_limit_mb: int) -> list[tuple[str
 
 
 _dml_device: int | None = None  # DXGI adapter index DirectML uses, once measured
+gpu_name: str | None = None  # the graphics card the speed check chose (shown to the user)
 
 
 def list_gpus() -> list[dict]:
@@ -218,7 +219,7 @@ def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
 
     import numpy as np
 
-    global _dml_device
+    global _dml_device, gpu_name
     key = str(model)
     if key in _speed_cache:
         return _speed_cache[key]
@@ -260,6 +261,7 @@ def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
             best_ms, best_label, best_index = min(candidates)
             if best_ms <= cpu_ms * GPU_MUST_BE_FASTER:
                 _dml_device = best_index
+                gpu_name = best_label.split(": ", 1)[-1]
                 result = (True, f"Dùng {best_label} ({measured})")
             else:
                 result = (False, f"Card đồ hoạ chậm hơn CPU trên máy này ({measured}); dùng CPU")

@@ -23,10 +23,37 @@ def _round32(v: float) -> int:
 
 class AestheticModel:
     def __init__(self, registry: ModelRegistry, *, prefer_gpu: bool = True) -> None:
-        # Not on DirectML: the input size changes with the photo's shape, which DirectML handles badly
-        # (installer 2.0.4: every photo of the quality stage failed on it). CUDA or the CPU.
-        self.session = create_session(registry.require("aesthetic"), prefer_gpu=prefer_gpu, allow_directml=False)
+        path = registry.require("aesthetic")
+        self.session = create_session(path, prefer_gpu=prefer_gpu)
         self._input = self.session.session.get_inputs()[0].name
+        if self.session.device != "cpu":
+            # The input size follows the photo's shape; a GPU provider may fail or round differently on it.
+            # Keep the GPU only if it gives the CPU's answer on both orientations (owner's laptop:
+            # DirectML 11 ms vs CPU 200 ms per detection, so this matters for 📊).
+            problem = self._differs_from_cpu(path)
+            if problem:
+                self.session = create_session(path, prefer_gpu=False)
+                self.session.fallback_reason = f"Gợi ý thẩm mỹ chạy bằng CPU: {problem}"
+
+    PROBES = ((384, 576), (576, 384))  # (height, width) of a landscape and a portrait photo
+    TOLERANCE = 0.02  # on the 1..10 scale
+
+    def _differs_from_cpu(self, path) -> str | None:  # noqa: ANN001
+        cpu = AestheticModel.__new__(AestheticModel)
+        cpu.session = create_session(path, prefer_gpu=False)
+        cpu._input = cpu.session.session.get_inputs()[0].name
+        for h, w in self.PROBES:
+            gx, gy = np.meshgrid(np.linspace(0, 255, w), np.linspace(0, 255, h))
+            probe = np.dstack([gx, gy, np.full((h, w), 128.0)]).astype(np.uint8)  # smooth colour ramp
+            try:
+                gpu_score = self.score(probe)
+            except Exception as exc:  # noqa: BLE001
+                return f"card đồ hoạ lỗi ({type(exc).__name__})"
+            if self.session.device == "cpu":
+                return "card đồ hoạ lỗi khi chạy"  # Session.run already fell back
+            if abs(gpu_score - cpu.score(probe)) > self.TOLERANCE:
+                return "kết quả trên card đồ hoạ khác CPU"
+        return None
 
     def score(self, bgr: np.ndarray) -> float:
         h, w = bgr.shape[:2]
