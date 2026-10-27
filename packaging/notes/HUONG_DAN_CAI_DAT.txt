@@ -1,0 +1,68 @@
+﻿HƯỚNG DẪN CÀI ĐẶT SNORLU AI CULLING (bản thử nghiệm 0.2)
+=========================================================
+
+KHÔNG cần cài Git, Python hay bất cứ thứ gì khác. Mọi thứ đã có sẵn trong bộ cài.
+Máy cần: Windows 10 hoặc 11 (64-bit), khoảng 1 GB ổ cứng trống. Không cần card đồ hoạ.
+
+-----------------------------------------------------------------
+BƯỚC 1 - GIẢI NÉN
+-----------------------------------------------------------------
+1. Nhấp chuột PHẢI vào file .zip bạn vừa tải về.
+2. Chọn "Extract All..." (Giải nén tất cả...) -> bấm "Extract".
+3. Một thư mục mới hiện ra, bên trong có:
+     - Snorlu-AI-Culling-Setup-....exe   (bộ cài)
+     - HUONG_DAN_CAI_DAT.txt             (file bạn đang đọc)
+
+-----------------------------------------------------------------
+BƯỚC 2 - CÀI ĐẶT
+-----------------------------------------------------------------
+1. Nhấp đúp vào file  Snorlu-AI-Culling-Setup-....exe
+2. Nếu hiện khung màu xanh "Windows protected your PC" (Windows đã bảo vệ máy tính):
+     - Bấm chữ nhỏ  "More info"  (Thông tin thêm)
+     - Bấm nút      "Run anyway" (Vẫn chạy)
+   Khung này hiện vì bộ cài thử nghiệm chưa mua chữ ký số, KHÔNG phải virus.
+3. Trang giấy phép: chọn "I accept the agreement" (Tôi đồng ý) -> Next.
+4. Trang hướng dẫn: Next.
+5. Tick ô "Create a desktop shortcut" nếu muốn có biểu tượng ngoài màn hình -> Next.
+6. Bấm "Install", chờ khoảng 1 phút -> bấm "Finish".
+   Không cần mật khẩu Administrator.
+
+Từ giờ mở ứng dụng bằng biểu tượng "Snorlu AI Culling" ngoài màn hình
+hoặc trong menu Start.
+
+-----------------------------------------------------------------
+BƯỚC 3 - DÙNG THỬ (4 nút trên thanh công cụ, làm lần lượt)
+-----------------------------------------------------------------
+1. 📂 Nhập ảnh        -> chọn thư mục ảnh của một buổi chụp (RAW hoặc JPEG).
+2. 🧠 Nhận diện người -> chờ AI gom ảnh theo từng người.
+                        Cột trái "NGƯỜI": nếu một người bị tách làm 2 nhóm,
+                        tick 2 ô vuông của họ rồi bấm "🔗 Gộp người".
+3. 📊 Phân tích ảnh    -> chờ AI chấm điểm (nét, mặt, sáng, bố cục).
+4. ⭐ Chọn ảnh         -> nhập số ảnh muốn chọn cho mỗi người -> "Chọn ảnh".
+Sau đó xem lại: phím K = giữ, X = loại, U = bỏ đánh dấu.
+Cuối cùng: "⤴ Xuất ảnh" -> chọn "Ảnh đã Giữ" -> chọn thư mục đích -> sao chép.
+
+Mẹo: Space = xem ảnh lớn, Esc = về lưới, E = phóng tới mắt xem có nét không.
+Bảng phím tắt luôn hiện ở dưới khu vực ảnh.
+
+-----------------------------------------------------------------
+YÊN TÂM VỀ ẢNH CỦA BẠN
+-----------------------------------------------------------------
+- Ứng dụng KHÔNG BAO GIỜ sửa, xoá, đổi tên hay di chuyển ảnh gốc.
+  "Xuất ảnh" chỉ SAO CHÉP sang thư mục bạn chọn.
+- Ứng dụng KHÔNG cần Internet và không gửi ảnh hay dữ liệu đi đâu.
+
+-----------------------------------------------------------------
+GỠ CÀI ĐẶT
+-----------------------------------------------------------------
+Start -> Settings (Cài đặt) -> Apps (Ứng dụng) -> tìm "Snorlu AI Culling" -> Uninstall.
+Ảnh của bạn không bị ảnh hưởng.
+
+-----------------------------------------------------------------
+KHI GẶP LỖI
+-----------------------------------------------------------------
+Chụp màn hình lỗi và gửi cho người đã chia sẻ ứng dụng cho bạn, kèm thư mục log:
+  bấm phím Windows + R, dán dòng dưới đây rồi Enter, gửi các file trong thư mục mở ra:
+  %LOCALAPPDATA%\Snorlu\Snorlu AI Culling\logs
+
+Đây là dự án cá nhân, phi thương mại, chia sẻ miễn phí - không bán lại.

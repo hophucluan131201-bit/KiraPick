@@ -7,6 +7,16 @@ keyboard culling, copy export) works; offline AI groups photos by person and loo
 shots (first version: eyes-closed and aesthetics are not judged yet). See
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
+## Dành cho người dùng (không cần biết lập trình)
+
+1. Vào trang **[Releases](https://github.com/hophucluan131201-bit/snorlu-ai-culling/releases)** của dự án
+   (cột bên phải trang GitHub → *Releases*).
+2. Tải file **`Snorlu-AI-Culling-…-BoCai.zip`** trong phiên bản mới nhất.
+3. Nhấp phải → *Extract All* → mở file **`HUONG_DAN_CAI_DAT.txt`** và làm theo (3 bước, không cần
+   cài Git hay Python).
+
+Dự án cá nhân, **phi thương mại**, chia sẻ miễn phí — xem [Giấy phép](#license--giấy-phép).
+
 Specification: [`docs/TECHNICAL_SPEC_v1.1.md`](docs/TECHNICAL_SPEC_v1.1.md).
 RAW support evidence: [`docs/raw-support-matrix.md`](docs/raw-support-matrix.md).
 
@@ -126,3 +136,15 @@ python scripts/raw_samples.py fetch         # DEV ONLY (network): download publi
 ```
 
 `test_photos/` is git-ignored. Put private sample photos there; they are never committed.
+
+## License / Giấy phép
+
+Personal, **non-commercial** project. The Snorlu source code is licensed under the
+[PolyForm Noncommercial License 1.0.0](LICENSE.md): free to use, copy, modify and share for any
+noncommercial purpose; commercial use needs the author's permission. Bundled third-party software
+and AI model weights keep their own licenses ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+[docs/model-licenses.md](docs/model-licenses.md)) — all of them allow this free, non-commercial
+distribution; the non-commercial terms above apply to Snorlu's own code only.
+
+Dự án cá nhân, phi thương mại: được dùng, sao chép, sửa, chia sẻ miễn phí; không bán lại hay dùng
+thương mại khi chưa được tác giả đồng ý. Thư viện và mô hình AI đi kèm giữ giấy phép riêng của họ.

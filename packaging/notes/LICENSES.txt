@@ -1,5 +1,15 @@
-﻿Snorlu AI Culling 0.2 beta - bản thử nghiệm chia sẻ miễn phí giữa bạn bè.
-Phần mềm được cung cấp "nguyên trạng", không bảo hành. Ứng dụng chỉ đọc ảnh gốc của bạn.
+﻿SNORLU AI CULLING - DỰ ÁN CÁ NHÂN, PHI THƯƠNG MẠI
+Required Notice: Copyright 2026 Snorlu (https://github.com/hophucluan131201-bit/snorlu-ai-culling)
+
+- Đây là dự án cá nhân, chia sẻ miễn phí, KHÔNG dùng cho mục đích thương mại.
+- Mã nguồn của Snorlu theo giấy phép PolyForm Noncommercial 1.0.0
+  (https://polyformproject.org/licenses/noncommercial/1.0.0): được dùng, sao chép,
+  sửa và chia sẻ cho mục đích phi thương mại; KHÔNG được bán hay đưa vào sản phẩm
+  thương mại nếu chưa được tác giả đồng ý. Toàn văn: file LICENSE.md đi kèm.
+- Phần mềm được cung cấp "nguyên trạng", không bảo hành. Ứng dụng chỉ đọc ảnh gốc,
+  không sửa, xoá hay gửi ảnh đi đâu.
+- Các thành phần của bên thứ ba bên dưới giữ nguyên giấy phép của họ; ghi chú
+  "phi thương mại" ở trên chỉ áp dụng cho mã nguồn của Snorlu.
 
 THÀNH PHẦN BÊN THỨ BA ĐI KÈM (THIRD-PARTY COMPONENTS)
 
@@ -15,6 +25,8 @@ Software
 - ExifRead - BSD-3-Clause
 - PyYAML - MIT
 - PyInstaller bootloader - GPL-2.0 with the PyInstaller bootloader exception
+- Microsoft Visual C++ runtime DLLs (msvcp140*, vcruntime140_1, concrt140, vcomp140) - redistributed
+  app-locally under the Microsoft Visual C++ Redistributable license terms
 
 AI model weights (bundled, verified by SHA-256; see docs/model-licenses.md in the source)
 - YuNet face detector 2023mar (OpenCV Zoo) - MIT, Shiqi Yu

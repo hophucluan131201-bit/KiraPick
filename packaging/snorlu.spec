@@ -10,9 +10,22 @@ ROOT = Path(SPECPATH).parent
 APP_NAME = "Snorlu AI Culling"
 icon = ROOT / "packaging" / "snorlu.ico"
 
+# Microsoft Visual C++ runtime next to the app (app-local deployment, allowed by the VC++
+# redistributable terms): ONNX Runtime and OpenCV need msvcp140.dll, which a PC without the
+# "VC++ Redistributable" lacks. PySide6 ships these files; put copies in the top folder,
+# which the PyInstaller bootloader adds to the DLL search path.
+msvc_runtime = []
+if sys.platform == "win32":
+    import importlib.util
+
+    pyside_dir = Path(importlib.util.find_spec("PySide6").origin).parent
+    for pattern in ("msvcp140*.dll", "vcruntime140_1.dll", "concrt140.dll", "vcomp140.dll"):
+        msvc_runtime += [(str(f), ".") for f in pyside_dir.glob(pattern)]
+
 a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(ROOT)],
+    binaries=msvc_runtime,
     datas=[
         (str(ROOT / "configs" / "model-manifest.json"), "configs"),
     ],

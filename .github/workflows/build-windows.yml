@@ -1,5 +1,6 @@
-# Builds the Windows installer on a clean Windows machine and keeps it as a downloadable artifact.
-# Runs on demand (Actions -> "Build Windows installer" -> Run workflow) and for version tags (v*).
+# Builds the Windows installer on a clean Windows machine.
+# - Push a version tag (v*): build + self-test + publish a GitHub Release with the files.
+# - Actions tab -> "Build Windows installer" -> Run workflow: build + downloadable artifact only.
 name: Build Windows installer
 
 on:
@@ -8,7 +9,7 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: read
+  contents: write  # needed to create the Release
 
 jobs:
   build:
@@ -24,13 +25,21 @@ jobs:
         run: |
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
       - name: Build, self-test (network blocked), package
-        shell: powershell
-        run: powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: snorlu-windows-installer
           path: |
-            dist/installer/*.exe
-            dist/installer/*.zip
+            dist/installer/*
             dist/selftest.json
           retention-days: 30
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = Get-ChildItem dist/installer -File | ForEach-Object { $_.FullName }
+          gh release create "${{ github.ref_name }}" $files --title "Snorlu AI Culling ${{ github.ref_name }} (beta)" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease

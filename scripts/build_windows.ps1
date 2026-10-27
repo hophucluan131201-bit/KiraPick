@@ -3,42 +3,65 @@ Build the Windows installer of Snorlu AI Culling (CPU build, works offline).
 
     powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 
+Normally GitHub Actions runs this (.github/workflows/build-windows.yml) and publishes the result on
+the Releases page; running it by hand is only needed to build locally.
 Steps: separate build venv (.venv-build, Python 3.12) with the exact versions in
 packaging\requirements-installer.txt -> verified model weights -> PyInstaller folder
 -> offline self-test of the packaged exe (network blocked) -> Inno Setup installer
-(if Inno Setup 6 is installed) and a portable .zip.
+(if Inno Setup 6 is installed) -> zips with the Vietnamese install guide.
 Changes nothing outside the project folder. Needs Internet only to download packages
-and model weights (development time, never at app run time).
+and model weights (build time, never at app run time).
 Output: dist\installer\
 #>
 param([switch]$NonInteractive)
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
-$Root = Get-Location
-function Step($text) { Write-Host "`n=== $text ===" -ForegroundColor Cyan }
+$Root = (Get-Location).Path
 
-Step "1/6 Python 3.12"
+function Step([string]$text) { Write-Host "`n=== $text ===" -ForegroundColor Cyan }
+
+# Native tools write progress to stderr; Windows PowerShell 5 would turn that into errors.
+# Run them with errors not stopping the script and judge success by the exit code only.
+function Invoke-Tool([string]$what, [string]$exe, [string[]]$arguments) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $exe @arguments 2>&1 | ForEach-Object { Write-Host "$_" }
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $old
+    if ($code -ne 0) { throw "$what thất bại (mã lỗi $code)" }
+}
+
 function Test-Python312([string]$exe, [string[]]$pre) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     try {
         $out = & $exe @pre -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
-        if ($LASTEXITCODE -eq 0 -and $out -eq "3.12") { return $true }
-    } catch { }
-    return $false
+        return ($LASTEXITCODE -eq 0 -and "$out".Trim() -eq "3.12")
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $old
+    }
 }
-$pyExe = $null; $pyArgs = @()
-if ((Get-Command py -ErrorAction SilentlyContinue) -and (Test-Python312 'py' @('-3.12'))) { $pyExe = 'py'; $pyArgs = @('-3.12') }
-elseif ((Get-Command python -ErrorAction SilentlyContinue) -and (Test-Python312 'python' @())) { $pyExe = 'python' }
+
+Step "1/6 Python 3.12"
+$pyExe = $null
+$pyArgs = @()
+if ((Get-Command py -ErrorAction SilentlyContinue) -and (Test-Python312 "py" @("-3.12"))) {
+    $pyExe = "py"; $pyArgs = @("-3.12")
+} elseif ((Get-Command python -ErrorAction SilentlyContinue) -and (Test-Python312 "python" @())) {
+    $pyExe = "python"
+}
 if (-not $pyExe) { throw "Cần Python 3.12: winget install --id Python.Python.3.12 -e" }
 Write-Host "Dùng: $pyExe $pyArgs"
 
 Step "2/6 Môi trường build riêng (.venv-build)"
 if (-not (Test-Path ".venv-build\Scripts\python.exe")) {
-    & $pyExe @pyArgs -m venv .venv-build
+    Invoke-Tool "Tạo .venv-build" $pyExe ($pyArgs + @("-m", "venv", ".venv-build"))
 }
 $bpy = Join-Path $Root ".venv-build\Scripts\python.exe"
-& $bpy -m pip install --disable-pip-version-check -q --upgrade pip
-& $bpy -m pip install --disable-pip-version-check -q -r packaging\requirements-installer.txt
-if ($LASTEXITCODE -ne 0) { throw "pip install thất bại" }
+Invoke-Tool "Cập nhật pip" $bpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "--upgrade", "pip")
+Invoke-Tool "Cài thư viện" $bpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "packaging\requirements-installer.txt")
 
 Step "3/6 Mô hình AI (kiểm tra SHA-256)"
 $models = Join-Path $Root "build\models"
@@ -46,43 +69,49 @@ New-Item -ItemType Directory -Force -Path $models | Out-Null
 Get-ChildItem "models\weights\*.onnx" -ErrorAction SilentlyContinue | ForEach-Object {
     if (-not (Test-Path (Join-Path $models $_.Name))) { Copy-Item $_.FullName $models }
 }
-& $bpy scripts\fetch_models.py --purpose identity,quality --dest $models
-if ($LASTEXITCODE -ne 0) { throw "Thiếu mô hình AI" }
+Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", "identity,quality", "--dest", $models)
 Remove-Item (Join-Path $models "yolox_m.onnx") -ErrorAction SilentlyContinue  # GPU-only model, not shipped
 
 Step "4/6 PyInstaller"
 $dist = Join-Path $Root "dist\Snorlu AI Culling"
 if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
-& $bpy -m PyInstaller --noconfirm --clean --workpath build\pyi --distpath dist packaging\snorlu.spec
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller thất bại" }
+Invoke-Tool "PyInstaller" $bpy @("-m", "PyInstaller", "--noconfirm", "--clean", "--workpath", "build\pyi", "--distpath", "dist", "packaging\snorlu.spec")
 New-Item -ItemType Directory -Force -Path (Join-Path $dist "models") | Out-Null
 Copy-Item (Join-Path $models "*.onnx") (Join-Path $dist "models")
 
 Step "5/6 Tự kiểm tra bản đóng gói (chặn mạng)"
 $report = Join-Path $Root "dist\selftest.json"
 Remove-Item $report -ErrorAction SilentlyContinue
-$p = Start-Process -FilePath (Join-Path $dist "Snorlu.exe") -ArgumentList @("--self-test", "`"$report`"") -Wait -PassThru
-Get-Content $report -Encoding UTF8 | Write-Host
-if ($p.ExitCode -ne 0) { throw "Tự kiểm tra thất bại (xem dist\selftest.json)" }
+$proc = Start-Process -FilePath (Join-Path $dist "Snorlu.exe") -ArgumentList @("--self-test", "`"$report`"") -Wait -PassThru
+if (Test-Path $report) { Get-Content $report -Encoding UTF8 | ForEach-Object { Write-Host $_ } }
+if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) { throw "Tự kiểm tra thất bại (xem dist\selftest.json)" }
 
-Step "6/6 Bộ cài"
-$version = (& $bpy -c "import sys; sys.path.insert(0, '.'); from app import __version__; print(__version__)").Trim()
+Step "6/6 Bộ cài và file zip"
+$version = (& $bpy -c "import sys; sys.path.insert(0, '.'); from app import __version__; print(__version__)" | Out-String).Trim()
+$out = Join-Path $Root "dist\installer"
 $notes = Join-Path $Root "dist\installer-notes"
-New-Item -ItemType Directory -Force -Path $notes, "dist\installer" | Out-Null
-Copy-Item packaging\notes\* $notes
-Copy-Item docs\model-licenses.md $notes
-$zip = "dist\installer\Snorlu-AI-Culling-$version-portable.zip"
-if (Test-Path $zip) { Remove-Item $zip }
-Compress-Archive -Path $dist -DestinationPath $zip
-Write-Host "Bản portable (giải nén là chạy): $zip"
+foreach ($d in @($out, $notes)) {
+    if (Test-Path $d) { Remove-Item -Recurse -Force $d }
+    New-Item -ItemType Directory -Force -Path $d | Out-Null
+}
+Copy-Item "packaging\notes\*" $notes
+Copy-Item "LICENSE.md", "THIRD_PARTY_NOTICES.md", "docs\model-licenses.md" $notes
+Copy-Item "packaging\notes\HUONG_DAN_CAI_DAT.txt", "LICENSE.md" $dist
+
+$guide = Join-Path $Root "packaging\notes\HUONG_DAN_CAI_DAT.txt"
+$portable = Join-Path $out "Snorlu-AI-Culling-$version-portable.zip"
+Compress-Archive -Path $dist -DestinationPath $portable
+Write-Host "Bản giải nén là chạy: $portable"
+
 $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
           "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) {
-    Write-Host "Chưa có Inno Setup 6 nên chưa tạo được file Setup.exe." -ForegroundColor Yellow
-    Write-Host "Cài một lần:  winget install --id JRSoftware.InnoSetup -e   rồi chạy lại script này."
+    Write-Host "Chưa có Inno Setup 6 nên chưa tạo được file Setup.exe (winget install --id JRSoftware.InnoSetup -e)." -ForegroundColor Yellow
 } else {
-    & $iscc "/DAppVersion=$version" packaging\installer.iss
-    if ($LASTEXITCODE -ne 0) { throw "Inno Setup thất bại" }
-    Write-Host "Bộ cài: dist\installer\Snorlu-AI-Culling-Setup-$version.exe" -ForegroundColor Green
+    Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "packaging\installer.iss")
+    $setup = Join-Path $out "Snorlu-AI-Culling-Setup-$version.exe"
+    $bundle = Join-Path $out "Snorlu-AI-Culling-$version-BoCai.zip"
+    Compress-Archive -Path $setup, $guide -DestinationPath $bundle
+    Write-Host "Bộ cài (gửi file này cho bạn bè): $bundle" -ForegroundColor Green
 }
-Get-ChildItem dist\installer | Format-Table Name, @{n = "MB"; e = { [math]::Round($_.Length / 1MB) } }
+Get-ChildItem $out | Format-Table Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB) } } | Out-String | Write-Host
