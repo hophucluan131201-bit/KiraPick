@@ -1,6 +1,6 @@
 """Pack the analysis data of one photo folder so grouping can be tuned on real results.
 
-    .\\.venv\\Scripts\\python scripts\\export_debug_bundle.py "D:\\Photos\\Shoot" [--out D:\\snorlu_debug.zip]
+    .\\.venv\\Scripts\\python scripts\\export_debug_bundle.py "D:\\Photos\\Shoot"   # -> .\\snorlu_debug.zip
 
 Contains: the session database (file names, capture times, camera/lens, decisions,
 detected boxes, face/outfit vectors, groups), the 400 px thumbnails and the 160 px
@@ -35,7 +35,7 @@ def default_sessions_root() -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("folder", type=Path, help="the photo folder you imported in the app")
-    parser.add_argument("--out", type=Path, default=Path.home() / "Desktop" / "snorlu_debug.zip")
+    parser.add_argument("--out", type=Path, default=Path.cwd() / "snorlu_debug.zip")
     parser.add_argument("--sessions", type=Path, help="override the sessions directory")
     args = parser.parse_args()
 
