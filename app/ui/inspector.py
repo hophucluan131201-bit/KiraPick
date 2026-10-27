@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFormLayout, QLabel, QVBoxLayout, QWidget
 
 from app.ui import theme
+from app.quality.score import NOT_MEASURED
 from app.ui.asset_model import AssetRecord
 
 _SOURCE_VI = {
@@ -86,9 +87,17 @@ class Inspector(QWidget):
         f["Đánh dấu"].setText(flag)
         f["Sao"].setText("★" * rec.rating if rec.rating else "chưa chấm")
         f["Yêu thích"].setText("♥ có" if rec.favorite else "không")
-        f["Chủ thể"].setText(people or "chưa phân tích — bấm 🧠 Nhận diện người")
-        # Honest status: quality scoring is not built yet (milestone M3).
-        f["Điểm chất lượng"].setText("chưa có — chưa cài bộ phân tích (M3)")
+        f["Chủ thể"].setText(people or "chưa phân tích — bấm 🧠 Phân tích ảnh")
+        if rec.score is None:
+            f["Điểm chất lượng"].setText("chưa chấm — bấm 🧠 Phân tích ảnh")
+        else:
+            text = rec.score.summary()
+            if rec.score.warnings:
+                text += "\n⚠ " + "; ".join(rec.score.warnings)
+            if rec.pick_rank is not None:
+                text += f"\n⭐ AI chọn (thứ {rec.pick_rank})"
+            text += "\nChỉ là điểm kỹ thuật. Chưa chấm: " + ", ".join(NOT_MEASURED)
+            f["Điểm chất lượng"].setText(text)
         source = view_source or rec.preview_source
         f["Nguồn ảnh"].setText(_SOURCE_VI.get(source or "", source or "—"))
         self.error.setText(f"Lỗi: {rec.error}" if rec.error else "")

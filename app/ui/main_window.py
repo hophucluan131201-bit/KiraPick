@@ -8,6 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QItemSelectionModel, QModelIndex, QSettings, QSize, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QFileDialog,
     QInputDialog,
@@ -33,18 +34,20 @@ from app import __version__
 from app.storage import decisions
 from app.storage.project import Project
 from app.storage.sessions import delete_session, open_session, purge_old_sessions
-from app.ai.models import ModelRegistry, ModelState
+from app.ai.models import ModelRegistry
 from app.identity import actions
 from app.identity.cluster import merge_suggestions
 from app.learning.store import LearningStore
+from app.quality import select
 from app.learning.teacher import Teacher
 from app.selection.client_list import delete_collection, list_collections
-from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter
+from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter, Sort
 from app.ui.client_list_dialog import ClientListDialog
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
 from app.ui.inspector import Inspector
 from app.ui.review_dialog import ReviewDialog
+from app.ui.select_dialog import SelectDialog
 from app.ui.jobs import AnalyzeThread, ImportThread
 from app.ui.viewer import ImageViewer
 
@@ -134,8 +137,8 @@ class MainWindow(QMainWindow):
         self.act_import.setToolTip("Nhập một thư mục ảnh (Ctrl+I)")
         self.act_import.setShortcut(QKeySequence("Ctrl+I"))
         self.act_import.triggered.connect(self.choose_and_import)
-        self.act_analyze = QAction("🧠 Nhận diện người", self)
-        self.act_analyze.setToolTip("AI tìm người trong ảnh và gom ảnh theo từng người (chạy nền, offline)")
+        self.act_analyze = QAction("🧠 Phân tích ảnh", self)
+        self.act_analyze.setToolTip("AI tìm người, gom ảnh theo từng người và chấm điểm kỹ thuật (chạy nền, offline)")
         self.act_analyze.triggered.connect(self.start_analysis)
         self.act_reset = QAction("↺ Làm lại", self)
         self.act_reset.setToolTip("Quên các dấu Giữ/Loại/sao và danh sách khách của thư mục này, nhập lại từ đầu")
@@ -162,8 +165,11 @@ class MainWindow(QMainWindow):
         self.act_merge.setToolTip("Tick ô vuông cạnh 2 người trở lên trong danh sách NGƯỜI, rồi bấm để gộp thành một người")
         self.act_merge.setEnabled(False)
         self.act_merge.triggered.connect(lambda: self.merge_selected_people())
-        for act in (self.act_import, self.act_analyze, self.act_merge, self.act_client_list, self.act_export,
-                    self.act_loupe, self.act_reset):
+        self.act_select = QAction("⭐ Chọn ảnh", self)
+        self.act_select.setToolTip("AI chọn N ảnh đẹp, khác dáng nhau; bạn xem lại rồi xuất ảnh")
+        self.act_select.triggered.connect(lambda: self.open_select_dialog())
+        for act in (self.act_import, self.act_analyze, self.act_merge, self.act_select, self.act_client_list,
+                    self.act_export, self.act_loupe, self.act_reset):
             tb.addAction(act)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
@@ -190,6 +196,12 @@ class MainWindow(QMainWindow):
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(6, 6, 6, 6)
         side_layout.addWidget(self.search)
+        self.sort = QComboBox()
+        for label, mode in (("Xếp theo thời gian chụp", Sort.TIME), ("Xếp theo điểm (cao → thấp)", Sort.SCORE),
+                            ("Ảnh AI chọn trước, rồi theo điểm", Sort.PICKS_FIRST)):
+            self.sort.addItem(label, mode.value)
+        self.sort.currentIndexChanged.connect(lambda _i: self._on_sort_changed())
+        side_layout.addWidget(self.sort)
         t1 = QLabel("THƯ MỤC")
         t1.setObjectName("sectionTitle")
         self.sources = QListWidget()
@@ -500,7 +512,7 @@ class MainWindow(QMainWindow):
     def models_ready(self) -> bool:
         if self._registry is None:
             self._registry = ModelRegistry()
-        return all(st.state is ModelState.READY for st in self._registry.all_status())
+        return self._registry.ready("identity")
 
     def start_analysis(self) -> AnalyzeThread | None:
         if self.project is None or self.import_thread is not None or self.analyze_thread is not None:
@@ -536,8 +548,9 @@ class MainWindow(QMainWindow):
 
     def _on_analyze_progress(self, phase: str, done: int, total: int) -> None:
         label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện người…",
+                 "quality": "Đang chấm điểm ảnh (độ nét đo trên ảnh gốc)…",
                  "group": "Đang gom ảnh theo người…"}.get(phase, phase)
-        if total and phase == "detect":
+        if total and phase in ("detect", "quality"):
             self.progress.setRange(0, total)
             self.progress.setValue(done)
             self.status.setText(f"{label} {done}/{total}")
@@ -562,6 +575,8 @@ class MainWindow(QMainWindow):
             parts.append(f"{review} gợi ý cần xem lại")
         if summary["failed"]:
             parts.append(f"{summary['failed']} ảnh lỗi")
+        if summary.get("measure_failed"):
+            parts.append(f"{summary['measure_failed']} ảnh không chấm được điểm")
         note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
         self.status.setText(", ".join(parts) + "." + note)
 
@@ -1020,7 +1035,12 @@ class MainWindow(QMainWindow):
             self.step(1)
 
     def set_flag(self, flag: str | None) -> None:
-        self._apply(lambda conn, rec: decisions.set_flag(conn, rec.id, flag), advance=flag is not None)
+        def apply(conn, rec: AssetRecord) -> None:  # noqa: ANN001
+            decisions.set_flag(conn, rec.id, flag)
+            if flag != rec.flag:
+                self.teacher.culled(flag, rec.pick_rank, rec.score)  # numbers only, for learning your taste
+
+        self._apply(apply, advance=flag is not None)
 
     def set_rating(self, rating: int) -> None:
         self._apply(lambda conn, rec: decisions.set_rating(conn, rec.id, rating))
@@ -1029,6 +1049,54 @@ class MainWindow(QMainWindow):
         targets = self._targets()
         new = not all(r.favorite for r in targets) if targets else True
         self._apply(lambda conn, rec: decisions.set_favorite(conn, rec.id, new))
+
+    # ----------------------------------------------------------- best shots
+    def _on_sort_changed(self) -> None:
+        self.model.set_sort(Sort(self.sort.currentData()))
+        self._after_filter()
+
+    def set_sort(self, mode: Sort) -> None:
+        self.sort.setCurrentIndex(self.sort.findData(mode.value))
+
+    def open_select_dialog(self, accept: bool = False) -> SelectDialog | None:
+        """accept=True: run with the dialog's defaults without showing it (tests)."""
+        if self.project is None:
+            QMessageBox.information(self, "Chọn ảnh", "Hãy nhập một thư mục ảnh trước.")
+            return None
+        conn = self.project.conn
+        people = conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
+        in_view = [r.id for r in self.model.records() if r.status == "ok"]
+        flt, target = self.model.current_filter, self.model.current_target
+        view_name = (f"ảnh của {actions.subject_label(conn, target)}" if flt is Filter.SUBJECT and target is not None
+                     else "danh sách đang xem")
+        scored = conn.execute("SELECT COUNT(*) FROM measurements WHERE extractor = 'quality'").fetchone()[0]
+        dialog = SelectDialog(self, people=people, in_view=len(in_view), view_name=view_name, scored=scored)
+        if not accept and dialog.exec() != QDialog.DialogCode.Accepted:
+            return dialog
+        n = dialog.count.value()
+        if dialog.per_person.isChecked():
+            picks = select.select_per_person(conn, n, set(in_view) if self.model.is_filtered else None)
+            params = {"mode": "per_person", "n": n}
+        else:
+            subject = target if flt is Filter.SUBJECT else None
+            picks = select.select_in_view(conn, n, set(in_view), subject)
+            params = {"mode": "in_view", "n": n, "subject_id": subject}
+        marked = 0
+        with self.project.transaction() as tx:
+            select.save_run(tx, picks, params)
+            if dialog.mark_keep.isChecked():
+                for asset_id in {p.asset_id for p in picks}:
+                    if decisions.get(tx, asset_id).flag is None:
+                        decisions.set_flag(tx, asset_id, "keep")
+                        marked += 1
+        self.set_sort(Sort.PICKS_FIRST)  # reloads the view
+        self.reload_preserving_view()
+        self._update_counts()
+        chosen = len({p.asset_id for p in picks})
+        self.status.setText(f"AI đã chọn {chosen} ảnh" + (f", đánh dấu Giữ {marked} ảnh" if marked else "")
+                            + ". Ảnh được chọn ở đầu danh sách (nhãn AI) — hãy xem lại, rồi ⤴ Xuất ảnh.")
+        self.grid.scrollToTop()
+        return dialog
 
     # ----------------------------------------------------------- export
     def open_export_dialog(self) -> ExportDialog | None:

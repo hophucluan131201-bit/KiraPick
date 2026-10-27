@@ -28,6 +28,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QImage, QPixmap
 
+from app.quality.score import Score, photo_scores
 from app.storage.project import Project
 
 THUMB_DISPLAY = 240  # long side of cached pixmaps
@@ -47,6 +48,12 @@ class Filter(str, Enum):
     COLLECTION = "collection"  # photos of one client list
     SUBJECT = "subject"  # photos where one person was recognised
     UNIDENTIFIED = "unidentified"  # photos with a main person not yet assigned
+
+
+class Sort(str, Enum):
+    TIME = "time"  # capture order
+    SCORE = "score"  # technical score, best first
+    PICKS_FIRST = "picks"  # photos the AI chose (in pick order), then the rest by score
 
 
 @dataclass(slots=True)
@@ -71,6 +78,8 @@ class AssetRecord:
     rating: int = 0
     favorite: bool = False
     uncertain: bool = False  # in a person view: only suggested (no clear face), needs a look
+    score: Score | None = None  # of the person shown (person view) or of the main person
+    pick_rank: int | None = None  # chosen by "⭐ Chọn ảnh": 1 = first choice
 
     @property
     def name(self) -> str:
@@ -151,6 +160,7 @@ class AssetListModel(QAbstractListModel):
         self._source_id: int | None = None
         self._target_id: int | None = None  # collection or subject id, depending on the filter
         self._search: list[str] = []
+        self._sort = Sort.TIME
         self._pixmaps: OrderedDict[int, QPixmap] = OrderedDict()
         self._pending: set[int] = set()
         self._pool = QThreadPool(self)
@@ -180,6 +190,15 @@ class AssetListModel(QAbstractListModel):
         if source_id != -1:
             self._source_id = source_id
         self.reload()
+
+    def set_sort(self, sort: Sort) -> None:
+        if sort is not self._sort:
+            self._sort = sort
+            self.reload()
+
+    @property
+    def current_sort(self) -> Sort:
+        return self._sort
 
     def set_search(self, text: str) -> None:
         tokens = search_tokens(text)
@@ -214,6 +233,8 @@ class AssetListModel(QAbstractListModel):
                 params["source_id"] = self._source_id
             sql += " ORDER BY a.capture_time IS NULL, a.capture_time, a.subsec, a.relative_path"
             conn = self._project.conn
+            scores = photo_scores(conn, self._target_id if self._filter is Filter.SUBJECT else None)
+            picks = {r[0]: r[1] for r in conn.execute("SELECT asset_id, rank FROM picks")}
             pairs = self._pair_names(conn)
             cache = self._project.cache_dir
             for r in conn.execute(sql, params):
@@ -234,8 +255,18 @@ class AssetListModel(QAbstractListModel):
                         preview_source=r["preview_source"],
                         flag=r["flag"], rating=int(r["rating"]), favorite=bool(r["favorite"]),
                         uncertain=r["id"] in uncertain,
+                        score=scores[r["id"]][1] if r["id"] in scores else None,
+                        pick_rank=picks.get(r["id"]),
                     )
                 )
+            if self._sort is not Sort.TIME:
+                def by_score(rec: AssetRecord) -> float:
+                    return -(rec.score.total if rec.score is not None and rec.score.total is not None else -1.0)
+
+                if self._sort is Sort.SCORE:
+                    rows.sort(key=by_score)  # stable: equal scores stay in capture order
+                else:
+                    rows.sort(key=lambda rec: (rec.pick_rank is None, rec.pick_rank or 0, by_score(rec)))
         self.beginResetModel()
         self._rows = rows
         self._row_of = {rec.id: i for i, rec in enumerate(rows)}

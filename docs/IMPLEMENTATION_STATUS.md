@@ -20,8 +20,8 @@ required — a listed provider does not prove inference works).
 | M0 Feasibility + safety | **tested** | RAW feasibility; AI runtime (offline-only providers, telemetry off, GPU→CPU fallback); model manifest + licenses. **CUDA verified on the RTX 2080 Super Max-Q** (2026-10-27, see below). OSNet/DINOv2 not fetched yet |
 | M1 Desktop MVP | **tested** | Ingest, storage, resumable import, PySide6 UI, keyboard culling, copy export, search, client lists, per-folder sessions. Used by the user on Windows with a real 439-NEF shoot (2026-10-27): import, culling, export, session restore confirmed working. No installer yet (M6) |
 | M2 Identity | **implemented + tested (synthetic + 7 real photos)** | Detection, face embeddings, look-first grouping (face + outfit within 5 min), people panel, review queue, manual corrections that survive re-analysis. **Calibrated on one labelled shoot only** (precision 1.00 / recall 0.76, thin margin); no body re-ID model yet (OSNet/DINOv2 blocked from dev container) |
-| M3 Quality | not started | |
-| M4 Best shot | not started | |
+| M3 Quality | **implemented + tested (synthetic + 7 real NEF)** | Per-person technical score: eye/face/body sharpness on the full-resolution image, eDifFIQA face quality, face/person exposure, framing; N/A redistribution + confidence; warnings. **Not measured: eyes closed, aesthetics** (no suitable offline model yet). Rubric mappings are starting values, not calibrated on the owner's choices |
+| M4 Best shot | **implemented + tested (synthetic)** | ⭐ Chọn ảnh: N per person or N in the current view, greedy MMR (λ 0.5) over score vs layout/burst similarity, picks first then by score, optional Keep marks (never overrides user flags). No compare view yet; no burst table (bursts = same person ≤ 1.5 s apart) |
 | M5 Local VLM | not started | |
 | M6 Release | not started | |
 
@@ -119,7 +119,21 @@ expected for this GPU (to profile: FP16, IO binding, preprocessing share, power 
 | Schema v3: occurrences (normalised boxes, prominence, main/background), vectors, reviewed "different" pairs | tested | migration from v2 in place |
 | Analysis job: prefetch decode, YOLOX + YuNet + SFace, outfit colour, avatar crops, resumable per photo, failures isolated, re-analysis keeps occurrence ids (box IoU) | tested | `tests/gui` real-photo flow, rerun = 0 work |
 | Grouping v2 (look-first): link if face ≥ 0.65 (photos > 5 min apart also need outfit ≥ 0.65, unless face ≥ 0.80); or within ±5 min outfit ≥ 0.80 and faces (if both visible) ≥ 0.55; or within ±5 min face ≥ 0.55 and outfit ≥ 0.78. Outfit = HSV histograms of 3 bands (hair, upper, lower body) of the central 60% of the person box at 400 px; older vectors are recomputed from cached thumbnails before regrouping (no models needed). Groups merge only if mean face similarity ≥ 0.45, or ≥ 0.60 when no photos of the two are within 5 min (no chaining); same-photo cannot-link; manual seeds attract first; user exclusions and "different" pairs respected; face-less members only *suggested* ("?"); a face-less-only group needs ≥ 2 photos; stable subject ids; background people never grouped. Review queue: same outfit within 5 min, or face ≥ 0.45 within 30 min, or face ≥ 0.60 any time (max 30) | tested | `tests/unit/test_identity_cluster.py` (synthetic), `scripts/calibration/evaluate_grouping.py` (real labels) |
-| UI: "🧠 Nhận diện người" (auto after import, background, pause/resume), NGƯỜI list with face avatars, person filter, "Chưa xác định", "?" badge for suggested photos, rename (double-click), tick people + "🔗 Gộp người" toolbar button (or right-click) to merge, keeping the named person, mark different, grid menu: confirm / remove from person / assign to person, review dialog, inspector lists people in the photo | tested offscreen | `test_people_recognition_flow_on_real_photos` |
+| UI: "🧠 Phân tích ảnh" (formerly "Nhận diện người"; auto after import, background, pause/resume), NGƯỜI list with face avatars, person filter, "Chưa xác định", "?" badge for suggested photos, rename (double-click), tick people + "🔗 Gộp người" toolbar button (or right-click) to merge, keeping the named person, mark different, grid menu: confirm / remove from person / assign to person, review dialog, inspector lists people in the photo | tested offscreen | `test_people_recognition_flow_on_real_photos` |
+
+## Done — M3 quality + M4 selection (`app/quality/`, `app/workers/quality_job.py`, `app/ai/face_quality.py`)
+
+| Feature | Status | Evidence |
+|---|---|---|
+| Stage `quality` after detection, resumable per photo; full-resolution source recorded (`embedded_jpeg` on the owner's Z 5 NEFs = 6016×4016); measurements stored as JSON per occurrence (`measurements`), layout vector in `occurrence_vectors` | tested | GUI real-photo flow asserts full-res source and eye sharpness |
+| Eye sharpness: YuNet re-run on the full-res face crop for landmarks, steepest-edge/contrast metric (≈1 = 1-px edge). Owner's NEFs: sharp eyes 0.48–0.81, defocused background face 0.08; synthetic blur monotone | tested | `tests/unit/test_quality.py` |
+| Rubric `cosplay-tech-v1`: focus 35, face 25, exposure 20, framing 20; N/A re-weighted, confidence; low-key tolerated; warnings (lệch nét, mặt khó thấy, mặt cháy sáng, đầu chạm mép) | tested | unit tests |
+| Selection: per person or in view, MMR diversity, saved run (`picks`, schema v4), “AI” badge, sort modes (time / score / AI picks first), inspector breakdown | tested offscreen | `test_ai_selection_puts_picks_first_marks_keep_and_explains` |
+| Taste examples: each Keep/Reject on a scored photo → learning store v2 (`culling_feedback`: score parts, AI rank, decision) | tested | `tests/unit/test_learning.py` |
+
+Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
+which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
+quality 5.8 s for 7 photos (quality ≈ 0.1–0.3 s/photo + full-res JPEG decode 0.1–0.7 s).
 
 ### Learning from the user's corrections (step 1: recording)
 
@@ -178,7 +192,7 @@ stragglers (profile, motion blur, hands over face) that the owner can merge with
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-239 passed in 60.86s
+247 passed in 54.31s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):
@@ -192,7 +206,7 @@ metadata-only ExifTool files. Manifest with SHA-256: `tests/fixtures/raw_samples
 
 ## Spec review items to resolve before the matching milestone
 
-1. Pose/eye-state/limb-crop criteria need a keypoint + face-landmark model not in the registry (M3).
+1. Pose/eye-state/limb-crop criteria need a keypoint + face-landmark model not in the registry (M3): MediaPipe Pose evaluated and rejected (see model-licenses.md); eye state still open.
 2. Manual merge/split must survive re-detection: match new occurrences to old by bbox IoU, or store
    constraints at subject level (M2, schema).
 3. Split `measurements` (preset-independent) from `scores` (preset-dependent) so reranking never

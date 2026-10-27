@@ -10,7 +10,8 @@
    "license": "MIT",
    "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
    "provenance": "opencv/opencv_zoo@48b10fa models/face_detection_yunet (LICENSE: MIT, Shiqi Yu). Trained with libfacedetection.train; best for faces ~10-300 px.",
-   "runtime": "opencv"
+   "runtime": "opencv",
+   "purpose": "identity"
   },
   {
    "id": "face_embedder",
@@ -21,7 +22,8 @@
    "license": "Apache-2.0",
    "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
    "provenance": "opencv/opencv_zoo@48b10fa models/face_recognition_sface (LICENSE: Apache-2.0). 128-d embedding of a 112x112 aligned face.",
-   "runtime": "opencv"
+   "runtime": "opencv",
+   "purpose": "identity"
   },
   {
    "id": "person_detector_s",
@@ -32,7 +34,8 @@
    "license": "Apache-2.0",
    "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx",
    "provenance": "Megvii-BaseDetection/YOLOX release 0.1.1rc0 (LICENSE: Apache-2.0). Input 640x640 BGR 0-255, output 8400x85.",
-   "runtime": "onnxruntime"
+   "runtime": "onnxruntime",
+   "purpose": "identity"
   },
   {
    "id": "person_detector_m",
@@ -43,7 +46,20 @@
    "license": "Apache-2.0",
    "url": "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_m.onnx",
    "provenance": "Megvii-BaseDetection/YOLOX release 0.1.1rc0 (LICENSE: Apache-2.0). More accurate, used on GPU.",
-   "runtime": "onnxruntime"
+   "runtime": "onnxruntime",
+   "purpose": "identity"
+  },
+  {
+   "id": "face_quality",
+   "name": "eDifFIQA(T) face image quality (jun2024)",
+   "file": "ediffiqa_tiny_jun2024.onnx",
+   "sha256": "9426c899cc0f01665240cb7d9e7f98e18e24e456c178326c771a43da289bfc6a",
+   "size": 7272678,
+   "license": "CC-BY-4.0",
+   "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_image_quality_assessment_ediffiqa/ediffiqa_tiny_jun2024.onnx",
+   "provenance": "opencv/opencv_zoo@48b10fa models/face_image_quality_assessment_ediffiqa (LICENSE: CC BY 4.0; Babnik et al., eDifFIQA, IEEE T-BIOM 2024). MobileFaceNet backbone + quality head; input 112x112 face aligned like SFace, RGB normalised to [-1, 1]; higher = better face image (sharpness, pose, occlusion).",
+   "runtime": "opencv",
+   "purpose": "quality"
   }
  ]
 }

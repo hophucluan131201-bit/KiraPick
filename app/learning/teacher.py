@@ -1,9 +1,13 @@
-"""Turns the user's people corrections into learning examples.
+"""Turns the user's corrections and choices into learning examples.
 
-Called by the UI around the corrections in app.identity.actions. An example is a
-pair of occurrences with its face / outfit similarity and time gap, and the
-user's answer (same person or not). Learning must never get in the way: any
-error here is logged and the correction itself goes ahead.
+- People: called around the corrections in app.identity.actions. An example is
+  a pair of occurrences with its face / outfit similarity and time gap, and the
+  user's answer (same person or not).
+- Taste: each Keep/Reject on a scored photo is stored with its score parts and
+  whether the AI had picked it.
+
+Learning must never get in the way: any error here is logged and the user's
+action itself goes ahead.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import numpy as np
 from app.identity.cluster import Occ, load_occurrences
 from app.identity.features import OUTFIT_VERSION
 from app.learning.store import LearningStore, PairEvidence
+from app.quality.score import PROFILE_VERSION
 from app.workers.analyze_job import FACE_VECTOR_VERSION
 
 log = logging.getLogger(__name__)
@@ -89,3 +94,16 @@ class Teacher:
         self._guard("assign", True, lambda: evidence(
             _occurrences(conn, f"subject_id = ? AND asset_id IN ({marks})", (subject_id, *asset_ids)),
             _occurrences(conn, f"subject_id = ? AND asset_id NOT IN ({marks})", (subject_id, *asset_ids))))
+
+    def culled(self, decision: str | None, ai_rank: int | None, score: object | None) -> None:
+        """The user pressed Keep/Reject on a photo (its technical score, if any, and whether the AI picked it)."""
+        if self.store is None or decision not in ("keep", "reject"):
+            return
+        try:
+            total = getattr(score, "total", None)
+            parts = getattr(score, "parts", {}) or {}
+            if total is None and ai_rank is None:
+                return  # nothing measured: nothing to learn from
+            self.store.add_culling(decision, ai_rank, total, parts, PROFILE_VERSION)
+        except Exception:  # noqa: BLE001 - learning is optional
+            log.exception("could not save a culling example")

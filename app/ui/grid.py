@@ -59,6 +59,8 @@ class ThumbnailDelegate(QStyledItemDelegate):
             p.setPen(QColor(theme.TEXT if selected else theme.MUTED))
             caption = QRect(cell.left() + 6, cell.bottom() - 22, cell.width() - 12, 20)
             name = rec.name + ("  +" + ",".join(n.rsplit(".", 1)[-1].upper() for n in rec.paired_with) if rec.paired_with else "")
+            if rec.score is not None and rec.score.total is not None:
+                name += f"  ·  {rec.score.total:.0f}đ"
             p.drawText(caption, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                        p.fontMetrics().elidedText(name, Qt.TextElideMode.ElideMiddle, caption.width()))
         p.restore()
@@ -79,6 +81,13 @@ class ThumbnailDelegate(QStyledItemDelegate):
         if rec.favorite:
             p.setPen(QColor(theme.FAVORITE))
             p.drawText(QRect(area.right() - 26, area.top() + 2, 24, 24), Qt.AlignmentFlag.AlignCenter, "♥")
+        if rec.pick_rank is not None:
+            pill = QRect(area.left() + (30 if rec.flag else 4), area.top() + 4, 34, 22)
+            p.setBrush(QColor(theme.STAR))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(pill, 11, 11)
+            p.setPen(QColor("#1e1f22"))
+            p.drawText(pill, Qt.AlignmentFlag.AlignCenter, "AI")
         if rec.uncertain:
             badge = QRect(area.right() - 26, area.bottom() - 26, 22, 22)
             p.setBrush(QColor(theme.ERROR))

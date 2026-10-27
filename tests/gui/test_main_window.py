@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -311,10 +312,16 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     kinds = [w.people.item(i).data(Qt.ItemDataRole.UserRole)[0] for i in range(w.people.count())]
     assert kinds.count("subject") == len(subjects) and "unidentified" in kinds  # DSC_0198: face hidden by hands
 
+    # Quality: every main person measured on the full-resolution photo, a score shown with its parts.
+    measured = w.project.conn.execute(
+        "SELECT input_source, values_json FROM measurements WHERE extractor = 'quality'").fetchall()
+    assert measured and all(r[0] == "embedded_jpeg" for r in measured)  # full-size camera JPEG, not the thumbnail
+    assert any(json.loads(r[1])["eye_sharp"] for r in measured)
     w.people.setCurrentRow(0)  # filter the grid to the first person
     first = w.people.item(0).data(Qt.ItemDataRole.UserRole)[1]
     assert w.model.rowCount() == subjects[0]["photos"]
     assert w.inspector.fields["Chủ thể"].text().startswith(actions.subject_label(w.project.conn, first))
+    assert "/100" in w.inspector.fields["Điểm chất lượng"].text()
 
     monkeypatch.setattr(mw.QInputDialog, "getText", lambda *a, **k: ("Aki", True))
     w.rename_current_person()
@@ -388,3 +395,35 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     assert summary[3]["display_name"] == "Aki" and summary[3]["photos"] == 4
     assert all(w.people.item(i).checkState() == Qt.CheckState.Unchecked for i in range(w.people.count()))
     assert not w.act_merge.isEnabled()
+
+
+def test_ai_selection_puts_picks_first_marks_keep_and_explains(qtbot, env: dict) -> None:
+    import numpy as np
+
+    from tests.unit.test_quality import add_scored
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    conn = w.project.conn
+    ids = [r[0] for r in conn.execute("SELECT id FROM assets WHERE status = 'ok' ORDER BY capture_time")]
+    a, b = np.eye(4, dtype=np.float32)[0], np.eye(4, dtype=np.float32)[1]
+    with w.project.transaction():
+        for asset, sharp, lay in zip(ids, (0.3, 0.7, 0.68, 0.6, 0.2, 0.5), (a, a, a, b, b, b)):
+            add_scored(w.project, asset, 1, sharp, lay)
+        decisions.set_flag(conn, ids[3], "reject")  # the user already rejected this one
+    w.reload_preserving_view()
+    w.open_select_dialog(accept=True)  # defaults: per person, N = 10 -> every scored photo, best/varied first
+    order = [r.id for r in w.model.records()]
+    assert order[:2] == [ids[1], ids[3]]  # best, then the best of the other pose (not the near copy ids[2])
+    recs = {r.id: r for r in w.model.records()}
+    assert recs[ids[1]].pick_rank == 1 and recs[ids[1]].flag == "keep"
+    assert recs[ids[3]].flag == "reject"  # never overrides the user's own decision
+    assert "AI đã chọn" in w.status.text()
+    w.select_row(0)
+    text = w.inspector.fields["Điểm chất lượng"].text()
+    assert "/100" in text and "AI chọn" in text and "Chưa chấm" in text
+    before = w.teacher.store.culling_count()
+    w.set_flag("reject")  # the user disagrees with the AI's first choice: a taste example
+    assert w.teacher.store.culling_count() == before + 1
+    w.set_sort(mw.Sort.TIME)
+    assert [r.id for r in w.model.records() if r.status == "ok"] == ids

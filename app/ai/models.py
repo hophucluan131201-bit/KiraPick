@@ -36,6 +36,7 @@ class ModelSpec:
     url: str
     provenance: str
     runtime: str
+    purpose: str = "identity"  # "identity": needed to group people; "quality": optional scoring
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +97,11 @@ class ModelRegistry:
 
     def all_status(self) -> list[ModelStatus]:
         return [self.status(model_id) for model_id in self.specs]
+
+    def ready(self, purpose: str) -> bool:
+        """All models needed for one purpose are present and verified."""
+        ids = [i for i, s in self.specs.items() if s.purpose == purpose]
+        return bool(ids) and all(self.status(i).state is ModelState.READY for i in ids)
 
 
 class ModelUnavailableError(RuntimeError):

@@ -94,3 +94,32 @@ def test_examples_use_closest_photos_in_time_and_cap() -> None:
     b = [Occ(100 + i, 100 + i, 1000.0 + i, f, None, "auto", 2, None) for i in range(30)]
     pairs = evidence(a, b, limit=10)
     assert len(pairs) == 10 and pairs[0].dt_s == 1000 - 29 and pairs[0].outfit is None
+
+
+def test_keep_reject_examples_and_upgrade_from_v1(tmp_path: Path) -> None:
+    from app.quality.score import score
+
+    folder = tmp_path / "learning"
+    folder.mkdir()
+    old = sqlite3.connect(folder / "learning.db")  # a v1 store (people examples only) from the previous app
+    from app.learning import store as store_module
+
+    old.executescript(store_module._SCHEMA)
+    old.execute("INSERT INTO identity_feedback (created_on, app_version, face_version, outfit_version, kind, same) "
+                "VALUES ('2026-10-27', 'x', 'f', 'o', 'merge', 1)")
+    old.execute("PRAGMA user_version = 1")
+    old.commit()
+    old.close()
+    store = LearningStore(folder)
+    assert store.identity_counts()["same"] == 1  # kept through the upgrade
+    teacher = Teacher(store)
+    s = score({"eye_sharp": 0.5, "face_quality": 0.6, "face_clip": 0.0, "face_luma": 50, "area": 0.3})
+    teacher.culled("keep", 1, s)
+    teacher.culled("reject", None, s)
+    teacher.culled(None, 1, s)  # clearing a flag teaches nothing
+    teacher.culled("keep", None, None)  # unscored, not picked: nothing to learn from
+    rows = store.conn.execute("SELECT decision, ai_rank, total, focus FROM culling_feedback ORDER BY id").fetchall()
+    assert rows == [("keep", 1, s.total, s.parts["focus"]), ("reject", None, s.total, s.parts["focus"])]
+    store.forget()
+    assert store.culling_count() == 0
+    store.close()

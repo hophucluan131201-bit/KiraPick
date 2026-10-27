@@ -3,7 +3,8 @@
 Offline, non-destructive photo culling for cosplay/street photographers (Windows desktop).
 **Status: early development** — desktop culling app (import, grid, loupe with 100% zoom,
 keyboard culling, copy export) works; offline AI groups photos by person and look
-(calibrated on one labelled shoot); quality scoring and best-shot selection are not built yet. See
+(calibrated on one labelled shoot), gives each person a technical score and picks N varied best
+shots (first version: eyes-closed and aesthetics are not judged yet). See
 [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 Specification: [`docs/TECHNICAL_SPEC_v1.1.md`](docs/TECHNICAL_SPEC_v1.1.md).
@@ -60,7 +61,7 @@ together, never overwrites (a different file with the same name gets " (1)"), sk
 exported there (identical bytes), refuses the shoot folder itself as destination, and writes a
 CSV/JSON list into the `_snorlu_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\logs`.
 
-**People (🧠 Nhận diện người)** runs automatically after an import (GPU if available, CPU otherwise),
+**People (🧠 Phân tích ảnh)** runs automatically after an import (GPU if available, CPU otherwise),
 in the background. The **NGƯỜI** list shows each recognised person with a face thumbnail; click to
 filter, double-click to name; tick the boxes of several people and press **🔗 Gộp người** in the
 toolbar to merge them (or select several + right-click). Photos where the face is not
@@ -70,6 +71,14 @@ person, or assign to another person. All corrections survive re-analysis. Each c
 gap, your answer) in `%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\learning` — per Windows user, never
 in the installer, so friends who install the app teach it their own way. Models: see
 `docs/model-licenses.md`; fetch once with `python scripts/fetch_models.py`.
+
+**Best shots (⭐ Chọn ảnh)**: 🧠 Phân tích ảnh also scores each person in each photo (sharpness at
+the eyes measured on the full-resolution image, face quality, exposure, framing — shown in the right
+panel with warnings). ⭐ Chọn ảnh asks for N (per person, or in the current view) and picks the best
+photos while skipping near-copies (same pose, same burst). Picked photos get an “AI” badge, go to
+the top of the list (sorting box under the search field) and can be marked Keep automatically
+(your own Keep/Reject is never changed). Review with K/X, then ⤴ Xuất ảnh → “Ảnh đã Giữ”.
+Export **copies** only: the app never moves or deletes your originals.
 
 ## Check your own photo folder (read-only)
 

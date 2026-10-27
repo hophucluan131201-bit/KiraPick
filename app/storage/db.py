@@ -227,6 +227,23 @@ CREATE TABLE subject_pairs (
 );
 """,
     ),
+    (4, """
+-- Best-shot selection (M4): only the newest run is kept; picks never change decisions by themselves.
+CREATE TABLE pick_runs (
+    id           INTEGER PRIMARY KEY,
+    created_at   TEXT NOT NULL,
+    params_json  TEXT NOT NULL
+);
+CREATE TABLE picks (
+    run_id       INTEGER NOT NULL REFERENCES pick_runs(id) ON DELETE CASCADE,
+    asset_id     INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    subject_id   INTEGER,              -- person it was chosen for (NULL = chosen in a plain view)
+    rank         INTEGER NOT NULL,     -- 1 = first choice for that person / view
+    score        REAL,
+    reason_json  TEXT NOT NULL,
+    PRIMARY KEY (run_id, asset_id)
+);
+"""),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

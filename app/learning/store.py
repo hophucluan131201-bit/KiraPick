@@ -21,7 +21,22 @@ from app import __version__
 log = logging.getLogger(__name__)
 
 DB_NAME = "learning.db"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+_SCHEMA_V2 = """
+CREATE TABLE culling_feedback (
+    id              INTEGER PRIMARY KEY,
+    created_on      TEXT NOT NULL,          -- day only
+    app_version     TEXT NOT NULL,
+    profile_version TEXT NOT NULL,          -- rubric the scores come from
+    decision        TEXT NOT NULL CHECK (decision IN ('keep', 'reject')),
+    ai_rank         INTEGER,                -- the AI had picked it (rank), NULL = not picked
+    total           REAL,
+    focus           REAL,
+    face            REAL,
+    exposure        REAL,
+    framing         REAL
+);
+"""
 _SCHEMA = """
 CREATE TABLE identity_feedback (
     id              INTEGER PRIMARY KEY,
@@ -51,12 +66,15 @@ class LearningStore:
         self.path = folder / DB_NAME
         self.conn = sqlite3.connect(self.path)
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
-        if version == 0:
-            with self.conn:
-                self.conn.executescript(_SCHEMA)
-                self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        elif version > SCHEMA_VERSION:
+        if version > SCHEMA_VERSION:
             raise RuntimeError(f"learning data is from a newer app version ({version})")
+        if version < SCHEMA_VERSION:
+            with self.conn:  # one transaction: an upgrade is all or nothing
+                if version < 1:
+                    self.conn.executescript(_SCHEMA.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS"))
+                if version < 2:
+                    self.conn.executescript(_SCHEMA_V2)
+                self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def add_identity(self, kind: str, same: bool, pairs: list[PairEvidence], face_version: str,
                      outfit_version: str) -> int:
@@ -73,6 +91,19 @@ class LearningStore:
             )
         return len(pairs)
 
+    def add_culling(self, decision: str, ai_rank: int | None, total: float | None, parts: dict[str, float | None],
+                    profile_version: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                """INSERT INTO culling_feedback (created_on, app_version, profile_version, decision, ai_rank, total,
+                   focus, face, exposure, framing) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (date.today().isoformat(), __version__, profile_version, decision, ai_rank, total,
+                 parts.get("focus"), parts.get("face"), parts.get("exposure"), parts.get("framing")),
+            )
+
+    def culling_count(self) -> int:
+        return self.conn.execute("SELECT COUNT(*) FROM culling_feedback").fetchone()[0]
+
     def identity_counts(self) -> dict[str, int]:
         rows = self.conn.execute("SELECT same, COUNT(*) FROM identity_feedback GROUP BY same").fetchall()
         counts = {"same": 0, "different": 0}
@@ -84,6 +115,7 @@ class LearningStore:
         """Back to the defaults: delete everything learnt."""
         with self.conn:
             self.conn.execute("DELETE FROM identity_feedback")
+            self.conn.execute("DELETE FROM culling_feedback")
         self.conn.execute("VACUUM")
 
     def close(self) -> None:

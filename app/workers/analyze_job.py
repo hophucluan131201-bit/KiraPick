@@ -41,7 +41,7 @@ _PREFETCH = 4
 
 @dataclass(slots=True)
 class AnalyzeProgress:
-    phase: str  # "load_models" | "detect" | "group"
+    phase: str  # "load_models" | "detect" | "quality" | "group"
     done: int
     total: int
 
@@ -51,6 +51,8 @@ class AnalyzeSummary:
     analysed: int = 0
     failed: int = 0
     occurrences: int = 0
+    measured: int = 0
+    measure_failed: int = 0
     cancelled: bool = False
     device: str = "cpu"
     fallback_reason: str | None = None
@@ -111,6 +113,12 @@ class AnalyzeJob:
             summary.fallback_reason = persons.session.fallback_reason
             self.crop_dir.mkdir(parents=True, exist_ok=True)
             self._detect_all(todo, persons, faces, embedder, summary, progress, should_cancel)
+        if not summary.cancelled:
+            from app.workers import quality_job  # local import: avoids a cycle through app.quality
+
+            summary.measured, summary.measure_failed, summary.cancelled = quality_job.run(
+                self.project, self.registry, lambda phase, done, total: progress(AnalyzeProgress(phase, done, total)),
+                should_cancel)
         if not summary.cancelled:
             from app.identity.cluster import recluster  # local import: clustering is pure, no models
 
@@ -209,6 +217,10 @@ class AnalyzeJob:
                 conn.execute("UPDATE occurrences SET crop_file = ? WHERE id = ?", (crop_name, occ_id))
             for occ_id in unmatched:  # people no longer detected in this photo
                 conn.execute("DELETE FROM occurrences WHERE id = ?", (occ_id,))
+            # New boxes: the quality measurements of this photo must be redone.
+            conn.execute("DELETE FROM measurements WHERE asset_id = ? AND extractor = 'quality'", (asset_id,))
+            conn.execute("UPDATE stage_status SET state = 'pending', attempts = 0 WHERE asset_id = ? AND stage = 'quality'",
+                         (asset_id,))
             conn.execute(
                 """UPDATE stage_status SET state = 'done', stage_version = ?, attempts = attempts + 1, error = NULL,
                    updated_at = ? WHERE asset_id = ? AND stage = ?""",
