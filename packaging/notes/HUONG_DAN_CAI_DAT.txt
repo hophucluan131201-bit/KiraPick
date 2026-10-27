@@ -1,4 +1,4 @@
-﻿HƯỚNG DẪN CÀI ĐẶT KIRAPICK (bản thử nghiệm 0.2)
+﻿HƯỚNG DẪN CÀI ĐẶT KIRAPICK (phiên bản 2.0)
 =========================================================
 
 KHÔNG cần cài Git, Python hay bất cứ thứ gì khác. Mọi thứ đã có sẵn trong bộ cài.
@@ -20,7 +20,7 @@ BƯỚC 2 - CÀI ĐẶT
 2. Nếu hiện khung màu xanh "Windows protected your PC" (Windows đã bảo vệ máy tính):
      - Bấm chữ nhỏ  "More info"  (Thông tin thêm)
      - Bấm nút      "Run anyway" (Vẫn chạy)
-   Khung này hiện vì bộ cài thử nghiệm chưa mua chữ ký số, KHÔNG phải virus.
+   Khung này hiện vì bộ cài chưa mua chữ ký số, KHÔNG phải virus.
 3. Trang giấy phép: chọn "I accept the agreement" (Tôi đồng ý) -> Next.
 4. Trang hướng dẫn: Next.
 5. Tick ô "Create a desktop shortcut" nếu muốn có biểu tượng ngoài màn hình -> Next.

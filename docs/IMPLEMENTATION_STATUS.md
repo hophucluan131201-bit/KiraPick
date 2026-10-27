@@ -4,7 +4,7 @@ Statuses: **not started** / **implemented** (code exists, not fully tested) / **
 tests pass in the dev container) / **blocked**. "Tested" here never means "verified on the target
 Windows laptop" unless stated.
 
-Last update: 2026-10-27 (beta 0.3.0b2: ArcFace + ReID grouping, per-user tuning) — dev container: Linux x86-64, Python 3.13.17, no GPU, no display. First Windows field test received (see raw-support-matrix.md).
+Last update: 2026-10-27 (release 2.0.0 = beta 0.3.0b4 merged into main) — dev container: Linux x86-64, Python 3.13.17, no GPU, no display. First Windows field test received (see raw-support-matrix.md).
 
 ## Target machine (from `scripts/diagnose_hardware.py`, 2026-10-27)
 

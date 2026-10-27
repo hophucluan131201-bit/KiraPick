@@ -15,12 +15,12 @@ những tấm đẹp, khác dáng nhau để bạn duyệt lại.
 - **Không cần Internet** sau khi cài; không gửi ảnh hay dữ liệu đi đâu.
 - **Không bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc.** Xuất ảnh = sao chép.
 - Đọc RAW (Nikon NEF ưu tiên, Canon CR2/CR3, Sony ARW, …) và JPEG.
-- Bản **0.3.0b1 (nhánh `beta`)** có thêm *gợi ý thẩm mỹ* bằng AI (TOPIQ, phi thương mại).
-- Bản **0.3.0b2 (nhánh `beta`)** nhận diện chủ thể tốt hơn bằng khuôn mặt **ArcFace** (InsightFace, chỉ dùng
-  phi thương mại / nghiên cứu) và dáng người **YoutuReID**, và **tự học** từ các lần bạn gộp / tách người
+- **Bản 2.0** (chính thức): gom ảnh theo chủ thể bằng khuôn mặt **ArcFace** (InsightFace, chỉ dùng phi thương
+  mại / nghiên cứu) và dáng người **YoutuReID**, **tự học** từ các lần bạn gộp / tách chủ thể, phát hiện mắt
+  nhắm / nhìn xuống, *gợi ý thẩm mỹ* bằng AI (TOPIQ, phi thương mại)
   (xem [Lưu ý miễn trừ](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer)).
-- Tình trạng: **bản thử nghiệm (beta)**. Có phát hiện mắt nhắm / nhìn xuống; chưa đánh giá được độ đẹp nghệ thuật.
-  Chi tiết: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) (tiếng Anh).
+- Giới hạn: điểm chủ yếu là điểm kỹ thuật, gợi ý thẩm mỹ chỉ chiếm phần nhỏ; ngưỡng gom mới được kiểm tra trên
+  một buổi chụp; luôn xem lại kết quả AI trước khi giao ảnh. Chi tiết: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) (tiếng Anh).
 
 ### Cài đặt (không cần biết lập trình)
 
@@ -103,12 +103,12 @@ open/closed, face, exposure, framing) and picks the best, varied shots for you t
 - **No Internet needed** after installation; no photo or data ever leaves the computer.
 - **Never edits, deletes, renames or moves original photos.** Export = copy.
 - Reads RAW (Nikon NEF first, Canon CR2/CR3, Sony ARW, …) and JPEG.
-- Version **0.3.0b1 (`beta` branch)** adds an AI *aesthetic hint* (TOPIQ, non-commercial).
-- Version **0.3.0b2 (`beta` branch)** groups people better with **ArcFace** faces (InsightFace,
-  non-commercial research use only) and **YoutuReID** whole-body vectors, and **learns** from your
-  merge / split corrections (see the [disclaimer](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer)).
-- Status: **beta**. Detects closed / downcast eyes; artistic quality is not judged yet.
-  Details: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
+- **Version 2.0** (stable): groups photos by subject with **ArcFace** faces (InsightFace, non-commercial
+  research use only) and **YoutuReID** whole-body vectors, **learns** from your merge / split
+  corrections, detects closed / downcast eyes and gives an AI *aesthetic hint* (TOPIQ, non-commercial)
+  (see the [disclaimer](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer)).
+- Limits: scores are mostly technical, the aesthetic hint weighs little; grouping thresholds were
+  checked on one shoot so far; always review AI results before delivering photos. Details: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 ### Install (no programming needed)
 
@@ -118,7 +118,7 @@ open/closed, face, exposure, framing) and picks the best, varied shots for you t
 3. Right-click → *Extract All* → open **`HUONG_DAN_CAI_DAT.txt`** (Vietnamese guide) and run
    `KiraPick-Setup-….exe`. No Git or Python needed; no administrator rights needed.
 4. If Windows shows *“Windows protected your PC”*: click **More info → Run anyway**
-   (the beta installer is not code-signed; it is not a virus).
+   (the installer is not code-signed; it is not a virus).
 
 Requires Windows 10/11 64-bit. With a graphics card (NVIDIA, AMD, Intel) the AI runs on it through
 DirectML; otherwise on the CPU.
@@ -212,7 +212,7 @@ distribution.
 **Tiếng Việt.**
 - KiraPick là dự án cá nhân, **phi thương mại**, chia sẻ miễn phí cho bạn bè dùng thử. Không bán, không thu
   phí, không quảng cáo; không dùng cho mục đích thương mại dưới bất kỳ hình thức nào.
-- Bản beta dùng một số mô hình AI **chỉ được phép dùng phi thương mại / nghiên cứu**:
+- KiraPick dùng một số mô hình AI **chỉ được phép dùng phi thương mại / nghiên cứu**:
   khuôn mặt **ArcFace** của InsightFace (“chỉ dành cho nghiên cứu phi thương mại”) và chấm thẩm mỹ
   **TOPIQ** (PolyForm Noncommercial). Mô hình dáng người **YoutuReID** có giấy phép Apache-2.0 nhưng được
   huấn luyện trên các bộ dữ liệu nghiên cứu (Market-1501, DukeMTMC-reID, MSMT17). Bản quyền các mô hình này
@@ -230,7 +230,7 @@ distribution.
 **English.**
 - KiraPick is a personal, **non-commercial** project shared for free with friends for testing. It is not
   sold, has no fees or ads, and must not be used for any commercial purpose.
-- The beta uses AI models whose weights are licensed for **non-commercial / research use only**: InsightFace
+- KiraPick uses AI models whose weights are licensed for **non-commercial / research use only**: InsightFace
   **ArcFace** (“available for non-commercial research purposes only”) and **TOPIQ** aesthetics (PolyForm
   Noncommercial). The **YoutuReID** whole-body model is Apache-2.0 but was trained on research datasets
   (Market-1501, DukeMTMC-reID, MSMT17). These models belong to their authors; KiraPick only reuses them.

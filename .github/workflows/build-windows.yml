@@ -1,6 +1,6 @@
 # Builds the Windows installer on a clean Windows machine.
 # - A push to main whose commit message contains "[release]": build + self-test + publish a
-#   GitHub (pre)release "v<app version>" with the files (the tag is created by the release).
+#   GitHub release (pre-release for a/b/rc versions) "v<app version>" with the files (the tag is created by the release).
 # - A pushed version tag (v*) does the same.
 # - Actions tab -> "Build Windows installer" -> Run workflow: build + downloadable artifact only.
 name: Build Windows installer
@@ -51,4 +51,8 @@ jobs:
           $tag = "v$version"
           $files = Get-ChildItem dist/installer -File | ForEach-Object { $_.FullName }
           if (gh release view $tag 2>$null) { Write-Host "Release $tag already exists: left untouched"; exit 0 }
-          gh release create $tag $files --target "${{ github.sha }}" --title "KiraPick $version (beta)" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease
+          if ($version -match '(a|b|rc)\d+$') {  # 0.3.0b4 -> pre-release; 2.0.0 -> the official latest release
+            gh release create $tag $files --target "${{ github.sha }}" --title "KiraPick $version (beta)" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease
+          } else {
+            gh release create $tag $files --target "${{ github.sha }}" --title "KiraPick $version" --notes-file packaging/notes/RELEASE_NOTES.md --latest
+          }
