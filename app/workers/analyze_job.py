@@ -114,15 +114,19 @@ class AnalyzeJob:
             faces = FaceDetector(self.registry)
             embedder = FaceEmbedder(self.registry)
             summary.device = persons.device
+            progress(AnalyzeProgress("device:" + persons.device, 0, len(todo)))
             summary.fallback_reason = persons.session.fallback_reason
             self.crop_dir.mkdir(parents=True, exist_ok=True)
             self._detect_all(todo, persons, faces, embedder, summary, progress, should_cancel)
         if not summary.cancelled and mode != "people":
             from app.workers import quality_job  # local import: avoids a cycle through app.quality
 
+            used: list[str] = []
             summary.measured, summary.measure_failed, summary.cancelled = quality_job.run(
                 self.project, self.registry, lambda phase, done, total: progress(AnalyzeProgress(phase, done, total)),
-                should_cancel)
+                should_cancel, used)
+            if mode == "quality" and used:
+                summary.device = used[0]
         if not summary.cancelled and mode != "quality":
             from app.identity.cluster import recluster  # local import: clustering is pure, no models
 

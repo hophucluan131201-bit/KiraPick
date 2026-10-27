@@ -121,8 +121,8 @@ def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None
 
 
 def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int, int], None],
-        should_cancel: Callable[[], bool]) -> tuple[int, int, bool]:
-    """Returns (measured photos, failed photos, cancelled)."""
+        should_cancel: Callable[[], bool], device: list[str] | None = None) -> tuple[int, int, bool]:
+    """Returns (measured photos, failed photos, cancelled); ``device`` receives where the heaviest model runs."""
     todo = queue(project)
     if not todo:
         return 0, 0, False
@@ -142,6 +142,9 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
         aesthetic: AestheticModel | None = AestheticModel(registry)
     except ModelUnavailableError:
         aesthetic = None  # honest: aesthetics stay "not judged"
+    if device is not None:
+        device.append(aesthetic.session.device if aesthetic is not None else "cpu")
+        progress("device:" + device[0], 0, 0)
     done = failed = 0
     total = len(todo)
     progress(STAGE, 0, total)

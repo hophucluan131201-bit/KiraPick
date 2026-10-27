@@ -625,6 +625,7 @@ class MainWindow(QMainWindow):
             return None
         thread = AnalyzeThread(self.project.folder, mode)
         self._analysis_started = time.monotonic()
+        self._run_device = None
         thread.progress.connect(self._on_analyze_progress)
         thread.succeeded.connect(self._on_analyze_done)
         title = "Nhận diện người" if mode == "people" else "Phân tích ảnh"
@@ -655,13 +656,17 @@ class MainWindow(QMainWindow):
             self.pause_button.setVisible(False)
 
     def _on_analyze_progress(self, phase: str, done: int, total: int) -> None:
+        if phase.startswith("device:"):  # where the AI runs, shown with every progress message
+            self._run_device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(phase[7:], "CPU")
+            return
         label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện người…",
                  "quality": "Đang chấm điểm ảnh (độ nét đo trên ảnh gốc)…",
                  "group": "Đang gom ảnh theo người…"}.get(phase, phase)
         if total and phase in ("detect", "quality"):
             self.progress.setRange(0, total)
             self.progress.setValue(done)
-            self.status.setText(f"{label} {done}/{total}")
+            where = f" [{self._run_device}]" if getattr(self, "_run_device", None) else ""
+            self.status.setText(f"{label} {done}/{total}{where}")
         else:
             self.progress.setRange(0, 0)
             self.status.setText(label)
@@ -676,7 +681,8 @@ class MainWindow(QMainWindow):
         assert self.project is not None
         if summary.get("mode") == "quality":
             took = _duration(time.monotonic() - getattr(self, "_analysis_started", time.monotonic()))
-            parts = [f"Phân tích xong ({took}): {self._step_state()[2]} ảnh có điểm"]
+            device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(summary["device"], "CPU")
+            parts = [f"Phân tích xong ({device}, {took}): {self._step_state()[2]} ảnh có điểm"]
             if summary.get("measure_failed"):
                 parts.append(f"{summary['measure_failed']} ảnh không chấm được")
             self.status.setText(", ".join(parts) + ". Bước tiếp theo: bấm ⭐ Chọn ảnh, hoặc xếp theo điểm.")
