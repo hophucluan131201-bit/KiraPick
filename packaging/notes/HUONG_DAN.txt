@@ -42,7 +42,8 @@ DỮ LIỆU CỦA ỨNG DỤNG
 - %LOCALAPPDATA%\KiraPick\sessions : ghi nhớ từng thư mục ảnh (tự xoá sau 30 ngày không mở)
 - %LOCALAPPDATA%\KiraPick\learning : bộ nhớ học
 - %LOCALAPPDATA%\KiraPick\logs     : file log (gửi kèm khi báo lỗi)
-Gỡ cài đặt (Settings -> Apps) chỉ xoá chương trình; ảnh và dữ liệu trên vẫn giữ nguyên.
+Gỡ cài đặt: Start -> "Gỡ cài đặt KiraPick", hoặc Settings -> Apps -> Installed apps -> KiraPick -> Uninstall.
+Gỡ chỉ xoá chương trình; ảnh và dữ liệu trên vẫn giữ nguyên.
 
 KIỂM TRA KHI CÓ LỖI
 Mở PowerShell trong thư mục cài đặt và chạy:

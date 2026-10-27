@@ -29,6 +29,7 @@ OutputDir=..\dist\installer
 OutputBaseFilename=KiraPick-Setup-{#AppVersion}
 SetupIconFile=kirapick.ico
 UninstallDisplayIcon={app}\KiraPick.exe
+UninstallDisplayName={#AppName}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -52,6 +53,7 @@ Source: "..\dist\installer-notes\*"; DestDir: "{app}\docs"; Flags: ignoreversion
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\KiraPick.exe"
 Name: "{autoprograms}\Hướng dẫn {#AppName}"; Filename: "{app}\docs\HUONG_DAN.txt"
+Name: "{autoprograms}\Gỡ cài đặt {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\KiraPick.exe"; Tasks: desktopicon
 
 [Run]
