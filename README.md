@@ -66,7 +66,9 @@ filter, double-click to name; tick the boxes of several people and press **🔗 
 toolbar to merge them (or select several + right-click). Photos where the face is not
 clearly visible are only *suggested* (a "?" badge) or listed under **Chưa xác định**. **Cần xem lại**
 asks about pairs that look alike but are not certain. Right-click photos to confirm, remove from a
-person, or assign to another person. All corrections survive re-analysis. Models: see
+person, or assign to another person. All corrections survive re-analysis. Each correction is also kept as a learning example (numbers only: face/outfit similarity, time
+gap, your answer) in `%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\learning` — per Windows user, never
+in the installer, so friends who install the app teach it their own way. Models: see
 `docs/model-licenses.md`; fetch once with `python scripts/fetch_models.py`.
 
 ## Check your own photo folder (read-only)

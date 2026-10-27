@@ -372,6 +372,7 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
         actions.rename_subject(conn, 3, "Aki")
     w._fill_people()
     assert not w.act_merge.isEnabled()
+    assert w.teacher.store is not None and w.teacher.store.path.parent == mw.sessions_dir().parent / "learning"
     items = {w.people.item(i).data(Qt.ItemDataRole.UserRole)[1]: w.people.item(i) for i in range(w.people.count())}
     items[1].setCheckState(Qt.CheckState.Checked)
     assert not w.act_merge.isEnabled()  # one ticked person: nothing to merge

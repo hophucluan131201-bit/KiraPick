@@ -121,6 +121,19 @@ expected for this GPU (to profile: FP16, IO binding, preprocessing share, power 
 | Grouping v2 (look-first): link if face ≥ 0.65 (photos > 5 min apart also need outfit ≥ 0.65, unless face ≥ 0.80); or within ±5 min outfit ≥ 0.80 and faces (if both visible) ≥ 0.55; or within ±5 min face ≥ 0.55 and outfit ≥ 0.78. Outfit = HSV histograms of 3 bands (hair, upper, lower body) of the central 60% of the person box at 400 px; older vectors are recomputed from cached thumbnails before regrouping (no models needed). Groups merge only if mean face similarity ≥ 0.45, or ≥ 0.60 when no photos of the two are within 5 min (no chaining); same-photo cannot-link; manual seeds attract first; user exclusions and "different" pairs respected; face-less members only *suggested* ("?"); a face-less-only group needs ≥ 2 photos; stable subject ids; background people never grouped. Review queue: same outfit within 5 min, or face ≥ 0.45 within 30 min, or face ≥ 0.60 any time (max 30) | tested | `tests/unit/test_identity_cluster.py` (synthetic), `scripts/calibration/evaluate_grouping.py` (real labels) |
 | UI: "🧠 Nhận diện người" (auto after import, background, pause/resume), NGƯỜI list with face avatars, person filter, "Chưa xác định", "?" badge for suggested photos, rename (double-click), tick people + "🔗 Gộp người" toolbar button (or right-click) to merge, keeping the named person, mark different, grid menu: confirm / remove from person / assign to person, review dialog, inspector lists people in the photo | tested offscreen | `test_people_recognition_flow_on_real_photos` |
 
+### Learning from the user's corrections (step 1: recording)
+
+Every people correction (merge, "different people", remove from person, assign/confirm) is
+turned into examples: pairs of occurrences with face similarity, outfit similarity, time gap and
+the user's answer. They are stored per Windows user in
+`%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\learning\learning.db` (`app/learning/`), survive the
+30-day session purge, are never part of an installer (each friend starts from the defaults), and
+contain no images, file names, paths, names or capture dates. Errors there never block a
+correction. Tested: `tests/unit/test_learning.py`.
+**Not yet:** using the examples (per-user threshold tuning with a safety check against past
+answers), a "forget what was learnt" button, and taste learning from Keep/Reject/stars (needs M3
+quality measurements first).
+
 ### Grouping calibration (owner's "Test" shoot, 2026-10-25)
 
 Data: debug bundle of 109 NEF (Nikon Z 5), 341 occurrences, 159 usable faces. Ground truth: 37 looks
@@ -165,7 +178,7 @@ stragglers (profile, motion blur, hands over face) that the owner can merge with
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-235 passed in 53.66s
+239 passed in 60.86s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):

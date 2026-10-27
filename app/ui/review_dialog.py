@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QDialog, QGridLayout, QHBoxLayout, QLabel, QPushBu
 
 from app.identity import actions
 from app.identity.cluster import Suggestion, merge_suggestions
+from app.learning.teacher import Teacher
 from app.storage.project import Project
 from app.ui import theme
 
@@ -26,10 +27,11 @@ def _avatar(project: Project, subject_id: int) -> tuple[QPixmap | None, int]:
 class ReviewDialog(QDialog):
     changed = Signal()
 
-    def __init__(self, project: Project, parent: QWidget | None = None) -> None:
+    def __init__(self, project: Project, parent: QWidget | None = None, teacher: Teacher | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Cần xem lại: có phải cùng một người?")
         self.project = project
+        self.teacher = teacher
         self.queue: list[Suggestion] = merge_suggestions(project.conn)
         self.index = 0
         self.decisions = 0
@@ -116,6 +118,8 @@ class ReviewDialog(QDialog):
         counts = {r["id"]: r["photos"] for r in actions.subjects_summary(self.project.conn)}
         keep, drop = (s.a, s.b) if counts.get(s.a, 0) >= counts.get(s.b, 0) else (s.b, s.a)
         with self.project.transaction() as conn:
+            if self.teacher is not None:
+                self.teacher.merged(conn, keep, drop)
             actions.merge_subjects(conn, keep, drop)
         self.decisions += 1
         self.changed.emit()
@@ -126,6 +130,8 @@ class ReviewDialog(QDialog):
         if s is None:
             return
         with self.project.transaction() as conn:
+            if self.teacher is not None:
+                self.teacher.different(conn, s.a, s.b)
             actions.mark_different(conn, s.a, s.b)
         self.decisions += 1
         self.changed.emit()

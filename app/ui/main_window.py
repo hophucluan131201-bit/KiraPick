@@ -36,6 +36,8 @@ from app.storage.sessions import delete_session, open_session, purge_old_session
 from app.ai.models import ModelRegistry, ModelState
 from app.identity import actions
 from app.identity.cluster import merge_suggestions
+from app.learning.store import LearningStore
+from app.learning.teacher import Teacher
 from app.selection.client_list import delete_collection, list_collections
 from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter
 from app.ui.client_list_dialog import ClientListDialog
@@ -80,6 +82,7 @@ class MainWindow(QMainWindow):
         self._registry: ModelRegistry | None = None
         self._last_import_root: Path | None = None
         self.model = AssetListModel(self)
+        self.teacher = Teacher(self._open_learning())
 
         self._build_toolbar()
         self._build_body()
@@ -467,6 +470,15 @@ class MainWindow(QMainWindow):
         elif self._last_import_root is not None:
             self.start_import(self._last_import_root)
 
+    @staticmethod
+    def _open_learning() -> LearningStore | None:
+        """This user's learning data (never shared with the app); optional."""
+        try:
+            return LearningStore(sessions_dir().parent / "learning")
+        except Exception:  # noqa: BLE001 - the app works without it
+            log.exception("learning data unavailable")
+            return None
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
         self.settings.setValue("geometry", self.saveGeometry())
         for dialog in self.findChildren(QDialog):  # they use the project database
@@ -479,6 +491,9 @@ class MainWindow(QMainWindow):
         self.viewer.wait_idle(5000)
         if self.project is not None:
             self.project.close()
+        if self.teacher.store is not None:
+            self.teacher.store.close()
+            self.teacher.store = None
         super().closeEvent(event)
 
     # ------------------------------------------------------------ people (AI)
@@ -677,6 +692,8 @@ class MainWindow(QMainWindow):
             return
         with self.project.transaction() as conn:
             for other in ids:
+                if other != keep:
+                    self.teacher.merged(conn, keep, other)
                 actions.merge_subjects(conn, keep, other)
         self.people.blockSignals(True)
         for i in range(self.people.count()):  # merged: clear the ticks
@@ -689,7 +706,7 @@ class MainWindow(QMainWindow):
     def open_review(self) -> ReviewDialog | None:
         if self.project is None:
             return None
-        dialog = ReviewDialog(self.project, self)
+        dialog = ReviewDialog(self.project, self, teacher=self.teacher)
         dialog.changed.connect(self._after_people_change)
         dialog.show()
         return dialog
@@ -716,6 +733,7 @@ class MainWindow(QMainWindow):
             self.merge_selected_people(ids)
         elif chosen is different:
             with self.project.transaction() as conn:
+                self.teacher.different(conn, ids[0], ids[1])
                 actions.mark_different(conn, ids[0], ids[1])
             self._fill_people()
 
@@ -743,11 +761,14 @@ class MainWindow(QMainWindow):
             return
         with self.project.transaction() as conn:
             if chosen is remove:
+                self.teacher.removed(conn, target, assets)  # type: ignore[arg-type]
                 actions.remove_photos_from_subject(conn, target, assets)  # type: ignore[arg-type]
             elif chosen is confirm:
                 actions.assign_photos_to_subject(conn, target, assets)  # type: ignore[arg-type]
+                self.teacher.assigned(conn, target, assets)  # type: ignore[arg-type]
             elif chosen in targets:
                 actions.assign_photos_to_subject(conn, targets[chosen], assets)
+                self.teacher.assigned(conn, targets[chosen], assets)
         self._after_people_change()
 
     def _people_text(self, asset_id: int) -> str | None:
