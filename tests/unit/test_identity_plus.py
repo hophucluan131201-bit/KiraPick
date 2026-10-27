@@ -455,3 +455,58 @@ def test_new_subject_from_photos_survives_regrouping(project: Project) -> None:
     recluster(project)
     assert _subjects(project).get(unnamed) == [3] and sid not in _subjects(project)
     assert project.conn.execute("SELECT 1 FROM subjects WHERE id = ?", (sid,)).fetchone()  # a named subject stays
+
+
+def test_new_subjects_are_numbered_in_shooting_order_and_list_orders(project: Project) -> None:
+    from app.identity import actions
+
+    early, late = _person(), _person()
+    for asset, minute in ((1, 50), (2, 51), (3, 52)):  # the later person has more photos
+        _add(project, asset, _shot(late), minute=minute, outfit=RED)
+    for asset, minute in ((4, 1), (5, 2)):
+        _add(project, asset, _shot(early), minute=minute, outfit=RED)
+    recluster(project)
+    subjects = _subjects(project)
+    first, second = sorted(subjects)
+    assert subjects[first] == [4, 5] and subjects[second] == [1, 2, 3]  # numbered by time, not size
+    assert [r["id"] for r in actions.subjects_summary(project.conn, "number")] == [first, second]
+    assert [r["id"] for r in actions.subjects_summary(project.conn, "photos")] == [second, first]
+    assert [r["id"] for r in actions.subjects_summary(project.conn, "time")] == [first, second]
+    actions.rename_subject(project.conn, second, "Aki")
+    assert [r["id"] for r in actions.subjects_summary(project.conn, "name")] == [second, first]
+
+
+def test_renumbering_keeps_every_reference(project: Project) -> None:
+    import json
+
+    from app.identity import actions
+
+    people = [_person() for _ in range(3)]
+    for k, face in enumerate(people):
+        for j in range(2):
+            _add(project, 10 * k + j + 1, _shot(face), minute=20 * k + j, outfit=RED)
+    recluster(project)
+    by_time = [r["id"] for r in actions.subjects_summary(project.conn, "time")]
+    with project.transaction() as conn:  # make the numbers jump, as after many corrections
+        conn.execute("PRAGMA defer_foreign_keys = ON")
+        for old, new in zip(by_time, (57, 12, 60)):
+            for table, col in (("subjects", "id"), ("occurrences", "subject_id")):
+                conn.execute(f"UPDATE {table} SET {col} = ? WHERE {col} = ?", (new, old))
+        actions.rename_subject(conn, 12, "Aki")
+        actions.mark_different(conn, 57, 60)
+        conn.execute("INSERT INTO decisions (asset_id, subject_id, flag, updated_at) VALUES (1, 57, 'keep', 'n')")
+        conn.execute("INSERT INTO pick_runs (id, created_at, params_json) VALUES (1, 'n', ?)",
+                     (json.dumps({"mode": "in_view", "subject_id": 60}),))
+    before = {tuple(v): None for v in _subjects(project).values()}
+    with project.transaction() as conn:
+        mapping = actions.renumber_subjects(conn)
+    assert mapping == {57: 1, 12: 2, 60: 3}
+    after = _subjects(project)
+    assert sorted(after) == [1, 2, 3] and {tuple(v) for v in after.values()} == set(before)
+    assert after[1] == [1, 2] and actions.subject_label(project.conn, 2) == "Aki"
+    assert [tuple(r) for r in project.conn.execute("SELECT a, b FROM subject_pairs")] == [(1, 3)]
+    assert project.conn.execute("SELECT subject_id FROM decisions").fetchone()[0] == 1
+    assert json.loads(project.conn.execute("SELECT params_json FROM pick_runs").fetchone()[0])["subject_id"] == 3
+    assert project.conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    with project.transaction() as conn:
+        assert actions.renumber_subjects(conn) == {}  # already 1, 2, 3

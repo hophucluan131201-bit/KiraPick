@@ -446,6 +446,13 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     assert "Đã tạo Kana với 1 ảnh" in w.status.text()
     assert any("Kana" in w.people.item(i).text() for i in range(w.people.count()))
 
+    # 🔢 numbers without gaps, the list sorted by number (default)
+    assert w.people_sort.currentData() == "number"
+    assert w.renumber_people(ask=False) > 0
+    assert sorted(r["id"] for r in actions.subjects_summary(conn)) == [1, 2, 3]
+    shown = [w.people.item(i).data(Qt.ItemDataRole.UserRole) for i in range(w.people.count())]
+    assert [d[1] for d in shown if d[0] == "subject"] == [1, 2, 3]
+
     # 🎓: what was learnt, and forgetting it (after a confirmation)
     from app.learning.store import PairEvidence
 

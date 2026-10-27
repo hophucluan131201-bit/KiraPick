@@ -288,7 +288,14 @@ class MainWindow(QMainWindow):
         self.people.itemDoubleClicked.connect(lambda _item: self.rename_current_person())
         self.people.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.people.customContextMenuRequested.connect(self._people_context_menu)
-        for w in (t1, self.sources, t2, self.filters, t3, self.people):
+        self.people_sort = QComboBox()
+        self.people_sort.setToolTip("Cách xếp danh sách chủ thể")
+        for key, label in actions.PEOPLE_ORDERS.items():
+            self.people_sort.addItem(label, key)
+        saved = self.settings.value("people_sort", "number", str)
+        self.people_sort.setCurrentIndex(max(0, self.people_sort.findData(saved)))
+        self.people_sort.currentIndexChanged.connect(self._on_people_sort_changed)
+        for w in (t1, self.sources, t2, self.filters, t3, self.people_sort, self.people):
             side_layout.addWidget(w)
         side_layout.addStretch(1)
         side.setMinimumWidth(190)
@@ -779,13 +786,49 @@ class MainWindow(QMainWindow):
             self.reload_preserving_view()
             self._show_inspector(self.current_record())
 
+    def renumber_people(self, ask: bool = True) -> int:
+        """Chủ thể 1, 2, 3 … without gaps, in shooting order (names are kept)."""
+        if self.project is None:
+            return 0
+        if ask and QMessageBox.question(
+                self, "Đánh số lại",
+                "Đánh số lại các chủ thể thành 1, 2, 3… theo thời gian chụp (không còn số bị nhảy)?\n"
+                "Chủ thể đã đặt tên giữ nguyên tên; ảnh và các lần sửa không bị ảnh hưởng.") != QMessageBox.StandardButton.Yes:
+            return 0
+        with self.project.transaction() as conn:
+            changed = actions.renumber_subjects(conn)
+        target = self.model.current_target
+        if self.model.current_filter is Filter.SUBJECT and target in changed:
+            self.model.set_filter(Filter.SUBJECT, subject_id=changed[target])  # keep showing the same person
+            target = changed[target]
+        self.people.blockSignals(True)
+        self.people.setCurrentRow(-1)  # the old row's id may now belong to someone else
+        self.people.blockSignals(False)
+        self._after_people_change()
+        if self.model.current_filter is Filter.SUBJECT:
+            for i in range(self.people.count()):
+                if self.people.item(i).data(Qt.ItemDataRole.UserRole) == ("subject", target):
+                    self.people.blockSignals(True)
+                    self.people.setCurrentRow(i)
+                    self.people.blockSignals(False)
+        self.status.setText(f"Đã đánh số lại {len(changed)} chủ thể theo thời gian chụp." if changed
+                            else "Các chủ thể đã được đánh số liền nhau.")
+        return len(changed)
+
+    def _people_order(self) -> str:
+        return self.people_sort.currentData() or "number"
+
+    def _on_people_sort_changed(self) -> None:
+        self.settings.setValue("people_sort", self._people_order())
+        self._fill_people()
+
     def _fill_people(self) -> None:
         current = self.people.currentItem().data(Qt.ItemDataRole.UserRole) if self.people.currentItem() else None
         checked = set(self._checked_subjects())
         self.people.blockSignals(True)
         self.people.clear()
         if self.project is not None:
-            for r in actions.subjects_summary(self.project.conn):
+            for r in actions.subjects_summary(self.project.conn, self._people_order()):
                 text = f"{r['display_name'] or f'Chủ thể {r[0]}'}  ·  {r['photos']} ảnh"
                 if r["suggested"]:
                     text += f"  ·  {r['suggested']}?"
@@ -919,10 +962,14 @@ class MainWindow(QMainWindow):
         rename = menu.addAction("Đặt tên…") if len(ids) == 1 else None
         merge = menu.addAction(f"Gộp {len(ids)} chủ thể này thành một") if len(ids) >= 2 else None
         different = menu.addAction("Đây là hai chủ thể khác nhau") if len(ids) == 2 else None
+        menu.addSeparator()
+        renumber = menu.addAction("🔢 Đánh số lại 1, 2, 3… theo thời gian chụp")
         chosen = menu.exec(self.people.mapToGlobal(pos))  # type: ignore[arg-type]
         if chosen is None:
             return
-        if chosen is rename:
+        if chosen is renumber:
+            self.renumber_people()
+        elif chosen is rename:
             self.rename_current_person()
         elif chosen is merge:
             self.merge_selected_people(ids)
@@ -949,9 +996,7 @@ class MainWindow(QMainWindow):
         new_subject.setToolTip("Chủ thể này chưa có trong danh sách: tạo một chủ thể riêng cho các ảnh đang chọn")
         assign_menu = menu.addMenu("Gán cho chủ thể…")
         targets = {}
-        rows = sorted(actions.subjects_summary(self.project.conn),  # named first (A-Z), then by number
-                      key=lambda r: (r["display_name"] is None, (r["display_name"] or "").casefold(), r["id"]))
-        for r in rows:
+        for r in actions.subjects_summary(self.project.conn, self._people_order()):  # same order as the list
             if r["id"] != target:
                 targets[assign_menu.addAction(r["display_name"] or f"Chủ thể {r['id']}")] = r["id"]
         assign_menu.setEnabled(bool(targets))

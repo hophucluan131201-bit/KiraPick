@@ -403,6 +403,7 @@ def recluster(project: Project, tune: Callable[[Thresholds], Thresholds] | None 
         # Map groups to subject ids: manual seed, else the previous subject most of its members had.
         taken: set[int] = set()
         subject_of: dict[int, int] = {}
+        fresh: list[int] = []
         order = sorted(range(len(groups)), key=lambda gi: (groups[gi].fixed_subject is None, -len(groups[gi].members)))
         for gi in order:
             g = groups[gi]
@@ -415,9 +416,15 @@ def recluster(project: Project, tune: Callable[[Thresholds], Thresholds] | None 
                         sid = candidate
                         break
             if sid is None:
-                sid = int(conn.execute("INSERT INTO subjects (created_at) VALUES (?)", (now,)).lastrowid)
+                fresh.append(gi)
+                continue
             taken.add(sid)
             subject_of[gi] = sid
+        # New subjects are numbered in shooting order (Chủ thể 1 = the first person photographed).
+        first = lambda gi: min((occs[m].time for m in groups[gi].members if occs[m].time is not None),  # noqa: E731
+                               default=float("inf"))
+        for gi in sorted(fresh, key=lambda gi: (first(gi), gi)):
+            subject_of[gi] = int(conn.execute("INSERT INTO subjects (created_at) VALUES (?)", (now,)).lastrowid)
         for gi, g in enumerate(groups):
             for m in g.members:
                 o = occs[m]

@@ -1,5 +1,9 @@
 ## KiraPick 2.0 – bản chính thức
 
+> **2.0.4 – danh sách chủ thể gọn gàng.** Ô chọn cách xếp ngay trên danh sách (theo số / thời gian chụp /
+> nhiều ảnh nhất / tên), mặc định theo số. Chủ thể mới được đánh số theo thứ tự chụp. Nhấp phải vào danh sách →
+> **🔢 Đánh số lại** để có 1, 2, 3… liền nhau (tên đã đặt và mọi lần sửa được giữ).
+>
 > **2.0.3 – ➕ Tạo chủ thể mới.** Chuột phải vào ảnh → **➕ Tạo chủ thể mới** cho người chưa có trong danh sách
 > (đặt tên hoặc để trống); nếu đang xem một chủ thể, ảnh được chuyển sang chủ thể mới. Danh sách "Gán cho chủ thể…"
 > xếp theo tên rồi theo số.

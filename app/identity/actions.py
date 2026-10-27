@@ -119,14 +119,63 @@ def assign_photos_to_subject(conn: sqlite3.Connection, subject_id: int, asset_id
     return changed
 
 
-def subjects_summary(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Subjects with photo counts, uncertain counts and an avatar crop, biggest first."""
-    return conn.execute(
+def renumber_subjects(conn: sqlite3.Connection) -> dict[int, int]:
+    """Number subjects 1, 2, 3 … in shooting order (first photo), without gaps. Returns {old: new} of those changed.
+
+    Every reference follows (occurrences, decisions, review answers, picks). Names stay.
+    Run inside a transaction.
+    """
+    import json
+
+    order = [r["id"] for r in subjects_summary(conn, "time")]
+    order += [r[0] for r in conn.execute("SELECT id FROM subjects ORDER BY id") if r[0] not in set(order)]
+    mapping = {old: new for new, old in enumerate(order, start=1)}
+    changed = {old: new for old, new in mapping.items() if old != new}
+    if not changed:
+        return {}
+    conn.execute("PRAGMA defer_foreign_keys = ON")  # references are consistent again before commit
+    pairs = conn.execute("SELECT a, b, relation, created_at FROM subject_pairs").fetchall()
+    conn.execute("DELETE FROM subject_pairs")  # CHECK (a < b): re-inserted below in the new order
+    columns = (("subjects", "id"), ("subjects", "merged_into"), ("occurrences", "subject_id"),
+               ("occurrences", "excluded_subject_id"), ("decisions", "subject_id"), ("picks", "subject_id"))
+    for table, col in columns:  # two steps through negative numbers: old and new ids overlap
+        conn.execute(f"UPDATE {table} SET {col} = -{col} WHERE {col} IS NOT NULL")
+        conn.executemany(f"UPDATE {table} SET {col} = ? WHERE {col} = ?", [(new, -old) for old, new in mapping.items()])
+    conn.executemany("INSERT INTO subject_pairs (a, b, relation, created_at) VALUES (?, ?, ?, ?)",
+                     [(min(mapping[p[0]], mapping[p[1]]), max(mapping[p[0]], mapping[p[1]]), p[2], p[3]) for p in pairs])
+    for run_id, params in conn.execute("SELECT id, params_json FROM pick_runs").fetchall():
+        data = json.loads(params)
+        if data.get("subject_id") in mapping:
+            data["subject_id"] = mapping[data["subject_id"]]
+            conn.execute("UPDATE pick_runs SET params_json = ? WHERE id = ?", (json.dumps(data), run_id))
+    return changed
+
+
+PEOPLE_ORDERS = {  # how the subjects list can be sorted (key, label)
+    "number": "Xếp theo số",
+    "time": "Xếp theo thời gian chụp",
+    "photos": "Nhiều ảnh nhất trước",
+    "name": "Xếp theo tên (A–Z)",
+}
+
+
+def subjects_summary(conn: sqlite3.Connection, order: str = "photos") -> list[sqlite3.Row]:
+    """Subjects with photo counts, uncertain counts, first capture time and an avatar crop.
+
+    ``order``: a key of PEOPLE_ORDERS (default: most photos first).
+    """
+    rows = conn.execute(
         """SELECT s.id, s.display_name, COUNT(DISTINCT o.asset_id) AS photos,
-                  SUM(o.assignment = 'suggested') AS suggested,
+                  SUM(o.assignment = 'suggested') AS suggested, MIN(a.capture_time) AS first_time,
                   (SELECT o2.crop_file FROM occurrences o2 JOIN occurrence_vectors v
                      ON v.occurrence_id = o2.id AND v.kind = 'face'
                    WHERE o2.subject_id = s.id ORDER BY o2.face_score DESC LIMIT 1) AS avatar
-           FROM subjects s JOIN occurrences o ON o.subject_id = s.id
-           GROUP BY s.id ORDER BY photos DESC, s.id"""
+           FROM subjects s JOIN occurrences o ON o.subject_id = s.id JOIN assets a ON a.id = o.asset_id
+           GROUP BY s.id"""
     ).fetchall()
+    keys = {
+        "number": lambda r: r["id"],
+        "time": lambda r: (r["first_time"] is None, r["first_time"] or "", r["id"]),
+        "name": lambda r: (r["display_name"] is None, (r["display_name"] or "").casefold(), r["id"]),
+    }
+    return sorted(rows, key=keys.get(order, lambda r: (-r["photos"], r["id"])))
