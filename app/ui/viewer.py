@@ -1,8 +1,11 @@
-"""Large preview ("loupe") with fit-to-window and 100% zoom.
+"""Large preview ("loupe"): fit-to-window, true 100% and closer (up to 800%).
 
 Pixels are decoded off the UI thread. The 1600 px analysis preview is shown
-first; pressing Z switches to true 100% using ``load_full_resolution`` (camera
-full-size JPEG when available, otherwise a full RAW demosaic).
+first; any zoom beyond "fit" loads the full-resolution image with
+``load_full_resolution`` (camera full-size JPEG when available, otherwise a full
+RAW demosaic), so sharpness is judged on real pixels, never on an enlarged preview.
+Zoom levels are relative to the full-resolution image: 1.0 = one photo pixel per
+physical screen pixel.
 """
 
 from __future__ import annotations
@@ -22,6 +25,8 @@ from app.ui.qt_image import pil_to_qimage
 
 PREVIEW_LONG_SIDE = 1600
 _FULL_CACHE = 2  # full-resolution frames kept in memory (~70 MB each for 24 MP)
+MAX_ZOOM = 8.0
+ZOOM_STEPS = (1.0, 2.0, 4.0, 8.0)
 
 
 class Quality(str, Enum):
@@ -77,15 +82,23 @@ class ImageViewer(QGraphicsView):
         self._shown_full = False
         self._full_cache: OrderedDict[Path, tuple[QPixmap, str]] = OrderedDict()
         self._message = ""
-        self.zoom_100 = False
+        self.zoom: float | None = None  # None = fit to window
+        self._full_long: int | None = None  # long side of the full-resolution image, when known
         self.source_label = ""
 
     # ------------------------------------------------------------ public
-    def show_photo(self, path: Path | None, placeholder: QPixmap | None = None) -> None:
+    @property
+    def zoom_100(self) -> bool:
+        """Zoomed in (100% or closer) rather than fitted to the window."""
+        return self.zoom is not None
+
+    def show_photo(self, path: Path | None, placeholder: QPixmap | None = None,
+                   full_long_side: int | None = None) -> None:
         self._token += 1
         self._path = path
         self._message = ""
         self._shown_full = False
+        self._full_long = full_long_side
         if path is None:
             self._set_pixmap(QPixmap())
             return
@@ -97,15 +110,35 @@ class ImageViewer(QGraphicsView):
             self._request(Quality.PREVIEW)
 
     def toggle_zoom(self) -> None:
-        self.zoom_100 = not self.zoom_100
-        if self.zoom_100:
-            if self._shown_full:
-                self._apply_zoom()
-            else:
-                self._request(Quality.FULL)
-                self.status_changed.emit("Đang tải ảnh độ phân giải đầy đủ…")
-        else:
+        """Z: fit <-> 100%."""
+        self.set_zoom(None if self.zoom is not None else 1.0)
+
+    def zoom_in(self) -> None:
+        current = self.zoom or 0.0
+        self.set_zoom(next((z for z in ZOOM_STEPS if z > current + 1e-6), MAX_ZOOM))
+
+    def zoom_out(self) -> None:
+        current = self.zoom
+        if current is None:
+            return
+        smaller = [z for z in ZOOM_STEPS if z < current - 1e-6]
+        self.set_zoom(smaller[-1] if smaller else None)
+
+    def set_zoom(self, level: float | None, focus: QPointF | None = None) -> None:
+        """level relative to full resolution (None = fit); focus = point to centre, 0..1 of the photo."""
+        self.zoom = None if level is None else max(0.05, min(MAX_ZOOM, level))
+        if self.zoom is None:
             self._fit()
+            self._emit_zoom()
+            return
+        if not self._shown_full:
+            self._request(Quality.FULL)
+            self.status_changed.emit("Đang tải ảnh độ phân giải đầy đủ…")
+        self._apply_zoom(focus)
+        self._emit_zoom()
+
+    def zoom_percent(self) -> int | None:
+        return None if self.zoom is None else round(self.zoom * 100)
 
     def is_full_resolution_shown(self) -> bool:
         return self._shown_full
@@ -133,8 +166,7 @@ class ImageViewer(QGraphicsView):
             return  # user already moved to another photo
         if error:
             if quality == Quality.FULL.value:
-                self.zoom_100 = False
-                self.status_changed.emit(f"Không zoom 100% được: {error}")
+                self.status_changed.emit(f"Không tải được ảnh gốc để phóng to: {error} (đang phóng ảnh xem trước)")
             else:
                 self._message = error
                 self.status_changed.emit(f"Không đọc được ảnh: {error}")
@@ -154,11 +186,21 @@ class ImageViewer(QGraphicsView):
 
     def _show_full(self, pm: QPixmap, source: str) -> None:
         self._shown_full = True
+        self._full_long = max(pm.width(), pm.height())
         self.source_label = source
         self._set_pixmap(pm, keep_view=True)
-        if self.zoom_100:
-            self._apply_zoom()
-        self.status_changed.emit(f"100%: {pm.width()}×{pm.height()} ({_source_vi(source)})")
+        self._emit_zoom()
+
+    def _emit_zoom(self) -> None:
+        pm = self._item.pixmap()
+        if pm.isNull():
+            return
+        size = f"{pm.width()}×{pm.height()} ({_source_vi(self.source_label)})"
+        if self.zoom is None:
+            self.status_changed.emit(f"Vừa khung · {'ảnh gốc' if self._shown_full else 'xem trước'} {size}")
+        else:
+            real = "ảnh gốc" if self._shown_full else "xem trước, đang tải ảnh gốc…"
+            self.status_changed.emit(f"Zoom {self.zoom_percent()}% · {real} {size} · cuộn chuột / + − để phóng")
 
     # ------------------------------------------------------------- view
     def _set_pixmap(self, pm: QPixmap, *, keep_view: bool = False) -> None:
@@ -167,7 +209,7 @@ class ImageViewer(QGraphicsView):
         rel = QPointF(center.x() / old.width(), center.y() / old.height()) if keep_view and not old.isNull() else None
         self._item.setPixmap(pm)
         self.scene().setSceneRect(QRectF(pm.rect()))
-        if self.zoom_100 and self._shown_full:
+        if self.zoom is not None:
             self._apply_zoom(rel)
         else:
             self._fit()
@@ -177,24 +219,65 @@ class ImageViewer(QGraphicsView):
         if not self._item.pixmap().isNull():
             self.fitInView(self._item, Qt.AspectRatioMode.KeepAspectRatio)
 
+    def _pixmap_scale(self) -> float:
+        """Shown pixmap pixels per full-resolution pixel (1 once the full image is shown)."""
+        pm = self._item.pixmap()
+        if self._shown_full or not self._full_long or pm.isNull():
+            return 1.0
+        return max(pm.width(), pm.height()) / self._full_long
+
     def _apply_zoom(self, rel: QPointF | None = None) -> None:
+        pm = self._item.pixmap()
+        if pm.isNull() or self.zoom is None:
+            return
+        if rel is None:  # keep what is in the middle of the window
+            centre = self.mapToScene(self.viewport().rect().center())
+            rel = QPointF(centre.x() / pm.width(), centre.y() / pm.height())
         self.resetTransform()
         ratio = self.devicePixelRatioF() or 1.0
-        self.scale(1 / ratio, 1 / ratio)  # one image pixel per physical screen pixel
-        pm = self._item.pixmap()
-        if rel is not None:
-            self.centerOn(rel.x() * pm.width(), rel.y() * pm.height())
-        else:
-            self.centerOn(pm.width() / 2, pm.height() / 2)
+        k = self.zoom / ratio / self._pixmap_scale()  # zoom 1.0 = one photo pixel per physical screen pixel
+        self.scale(k, k)
+        self.centerOn(rel.x() * pm.width(), rel.y() * pm.height())
 
     def resizeEvent(self, event: object) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)  # type: ignore[arg-type]
-        if not self.zoom_100:
+        if self.zoom is None:
             self._fit()
 
+    def _fit_level(self) -> float:
+        """Zoom level (relative to full resolution) at which the photo fits the window."""
+        pm = self._item.pixmap()
+        if pm.isNull():
+            return 1.0
+        ratio = self.devicePixelRatioF() or 1.0
+        fit = min(self.viewport().width() / pm.width(), self.viewport().height() / pm.height())
+        return fit * ratio * self._pixmap_scale()
+
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt override
-        factor = 1.25 if event.angleDelta().y() > 0 else 0.8
-        self.scale(factor, factor)
+        if self._item.pixmap().isNull():
+            return
+        current = self.zoom if self.zoom is not None else self._fit_level()
+        target = current * (1.25 if event.angleDelta().y() > 0 else 0.8)
+        if target <= self._fit_level():
+            self.set_zoom(None)
+            return
+        point = self.mapToScene(event.position().toPoint())
+        pm = self._item.pixmap()
+        before = event.position()
+        self.set_zoom(min(MAX_ZOOM, target), QPointF(point.x() / pm.width(), point.y() / pm.height()))
+        # keep the photo point under the mouse where it was
+        moved = self.mapFromScene(point)
+        delta = moved - before.toPoint()
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + delta.x())
+        self.verticalScrollBar().setValue(self.verticalScrollBar().value() + delta.y())
+
+    def mouseDoubleClickEvent(self, event: object) -> None:  # noqa: N802 - Qt override
+        """Double-click: 100% on that spot, or back to fit."""
+        pm = self._item.pixmap()
+        if pm.isNull():
+            return
+        point = self.mapToScene(event.position().toPoint())  # type: ignore[attr-defined]
+        self.set_zoom(1.0 if self.zoom is None else None, QPointF(point.x() / pm.width(), point.y() / pm.height()))
 
     def drawForeground(self, painter: QPainter, rect: QRectF) -> None:  # noqa: N802 - Qt override
         if self._message:

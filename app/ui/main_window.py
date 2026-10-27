@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelectionModel, QModelIndex, QSettings, QSize, QStandardPaths, Qt, QTimer
+from PySide6.QtCore import QItemSelectionModel, QModelIndex, QPointF, QSettings, QSize, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -69,6 +71,10 @@ def sessions_dir() -> Path:
     """Hidden per-folder session data (database + thumbnails), never shown as 'projects'."""
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
     return Path(base or Path.home() / ".snorlu") / "sessions"
+
+
+def _long_side(rec: AssetRecord) -> int | None:
+    return max(rec.width or 0, rec.height or 0) or None
 
 
 class MainWindow(QMainWindow):
@@ -314,6 +320,10 @@ class MainWindow(QMainWindow):
         sc("Return", self.toggle_loupe)
         sc("Escape", lambda: self.show_loupe(False))
         sc("Z", self.toggle_zoom)
+        sc("+", lambda: self.zoom_step(1))
+        sc("=", lambda: self.zoom_step(1))
+        sc("-", lambda: self.zoom_step(-1))
+        sc("E", self.zoom_to_eyes)
         sc("F1", self.show_shortcuts)
 
     # ---------------------------------------------------------- sessions
@@ -892,7 +902,7 @@ class MainWindow(QMainWindow):
         rec = self.model.record(current)
         self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None)
         if rec is not None and self.center.currentIndex() == 2:
-            self.viewer.show_photo(rec.path, self.model.pixmap(rec))
+            self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec))
 
     def _on_source_changed(self, row: int) -> None:
         item = self.sources.item(row)
@@ -1041,7 +1051,7 @@ class MainWindow(QMainWindow):
             if rec is None:
                 return
             self.center.setCurrentIndex(2)
-            self.viewer.show_photo(rec.path, self.model.pixmap(rec))
+            self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec))
             self.filmstrip.scrollTo(self.grid.currentIndex())
         elif self.center.currentIndex() == 2:
             self.center.setCurrentIndex(1)
@@ -1052,6 +1062,29 @@ class MainWindow(QMainWindow):
         if self.center.currentIndex() != 2:
             self.show_loupe(True)
         self.viewer.toggle_zoom()
+
+    def zoom_step(self, direction: int) -> None:
+        if self.center.currentIndex() != 2:
+            self.show_loupe(True)
+        (self.viewer.zoom_in if direction > 0 else self.viewer.zoom_out)()
+
+    def zoom_to_eyes(self) -> None:
+        """E: jump close to the eyes of the photo's main person (to judge focus)."""
+        rec = self.current_record()
+        if rec is None or self.project is None:
+            return
+        if self.center.currentIndex() != 2:
+            self.show_loupe(True)
+        row = self.project.conn.execute(
+            """SELECT face_box FROM occurrences WHERE asset_id = ? AND face_box IS NOT NULL
+               ORDER BY is_main DESC, prominence DESC LIMIT 1""", (rec.id,)).fetchone()
+        if row is None:
+            self.status.setText("Ảnh này chưa có khuôn mặt được nhận diện — dùng cuộn chuột hoặc + để phóng to.")
+            return
+        x, y, w, h = json.loads(row[0])
+        face_px = h * max(rec.width or 0, rec.height or 0)  # upper estimate of the face height in photo pixels
+        level = 2.0 if 0 < face_px < 900 else 1.0  # small faces: 200%, big close-ups: 100% is enough
+        self.viewer.set_zoom(level, QPointF(x + w / 2, y + h * 0.42))
 
     # --------------------------------------------------------- culling
     def _targets(self) -> list[AssetRecord]:
@@ -1100,8 +1133,9 @@ class MainWindow(QMainWindow):
     def set_sort(self, mode: Sort) -> None:
         self.sort.setCurrentIndex(self.sort.findData(mode.value))
 
-    def open_select_dialog(self, accept: bool = False) -> SelectDialog | None:
-        """accept=True: run with the dialog's defaults without showing it (tests)."""
+    def open_select_dialog(self, accept: bool = False,
+                           configure: Callable[[SelectDialog], None] | None = None) -> SelectDialog | None:
+        """accept=True: run without showing the dialog, after ``configure`` set its fields (tests)."""
         if self.project is None:
             QMessageBox.information(self, "Chọn ảnh", "Hãy nhập một thư mục ảnh trước.")
             return None
@@ -1113,11 +1147,14 @@ class MainWindow(QMainWindow):
                      else "danh sách đang xem")
         scored = conn.execute("SELECT COUNT(*) FROM measurements WHERE extractor = 'quality'").fetchone()[0]
         dialog = SelectDialog(self, people=people, in_view=len(in_view), view_name=view_name, scored=scored)
+        if configure is not None:
+            configure(dialog)
         if not accept and dialog.exec() != QDialog.DialogCode.Accepted:
             return dialog
         n = dialog.count.value()
-        if dialog.per_person.isChecked():
-            picks = select.select_per_person(conn, n, set(in_view) if self.model.is_filtered else None)
+        per_person = dialog.per_person.isChecked()
+        if per_person:  # every person of the folder, whatever the grid currently shows
+            picks = select.select_per_person(conn, n)
             params = {"mode": "per_person", "n": n}
         else:
             subject = target if flt is Filter.SUBJECT else None
@@ -1131,11 +1168,16 @@ class MainWindow(QMainWindow):
                     if decisions.get(tx, asset_id).flag is None:
                         decisions.set_flag(tx, asset_id, "keep")
                         marked += 1
+        if per_person and self.model.current_filter is not Filter.ALL:
+            self.search.clear()
+            self.filters.setCurrentRow(0)  # show everyone's picks: "Tất cả ảnh"
         self.set_sort(Sort.PICKS_FIRST)  # reloads the view
         self.reload_preserving_view()
         self._update_counts()
         chosen = len({p.asset_id for p in picks})
-        self.status.setText(f"AI đã chọn {chosen} ảnh" + (f", đánh dấu Giữ {marked} ảnh" if marked else "")
+        persons = len({p.subject_id for p in picks if p.subject_id is not None})
+        self.status.setText(f"AI đã chọn {chosen} ảnh" + (f" cho {persons} người" if per_person else "")
+                            + (f", đánh dấu Giữ {marked} ảnh" if marked else "")
                             + ". Ảnh được chọn ở đầu danh sách (nhãn AI) — hãy xem lại, rồi ⤴ Xuất ảnh.")
         self.grid.scrollToTop()
         return dialog
@@ -1158,6 +1200,8 @@ class MainWindow(QMainWindow):
             "← / →   ảnh trước / sau (↑ ↓ trong lưới)\n"
             "Space / Enter   xem lớn ↔ lưới,  Esc   về lưới\n"
             "Z   zoom 100% (ảnh độ phân giải đầy đủ) ↔ vừa khung\n"
+            "+ / −   phóng to / thu nhỏ (tới 800%),  cuộn chuột: phóng tại vị trí chuột\n"
+            "E   phóng tới mắt của người chính (xem nét),  nháy đúp: 100% tại chỗ đó\n"
             "K   Giữ      X   Loại      U   bỏ đánh dấu\n"
             "1 – 5   chấm sao,  0   xoá sao\n"
             "F   Yêu thích\n"

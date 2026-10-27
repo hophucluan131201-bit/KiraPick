@@ -153,6 +153,38 @@ def test_loupe_preview_and_true_100_percent_zoom(qtbot, env: dict) -> None:
     assert w.center.currentIndex() == 1
 
 
+def test_zoom_closer_than_100_percent_and_jump_to_eyes(qtbot, env: dict) -> None:
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.select_row(0)
+    ratio = w.viewer.devicePixelRatioF()
+    _key(qtbot, w, Qt.Key.Key_Plus)  # from the grid: opens the loupe at 100%, loads the real pixels
+    assert w.center.currentIndex() == 2 and w.viewer.zoom == 1.0
+    qtbot.waitUntil(w.viewer.is_full_resolution_shown, timeout=10000)
+    _key(qtbot, w, Qt.Key.Key_Plus)
+    _key(qtbot, w, Qt.Key.Key_Plus)
+    assert w.viewer.zoom == 4.0 and w.viewer.transform().m11() == pytest.approx(4.0 / ratio)
+    assert "Zoom 400%" in w.status.text() and "ảnh gốc" in w.status.text()
+    for _ in range(5):
+        _key(qtbot, w, Qt.Key.Key_Plus)
+    assert w.viewer.zoom == 8.0  # capped
+    _key(qtbot, w, Qt.Key.Key_Minus)
+    assert w.viewer.zoom == 4.0
+    for _ in range(4):
+        _key(qtbot, w, Qt.Key.Key_Minus)
+    assert w.viewer.zoom is None  # back to fit
+
+    rec = w.current_record()
+    with w.project.transaction() as conn:
+        conn.execute("""INSERT INTO occurrences (asset_id, person_box, face_box, prominence, is_main, analysis_version,
+                        created_at) VALUES (?, '[0.1,0.1,0.5,0.8]', '[0.6,0.2,0.1,0.15]', 1, 1, 1, 'n')""", (rec.id,))
+    _key(qtbot, w, Qt.Key.Key_E)
+    assert w.viewer.zoom == 2.0  # small face: 200%
+    centre = w.viewer.mapToScene(w.viewer.viewport().rect().center())
+    width, height = w.viewer.pixmap_size()
+    assert abs(centre.x() / width - 0.65) < 0.05 and abs(centre.y() / height - 0.263) < 0.05
+
+
 def test_broken_photo_in_loupe_shows_message_not_crash(qtbot, env: dict) -> None:
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
@@ -434,3 +466,34 @@ def test_ai_selection_puts_picks_first_marks_keep_and_explains(qtbot, env: dict)
     assert w.teacher.store.culling_count() == before + 1
     w.set_sort(mw.Sort.TIME)
     assert [r.id for r in w.model.records() if r.status == "ok"] == ids
+
+
+def test_per_person_selection_covers_everyone_even_from_a_person_view(qtbot, env: dict) -> None:
+    import numpy as np
+
+    from tests.unit.test_quality import add_scored
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    ids = [r[0] for r in w.project.conn.execute("SELECT id FROM assets WHERE status = 'ok' ORDER BY capture_time")]
+    a, b = np.eye(4, dtype=np.float32)[0], np.eye(4, dtype=np.float32)[1]
+    with w.project.transaction():
+        for asset, person, lay in zip(ids, (1, 1, 1, 2, 2, 3), (a, b, a, a, b, a)):
+            add_scored(w.project, asset, person, 0.6, lay)
+    w._fill_people()
+    w.people.setCurrentRow(0)  # looking at one person, like in the owner's screenshot
+    assert w.model.current_filter is Filter.SUBJECT
+
+    def per_person_two(d) -> None:  # noqa: ANN001
+        d.per_person.setChecked(True)
+        d.count.setValue(2)
+        assert d.count_label.text() == "Số ảnh cho mỗi người:" and d.count.prefix() == ""
+
+    w.open_select_dialog(accept=True, configure=per_person_two)
+    chosen = {r[0]: r[1] for r in w.project.conn.execute("SELECT asset_id, subject_id FROM picks")}
+    assert sorted(set(chosen.values())) == [1, 2, 3]  # every person got photos
+    assert len(chosen) == 5  # 2 + 2 + 1 (person 3 has a single photo)
+    assert w.model.current_filter is Filter.ALL  # the grid shows everyone's picks
+    assert "cho 3 người" in w.status.text()
+    first = [r.id for r in w.model.records()][:5]
+    assert set(first) == set(chosen)

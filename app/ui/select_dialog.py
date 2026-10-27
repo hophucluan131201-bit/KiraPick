@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QHBoxLayout,
     QLabel,
     QRadioButton,
     QSpinBox,
@@ -34,19 +35,28 @@ class SelectDialog(QDialog):
             warn = QLabel("⚠ Chưa có ảnh nào được chấm điểm. Hãy bấm 📊 Phân tích ảnh trước.")
             warn.setWordWrap(True)
             layout.addWidget(warn)
-        self.per_person = QRadioButton(f"Mỗi người N ảnh ({people} người)")
-        self.in_view = QRadioButton(f"N ảnh trong {view_name} ({in_view} ảnh)")
+        self.per_person = QRadioButton(f"Mỗi người một số ảnh — tất cả {people} người trong thư mục")
+        self.in_view = QRadioButton(f"Chỉ chọn trong {view_name} ({in_view} ảnh)")
         group = QButtonGroup(self)
         for b in (self.per_person, self.in_view):
             group.addButton(b)
             layout.addWidget(b)
         self.per_person.setEnabled(people > 0)
         (self.in_view if view_name.startswith("ảnh của") or people == 0 else self.per_person).setChecked(True)
+        row = QHBoxLayout()
+        self.count_label = QLabel()
+        row.addWidget(self.count_label)
         self.count = QSpinBox()
         self.count.setRange(1, 999)
         self.count.setValue(10)
-        self.count.setPrefix("N = ")
-        layout.addWidget(self.count)
+        self.count.setButtonSymbols(QSpinBox.ButtonSymbols.UpDownArrows)
+        self.count.setCorrectionMode(QSpinBox.CorrectionMode.CorrectToNearestValue)  # an emptied box becomes 1
+        self.count.setMinimumWidth(90)
+        row.addWidget(self.count)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.per_person.toggled.connect(self._update_label)
+        self._update_label()
         self.mark_keep = QCheckBox("Đánh dấu Giữ ✓ cho ảnh được chọn (ảnh bạn đã đánh dấu thì giữ nguyên)")
         self.mark_keep.setChecked(True)
         layout.addWidget(self.mark_keep)
@@ -56,3 +66,6 @@ class SelectDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _update_label(self) -> None:
+        self.count_label.setText("Số ảnh cho mỗi người:" if self.per_person.isChecked() else "Số ảnh cần chọn:")

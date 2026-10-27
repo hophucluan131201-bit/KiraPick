@@ -136,6 +136,11 @@ then stop for corrections) → 📊 Phân tích ảnh (quality only) → ⭐ Ch�
 only when the previous step has results and nothing is running (`_update_steps`). The inspector
 explains a score as strengths / weaknesses / not judged, each item tied to a measurement.
 
+Owner feedback 2026-10-27 (fixed): zoom beyond 100% (+/−, wheel up to 800%, double-click, **E** =
+jump to the main person's eyes; any zoom loads full-resolution pixels first); the number box no
+longer has an editable "N = " prefix; "every person N photos" used to be limited to the person shown
+in the grid — it now always covers every person of the folder and switches the grid to all photos.
+
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
 quality 5.8 s for 7 photos (quality ≈ 0.1–0.3 s/photo + full-res JPEG decode 0.1–0.7 s).
@@ -197,7 +202,7 @@ stragglers (profile, motion blur, hands over face) that the owner can merge with
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-248 passed in 54.87s
+250 passed in 61.15s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):

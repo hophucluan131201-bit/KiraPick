@@ -43,6 +43,8 @@ to that folder's session.
 | ← / → (↑ ↓ in grid) | previous / next photo |
 | Space / Enter, Esc | loupe ↔ grid, back to grid |
 | Z | true 100% zoom (full-resolution pixels) ↔ fit |
+| + / − , mouse wheel | zoom closer (up to 800%, always on full-resolution pixels) / back |
+| E | jump to the eyes of the main person (200% for small faces) to check focus; double-click = 100% there |
 | K / X / U | keep / reject / clear flag (applies to all selected photos in the grid) |
 | 1–5, 0 | star rating, clear rating |
 | F | favorite |
