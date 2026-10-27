@@ -52,5 +52,10 @@ def apply_dark_theme(app: QApplication) -> None:
         QSplitter::handle {{ background: {BG}; }}
         QLabel#sectionTitle {{ color: {MUTED}; font-weight: 600; padding: 8px 4px 2px 4px; }}
         QLabel#emptyHint {{ color: {MUTED}; font-size: 15px; }}
+        QToolButton:checked {{ background: #2d4a78; color: #ffffff; }}
+        QLabel#keyHints {{ background: {PANEL}; padding: 6px 10px; border-top: 1px solid {RAISED}; }}
+        QToolButton#backToGrid {{ background: rgba(30, 31, 34, 210); border: 1px solid {RAISED};
+                                  padding: 6px 12px; font-weight: 600; }}
+        QToolButton#backToGrid:hover {{ background: #2d4a78; }}
         """
     )

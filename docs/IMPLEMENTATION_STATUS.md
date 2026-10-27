@@ -145,6 +145,11 @@ Owner report 2026-10-27: Ctrl/Shift+click did not select several photos — in t
 (single selection, keys applied only to the shown photo). Fixed: the filmstrip shares extended
 selection with the grid and K/X/U/stars apply to every selected photo there too.
 
+Owner feedback 2026-10-27 (UI): no obvious way back from the large view. Added a "▦ Lưới ảnh |
+🔍 Xem lớn" switch in the toolbar (active one highlighted), a "◀ Về lưới ảnh (Esc)" button on the
+large view, and a small cheat sheet of keys under the photos that follows the current view
+(toggle "⌨ Phím tắt", remembered; F1 = full list).
+
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
 quality 5.8 s for 7 photos (quality ≈ 0.1–0.3 s/photo + full-res JPEG decode 0.1–0.7 s).
@@ -206,7 +211,7 @@ stragglers (profile, motion blur, hands over face) that the owner can merge with
 
 ```
 $ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
-251 passed in 61.19s
+252 passed in 60.72s
 ```
 
 Windows (user's laptop, Python 3.12, via `scripts/setup_windows.ps1`, 2026-10-27):

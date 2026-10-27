@@ -524,3 +524,22 @@ def test_ctrl_and_shift_click_select_several_in_grid_and_filmstrip(qtbot, env: d
     assert [r.flag for r in w.model.records()][:3] == [None, None, None]
     _key(qtbot, w, Qt.Key.Key_Right)  # moving on selects a single photo again
     assert len(w.selected_records()) == 1
+
+
+def test_view_buttons_back_button_and_key_hints(qtbot, env: dict) -> None:
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.select_row(0)
+    assert w.act_grid_view.isChecked() and not w.act_loupe.isChecked()
+    assert w.key_hints.isVisible() and "chọn nhiều ảnh" in w.key_hints.text()
+    w.act_loupe.trigger()
+    assert w.center.currentIndex() == 2 and w.act_loupe.isChecked() and not w.act_grid_view.isChecked()
+    assert "về lưới ảnh" in w.key_hints.text() and "phóng tới mắt" in w.key_hints.text()
+    assert w.viewer.back_button.isVisible()
+    qtbot.mouseClick(w.viewer.back_button, Qt.MouseButton.LeftButton)
+    assert w.center.currentIndex() == 1 and w.act_grid_view.isChecked()
+    w.act_help.setChecked(False)  # the cheat sheet can be hidden, and stays hidden next time
+    assert not w.key_hints.isVisible()
+    w.close()
+    w2 = _window(qtbot, env)
+    assert not w2.act_help.isChecked() and not w2.key_hints.isVisible()

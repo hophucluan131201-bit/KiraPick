@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QItemSelectionModel, QModelIndex, QPointF, QSettings, QSize, QStandardPaths, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut, QShowEvent
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -71,6 +71,27 @@ def sessions_dir() -> Path:
     """Hidden per-folder session data (database + thumbnails), never shown as 'projects'."""
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
     return Path(base or Path.home() / ".snorlu") / "sessions"
+
+
+_KEYS_GRID = [
+    ("Space / Enter", "xem ảnh lớn"), ("← → ↑ ↓", "di chuyển"), ("K", "giữ"), ("X", "loại"), ("U", "bỏ đánh dấu"),
+    ("1–5 / 0", "sao / xoá sao"), ("F", "yêu thích"), ("Ctrl/Shift + click", "chọn nhiều ảnh"),
+    ("Ctrl+A", "chọn tất cả"), ("Ctrl+F", "tìm tên file"), ("Ctrl+E", "xuất ảnh"), ("F1", "tất cả phím tắt"),
+]
+_KEYS_LOUPE = [
+    ("Esc", "về lưới ảnh"), ("← →", "ảnh trước / sau"), ("Z", "100% ↔ vừa khung"), ("E", "phóng tới mắt"),
+    ("+ / − / cuộn chuột", "phóng to / nhỏ"), ("nháy đúp", "100% tại chỗ đó"), ("kéo chuột", "di chuyển ảnh"),
+    ("K", "giữ"), ("X", "loại"), ("U", "bỏ đánh dấu"), ("1–5", "sao"), ("F", "yêu thích"),
+]
+
+
+def key_hints_html(loupe: bool) -> str:
+    """One compact line of key chips for the current view."""
+    chip = ("<span style='background-color:#3a3d42; color:#e8eaed;'>&nbsp;{}&nbsp;</span>"
+            "&nbsp;<span style='color:#9aa0a6;'>{}</span>")
+    items = _KEYS_LOUPE if loupe else _KEYS_GRID
+    nb = lambda text: text.replace(" ", "&nbsp;")  # noqa: E731 - a key and its meaning never wrap apart
+    return "<b>Phím tắt</b>&nbsp;&nbsp; " + " &nbsp; ".join(chip.format(nb(k), nb(v)) for k, v in items)
 
 
 def _long_side(rec: AssetRecord) -> int | None:
@@ -158,16 +179,30 @@ class MainWindow(QMainWindow):
         self.act_export.setToolTip("Sao chép ảnh đã chọn sang thư mục khác (Ctrl+E)")
         self.act_export.setShortcut(QKeySequence("Ctrl+E"))
         self.act_export.triggered.connect(self.open_export_dialog)
+        # View switch: two buttons, the active one stays highlighted.
+        self.act_grid_view = QAction("▦ Lưới ảnh", self)
+        self.act_grid_view.setToolTip("Xem nhiều ảnh dạng lưới (Esc)")
+        self.act_grid_view.setCheckable(True)
+        self.act_grid_view.triggered.connect(lambda: self.show_loupe(False))
         self.act_loupe = QAction("🔍 Xem lớn", self)
-        self.act_loupe.setToolTip("Xem ảnh lớn ↔ lưới (Space)")
-        self.act_loupe.triggered.connect(self.toggle_loupe)
+        self.act_loupe.setToolTip("Xem một ảnh lớn, phóng to tới 800% (Space / Enter)")
+        self.act_loupe.setCheckable(True)
+        self.act_loupe.triggered.connect(lambda: self.show_loupe(True))
+        view_group = QActionGroup(self)
+        view_group.setExclusive(True)
+        for act in (self.act_grid_view, self.act_loupe):
+            view_group.addAction(act)
+        self.act_grid_view.setChecked(True)
         self.act_auto_advance = QAction("Tự chuyển ảnh", self)
         self.act_auto_advance.setToolTip("Bật: bấm K/X xong tự sang ảnh kế tiếp")
         self.act_auto_advance.setCheckable(True)
         self.act_auto_advance.setChecked(self.settings.value("auto_advance", False, bool))
         self.act_auto_advance.toggled.connect(lambda on: self.settings.setValue("auto_advance", on))
-        self.act_help = QAction("Phím tắt", self)
-        self.act_help.triggered.connect(self.show_shortcuts)
+        self.act_help = QAction("⌨ Phím tắt", self)
+        self.act_help.setToolTip("Hiện/ẩn bảng phím tắt nhỏ dưới khu vực ảnh (F1: bảng đầy đủ)")
+        self.act_help.setCheckable(True)
+        self.act_help.setChecked(self.settings.value("show_key_hints", True, bool))
+        self.act_help.toggled.connect(self._toggle_key_hints)
         self.act_client_list = QAction("📋 Khách chọn", self)
         self.act_client_list.setToolTip("Dán danh sách ảnh khách chọn, app tự chọn ảnh theo tên (Ctrl+L)")
         self.act_client_list.setShortcut(QKeySequence("Ctrl+L"))
@@ -179,8 +214,13 @@ class MainWindow(QMainWindow):
         self.act_select = QAction("⭐ Chọn ảnh", self)
         self.act_select.triggered.connect(lambda: self.open_select_dialog())
         for act in (self.act_import, self.act_analyze, self.act_merge, self.act_quality, self.act_select,
-                    self.act_client_list, self.act_export, self.act_loupe, self.act_reset):
+                    self.act_client_list, self.act_export):
             tb.addAction(act)
+        tb.addSeparator()
+        tb.addAction(self.act_grid_view)
+        tb.addAction(self.act_loupe)
+        tb.addSeparator()
+        tb.addAction(self.act_reset)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
         tb.addAction(self.act_help)
@@ -272,6 +312,22 @@ class MainWindow(QMainWindow):
         self.center.addWidget(self.empty_hint)  # 0
         self.center.addWidget(self.grid)  # 1
         self.center.addWidget(loupe)  # 2
+        self.viewer.back_requested.connect(lambda: self.show_loupe(False))
+
+        # Small cheat sheet under the photos; its content follows the current view.
+        self.key_hints = QLabel()
+        self.key_hints.setObjectName("keyHints")
+        self.key_hints.setWordWrap(True)
+        self.key_hints.setTextFormat(Qt.TextFormat.RichText)
+        self.key_hints.setVisible(self.act_help.isChecked())
+        center_box = QWidget()
+        center_layout = QVBoxLayout(center_box)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
+        center_layout.addWidget(self.center, 1)
+        center_layout.addWidget(self.key_hints)
+        self.center.currentChanged.connect(self._on_view_changed)
+        self._on_view_changed(self.center.currentIndex())
 
         self.inspector = Inspector()
         # Scrollable so the window can shrink to small/scaled screens (e.g. 1080p at 150%).
@@ -281,7 +337,7 @@ class MainWindow(QMainWindow):
         inspector_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         inspector_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         splitter.addWidget(side)
-        splitter.addWidget(self.center)
+        splitter.addWidget(center_box)
         splitter.addWidget(inspector_scroll)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([210, 1000, 290])
@@ -1040,6 +1096,17 @@ class MainWindow(QMainWindow):
             self.center.setCurrentIndex(0)
         elif self.center.currentIndex() == 0:
             self.center.setCurrentIndex(1)
+
+    # ------------------------------------------------------------ views
+    def _on_view_changed(self, index: int) -> None:
+        loupe = index == 2
+        self.act_loupe.setChecked(loupe)
+        self.act_grid_view.setChecked(not loupe)
+        self.key_hints.setText(key_hints_html(loupe))
+
+    def _toggle_key_hints(self, on: bool) -> None:
+        self.settings.setValue("show_key_hints", on)
+        self.key_hints.setVisible(on)
 
     # ------------------------------------------------------------ loupe
     def toggle_loupe(self) -> None:

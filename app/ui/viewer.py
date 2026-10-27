@@ -16,7 +16,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QPointF, QRectF, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap, QWheelEvent
-from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QWidget
+from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QToolButton, QWidget
 
 from app.core.errors import ImageReadError
 from app.ingest.preview import load_full_resolution, load_image
@@ -58,6 +58,7 @@ class _LoadTask(QRunnable):
 
 class ImageViewer(QGraphicsView):
     status_changed = Signal(str)  # human-readable description of what is shown
+    back_requested = Signal()  # the "back to grid" button was pressed
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -71,6 +72,13 @@ class ImageViewer(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keys go to the window shortcuts
+        self.back_button = QToolButton(self)
+        self.back_button.setObjectName("backToGrid")
+        self.back_button.setText("◀  Về lưới ảnh  (Esc)")
+        self.back_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.back_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.back_button.move(12, 12)
+        self.back_button.clicked.connect(self.back_requested.emit)
 
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(2)

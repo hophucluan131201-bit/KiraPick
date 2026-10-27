@@ -38,6 +38,10 @@ Keep/Reject/stars and client lists. A folder not opened for 30 days is forgotten
 **↺ Làm lại** forgets the current folder immediately (asks first). Importing another folder switches
 to that folder's session.
 
+The toolbar switch **▦ Lưới ảnh | 🔍 Xem lớn** changes the view (the large view also has a
+“◀ Về lưới ảnh (Esc)” button). A small cheat sheet of keys sits under the photos and follows the view;
+hide/show it with **⌨ Phím tắt**, F1 lists everything.
+
 | Key | Action |
 |---|---|
 | ← / → (↑ ↓ in grid) | previous / next photo |
