@@ -10,8 +10,9 @@ BƯỚC 1 - GIẢI NÉN
 1. Nhấp chuột PHẢI vào file .zip bạn vừa tải về.
 2. Chọn "Extract All..." (Giải nén tất cả...) -> bấm "Extract".
 3. Một thư mục mới hiện ra, bên trong có:
-     - KiraPick-Setup-....exe   (bộ cài)
-     - HUONG_DAN_CAI_DAT.txt             (file bạn đang đọc)
+     - KiraPick-Setup-....exe     (bộ cài, chỉ vài MB nên mở rất nhanh)
+     - KiraPick-Setup-...-1.bin   (dữ liệu của bộ cài - PHẢI nằm cùng thư mục với file .exe)
+     - HUONG_DAN_CAI_DAT.txt       (file bạn đang đọc)
 
 -----------------------------------------------------------------
 BƯỚC 2 - CÀI ĐẶT
@@ -24,7 +25,9 @@ BƯỚC 2 - CÀI ĐẶT
 3. Trang giấy phép: chọn "I accept the agreement" (Tôi đồng ý) -> Next.
 4. Trang hướng dẫn: Next.
 5. Tick ô "Create a desktop shortcut" nếu muốn có biểu tượng ngoài màn hình -> Next.
-6. Bấm "Install", chờ khoảng 1 phút -> bấm "Finish".
+6. Bấm "Install", chờ khoảng 1 phút (thanh tiến trình chạy) -> bấm "Finish".
+   Nếu bộ cài hỏi "insert disk" / không thấy file .bin: file .bin chưa nằm cạnh file .exe -
+   giải nén lại cả file .zip rồi chạy file .exe trong thư mục vừa giải nén.
    Không cần mật khẩu Administrator.
 
 Từ giờ mở ứng dụng bằng biểu tượng "KiraPick" ngoài màn hình

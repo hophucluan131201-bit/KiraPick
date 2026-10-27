@@ -49,7 +49,8 @@ jobs:
         run: |
           $version = (Select-String -Path app/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
           $tag = "v$version"
-          $files = Get-ChildItem dist/installer -File | ForEach-Object { $_.FullName }
+          # Only the zips: the small Setup.exe is useless without its .bin data file (both are in BoCai.zip).
+          $files = Get-ChildItem dist/installer -File -Filter *.zip | ForEach-Object { $_.FullName }
           if (gh release view $tag 2>$null) { Write-Host "Release $tag already exists: left untouched"; exit 0 }
           if ($version -match '(a|b|rc)\d+$') {  # 0.3.0b4 -> pre-release; 2.0.0 -> the official latest release
             gh release create $tag $files --target "${{ github.sha }}" --title "KiraPick $version (beta)" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease

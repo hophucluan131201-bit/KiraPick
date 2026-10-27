@@ -1,6 +1,9 @@
 ## KiraPick 2.1.0b1 – bản thử nghiệm (beta)
 
 > **Bản beta, chưa phải bản chính thức.** Bản chính thức mới nhất vẫn là 2.0.6.
+> - **2.1.0b2 – bộ cài mở ngay:** file Setup.exe chỉ còn vài MB (dữ liệu nằm ở file `…-1.bin` đi kèm trong
+>   `…-BoCai.zip`), vì Windows quét toàn bộ file .exe trước khi mở nên file 400 MB làm bấm vào rất lâu.
+>   Giải nén cả file zip rồi chạy Setup.exe như cũ.
 > - **Độ nét ảnh cận mặt:** ảnh chụp cận (mắt cách nhau hơn 500 điểm ảnh) được đo ở cỡ của chân dung thường,
 >   nên ảnh cận nét không còn bị chê "thiếu nét"; ảnh chân dung bình thường vẫn đo ở 100% như cũ.
 > - **Bố cục** được chấm cả khi app không thấy thân người (ảnh cận mặt); cắt trán trong ảnh cận được coi là
@@ -54,7 +57,6 @@ Không cần cài Git hay Python — mọi thứ đã nằm trong bộ cài. Có
 ### Tải file nào?
 - **`KiraPick-…-BoCai.zip`** ← tải file này (bộ cài + hướng dẫn tiếng Việt).
 - `KiraPick-…-portable.zip`: bản không cần cài, giải nén ra là chạy `KiraPick.exe`.
-- `KiraPick-Setup-….exe`: chỉ riêng bộ cài.
 
 ### Cài trong 3 bước
 1. Nhấp phải vào file `…-BoCai.zip` → **Extract All** (Giải nén tất cả).

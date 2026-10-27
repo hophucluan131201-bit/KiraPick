@@ -130,7 +130,10 @@ if (-not $iscc) {
     Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "packaging\installer.iss")
     $setup = Join-Path $out "KiraPick-Setup-$version.exe"
     $bundle = Join-Path $out "KiraPick-$version-BoCai.zip"
-    Compress-Archive -Path $setup, $guide -DestinationPath $bundle
+    # Small Setup.exe + its data file(s) (.bin); they must stay together in one folder.
+    $slices = @(Get-ChildItem $out -Filter "KiraPick-Setup-$version-*.bin" | ForEach-Object { $_.FullName })
+    if (-not $slices) { throw "Không thấy file dữ liệu .bin của bộ cài" }
+    Compress-Archive -Path (@($setup) + $slices + @($guide)) -DestinationPath $bundle
     Write-Host "Bộ cài (gửi file này cho bạn bè): $bundle" -ForegroundColor Green
 }
 Get-ChildItem $out | Format-Table Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB) } } | Out-String | Write-Host

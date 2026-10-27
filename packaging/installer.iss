@@ -1,7 +1,9 @@
 ﻿; Inno Setup 6 script: per-user installer for KiraPick (no administrator rights needed).
 ;   ISCC.exe /DAppVersion=0.2.0b2 packaging\installer.iss
 ; Input : dist\KiraPick\ (PyInstaller folder + verified models\)
-; Output: dist\installer\KiraPick-Setup-<version>.exe
+; Output: dist\installer\KiraPick-Setup-<version>.exe (a few MB) + KiraPick-Setup-<version>-1.bin (the data).
+;   Split on purpose: Windows Defender / SmartScreen read the whole .exe before starting it, so a
+;   400 MB setup.exe took a long time to open after a double-click. Keep both files in one folder.
 ; The uninstaller removes the program only. Photos are never touched; the user's
 ; sessions and learning data (%LOCALAPPDATA%\KiraPick) are kept.
 
@@ -32,6 +34,9 @@ UninstallDisplayIcon={app}\KiraPick.exe
 UninstallDisplayName={#AppName}
 Compression=lzma2/max
 SolidCompression=yes
+DiskSpanning=yes
+DiskSliceSize=max
+SlicesPerDisk=1
 WizardStyle=modern
 CloseApplications=yes
 LicenseFile=..\dist\installer-notes\LICENSES.txt
