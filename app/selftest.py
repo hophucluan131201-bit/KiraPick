@@ -142,6 +142,10 @@ def run(report_path: Path, photos: Path | None = None) -> int:
                 quality = AnalyzeJob(project, registry, prefer_gpu=gpu).run(mode="quality")
                 report["steps"].append(f"quality: {quality.measured} measured, {quality.measure_failed} failed, "
                                        f"device {quality.device}")
+                from app.workers import quality_job
+
+                report["quality_timings_s"] = dict(quality_job.last_timings)
+                report["aesthetic_gpu_check"] = dict(quality_job.last_aesthetic_check)
                 report["stage_errors"] = [dict(r) for r in project.conn.execute(
                     """SELECT a.relative_path AS file, s.stage, s.error FROM stage_status s
                        JOIN assets a ON a.id = s.asset_id WHERE s.state = 'failed'""")]

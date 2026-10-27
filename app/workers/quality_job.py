@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
@@ -129,6 +130,12 @@ def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None
     return values, layout_descriptor(small, person)
 
 
+# Where the time of the last run went (seconds), and how the aesthetic model's GPU check went:
+# for the self-test report and the log, to find what is slow on a given PC.
+last_timings: dict[str, float] = {}
+last_aesthetic_check: dict = {}
+
+
 def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int, int], None],
         should_cancel: Callable[[], bool], device: list[str] | None = None, *,
         prefer_gpu: bool = True) -> tuple[int, int, bool]:
@@ -148,10 +155,16 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
         eyes: EyeState | None = EyeState(registry)
     except ModelUnavailableError:
         eyes = None  # honest: eyes stay "not judged"
+    t_load = time.perf_counter()
     try:
         aesthetic: AestheticModel | None = AestheticModel(registry, prefer_gpu=prefer_gpu)
     except ModelUnavailableError:
         aesthetic = None  # honest: aesthetics stay "not judged"
+    last_timings.clear()
+    last_timings["load_models"] = round(time.perf_counter() - t_load, 2)
+    last_aesthetic_check.clear()
+    last_aesthetic_check.update(aesthetic.check if aesthetic is not None else {"device": "none"})
+    log.info("aesthetic model: %s", last_aesthetic_check)
     if device is not None:
         device.append(aesthetic.session.device if aesthetic is not None else "cpu")
         progress("device:" + device[0], 0, 0)
@@ -180,7 +193,9 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
                 return done, failed, True
             asset_id, fut = pending.pop(0)
             try:
+                t0 = time.perf_counter()
                 full, source = fut.result()
+                _add_time("wait_for_photo_decode", t0)
                 _store(project, asset_id, full, source, refiner, face_quality, eyes, aesthetic)
                 done += 1
             except (ImageReadError, cv2.error, OSError, MemoryError) as exc:
@@ -191,7 +206,12 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
                 _mark(project, asset_id, "failed", f"internal_error: {type(exc).__name__}")
                 failed += 1
             progress(STAGE, done + failed, total)
+    log.info("quality stage timings (s): %s", last_timings)
     return done, failed, False
+
+
+def _add_time(key: str, since: float) -> None:
+    last_timings[key] = round(last_timings.get(key, 0.0) + time.perf_counter() - since, 2)
 
 
 def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refiner: FaceRefiner | None,
@@ -205,12 +225,15 @@ def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refin
         (asset_id,),
     ).fetchall()
     mos = None
+    t0 = time.perf_counter()
     if aesthetic is not None and rows:  # one per photo; a failing hint must not lose the measurements
         try:
             mos = aesthetic.score(small)
         except Exception:  # noqa: BLE001
             log.exception("aesthetic hint failed for one photo")
+    _add_time("aesthetic", t0)
     results = []
+    t0 = time.perf_counter()
     for r in rows:
         person = tuple(json.loads(r["person_box"])) if r["person_box"] else None
         face = tuple(json.loads(r["face_box"])) if r["face_box"] else None
@@ -218,6 +241,7 @@ def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refin
         values["full_long_side"] = float(max(h, w))
         values["aesthetic_mos"] = mos
         results.append((r["id"], values, layout))
+    _add_time("sharpness_eyes_face", t0)
     now = utc_now()
     with project.transaction() as conn:
         conn.execute("DELETE FROM measurements WHERE asset_id = ? AND extractor = ?", (asset_id, EXTRACTOR))

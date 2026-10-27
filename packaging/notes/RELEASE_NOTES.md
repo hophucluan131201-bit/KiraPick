@@ -1,6 +1,8 @@
-## KiraPick 2.1.0b4 – bản thử nghiệm (beta)
+## KiraPick 2.1.0b5 – bản thử nghiệm (beta)
 
 > **Bản beta, chưa phải bản chính thức.** Bản chính thức mới nhất vẫn là 2.0.6.
+> - **2.1.0b5 – đo để tăng tốc:** file tự kiểm tra ghi thời gian từng khâu của 📊 (đọc ảnh gốc, gợi ý thẩm mỹ,
+>   đo nét/mắt/mặt) và lý do mô hình thẩm mỹ không dùng được card đồ hoạ (nếu có).
 > - **2.1.0b4 – 📊 Phân tích ảnh cũng dùng card đồ hoạ:** mô hình gợi ý thẩm mỹ được chạy trên GPU nếu khi
 >   khởi động nó cho kết quả giống CPU (tự kiểm tra trên ảnh mẫu dọc và ngang); khác hoặc lỗi thì tự dùng CPU.
 >   Thanh trạng thái ghi tên card đang dùng, ví dụ [GPU NVIDIA GeForce RTX 2080 …]; rê chuột lên để xem số đo.

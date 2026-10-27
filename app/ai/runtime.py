@@ -66,6 +66,7 @@ class Session:
     fallback_reason: str | None
     model: Path | None = None
     cpu_threads: int = 0
+    last_error: str | None = None  # the GPU error that moved this model to the CPU
 
     def run(self, output_names: list[str] | None, feeds: dict) -> list:
         """Run; if the graphics card fails at run time, continue on the CPU (once, for good).
@@ -79,6 +80,7 @@ class Session:
             if self.device == "cpu" or self.model is None:
                 raise
             name = self.model.name
+            self.last_error = f"{type(exc).__name__}: {str(exc)[:300]}"
             log.warning("GPU (%s) failed on %s: %s; switching this model to the CPU",
                         self.device, name, type(exc).__name__)
             self.session = ort.InferenceSession(str(self.model), sess_options=_options(False, self.cpu_threads),
