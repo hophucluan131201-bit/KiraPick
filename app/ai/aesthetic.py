@@ -23,7 +23,9 @@ def _round32(v: float) -> int:
 
 class AestheticModel:
     def __init__(self, registry: ModelRegistry, *, prefer_gpu: bool = True) -> None:
-        self.session = create_session(registry.require("aesthetic"), prefer_gpu=prefer_gpu)
+        # Not on DirectML: the input size changes with the photo's shape, which DirectML handles badly
+        # (installer 2.0.4: every photo of the quality stage failed on it). CUDA or the CPU.
+        self.session = create_session(registry.require("aesthetic"), prefer_gpu=prefer_gpu, allow_directml=False)
         self._input = self.session.session.get_inputs()[0].name
 
     def score(self, bgr: np.ndarray) -> float:
@@ -32,6 +34,6 @@ class AestheticModel:
         img = cv2.resize(bgr, (_round32(w * k), _round32(h * k)), interpolation=cv2.INTER_AREA if k < 1
                          else cv2.INTER_CUBIC)
         x = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32).transpose(2, 0, 1)[None] / 255.0
-        outs = self.session.session.run(None, {self._input: x})
+        outs = self.session.run(None, {self._input: x})
         mos = next(o for o in outs if o.size == 1)
         return round(float(mos.reshape(-1)[0]), 4)

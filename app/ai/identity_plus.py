@@ -43,7 +43,7 @@ class ArcFaceEmbedder:
         if aligned is None:
             return None
         x = (cv2.cvtColor(aligned, cv2.COLOR_BGR2RGB).astype(np.float32) - 127.5) / 127.5
-        out = self.session.session.run(None, {self._input: np.ascontiguousarray(x.transpose(2, 0, 1)[None])})[0]
+        out = self.session.run(None, {self._input: np.ascontiguousarray(x.transpose(2, 0, 1)[None])})[0]
         return _unit(out)
 
 
@@ -61,5 +61,5 @@ class BodyEmbedder:
             return None
         crop = cv2.resize(bgr[y0:y1, x0:x1], BODY_SIZE, interpolation=cv2.INTER_AREA)
         x = (cv2.cvtColor(crop, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0 - _MEAN) / _STD
-        out = self.session.session.run(None, {self._input: np.ascontiguousarray(x.transpose(2, 0, 1)[None])})[0]
+        out = self.session.run(None, {self._input: np.ascontiguousarray(x.transpose(2, 0, 1)[None])})[0]
         return _unit(out)

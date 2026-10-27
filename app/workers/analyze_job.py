@@ -138,7 +138,7 @@ class AnalyzeJob:
             used: list[str] = []
             summary.measured, summary.measure_failed, summary.cancelled = quality_job.run(
                 self.project, self.registry, lambda phase, done, total: progress(AnalyzeProgress(phase, done, total)),
-                should_cancel, used)
+                should_cancel, used, prefer_gpu=self.prefer_gpu)
             if mode == "quality" and used:
                 summary.device = used[0]
         if not summary.cancelled and mode != "quality":

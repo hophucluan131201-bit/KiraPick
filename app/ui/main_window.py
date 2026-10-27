@@ -204,6 +204,12 @@ class MainWindow(QMainWindow):
         self.act_auto_advance.setCheckable(True)
         self.act_auto_advance.setChecked(self.settings.value("auto_advance", False, bool))
         self.act_auto_advance.toggled.connect(lambda on: self.settings.setValue("auto_advance", on))
+        self.act_gpu = QAction("⚡ Dùng card đồ hoạ", self)
+        self.act_gpu.setToolTip("Bật: AI chạy trên card đồ hoạ (nhanh hơn). Tắt nếu máy bị giật / “Not responding” "
+                                "hoặc phân tích bị lỗi: AI chạy bằng CPU (chậm hơn nhưng ổn định).")
+        self.act_gpu.setCheckable(True)
+        self.act_gpu.setChecked(self.settings.value("use_gpu", True, bool))
+        self.act_gpu.toggled.connect(lambda on: self.settings.setValue("use_gpu", on))
         self.act_help = QAction("⌨ Phím tắt", self)
         self.act_help.setToolTip("Hiện/ẩn bảng phím tắt nhỏ dưới khu vực ảnh (F1: bảng đầy đủ)")
         self.act_help.setCheckable(True)
@@ -233,6 +239,7 @@ class MainWindow(QMainWindow):
         tb.addAction(self.act_learning)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
+        tb.addAction(self.act_gpu)
         tb.addAction(self.act_help)
         # The search box lives at the top of the sidebar (always visible; a toolbar
         # would hide it in its overflow menu on narrow or scaled screens).
@@ -684,7 +691,7 @@ class MainWindow(QMainWindow):
     def start_analysis(self, mode: str = "people") -> AnalyzeThread | None:
         if self.project is None or self.import_thread is not None or self.analyze_thread is not None:
             return None
-        thread = AnalyzeThread(self.project.folder, mode, self._learning_dir())
+        thread = AnalyzeThread(self.project.folder, mode, self._learning_dir(), self.act_gpu.isChecked())
         self._analysis_started = time.monotonic()
         self._run_device = None
         thread.progress.connect(self._on_analyze_progress)
@@ -746,7 +753,7 @@ class MainWindow(QMainWindow):
             device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(summary["device"], "CPU")
             parts = [f"Phân tích xong ({device}, {took}): {self._step_state()[2]} ảnh có điểm"]
             if summary.get("measure_failed"):
-                parts.append(f"{summary['measure_failed']} ảnh không chấm được")
+                parts.append(f"{summary['measure_failed']} ảnh không chấm được ({self._main_error('quality')})")
             self.status.setText(", ".join(parts) + ". Bước tiếp theo: bấm ⭐ Chọn ảnh, hoặc xếp theo điểm.")
             return
         people = self.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
@@ -765,6 +772,16 @@ class MainWindow(QMainWindow):
             note += f" {summary['learning']}"
         self.status.setText(", ".join(parts) + "." + note
                             + " Hãy kiểm tra, gộp/tách chủ thể cho đúng, rồi bấm 📊 Phân tích ảnh.")
+
+    def _main_error(self, stage: str) -> str:
+        """The most frequent error of a stage, shortened, for the status bar (details are in the log)."""
+        row = self.project.conn.execute(
+            """SELECT error, COUNT(*) FROM stage_status WHERE stage = ? AND state = 'failed' AND error IS NOT NULL
+               GROUP BY error ORDER BY 2 DESC LIMIT 1""", (stage,)).fetchone() if self.project else None
+        if row is None:
+            return "xem file log"
+        hint = " — thử tắt ⚡ Dùng card đồ hoạ rồi bấm lại" if self.act_gpu.isChecked() else ""
+        return f"lỗi: {row[0][:120]}{hint}"
 
     def _on_analyze_thread_finished(self) -> None:
         if self.sender() is not self.analyze_thread:

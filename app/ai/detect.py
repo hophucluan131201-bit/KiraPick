@@ -80,7 +80,7 @@ class PersonDetector:
 
     def _raw(self, session: Session, canvas: np.ndarray, ratio: float) -> tuple[np.ndarray, np.ndarray]:
         blob = canvas.transpose(2, 0, 1)[None].astype(np.float32)
-        out = session.session.run(None, {session.session.get_inputs()[0].name: blob})[0][0]
+        out = session.run(None, {session.session.get_inputs()[0].name: blob})[0][0]
         xy = (out[:, :2] + self._grid) * self._stride
         wh = np.exp(out[:, 2:4]) * self._stride
         score = out[:, 4] * out[:, 5]  # objectness x P(person)

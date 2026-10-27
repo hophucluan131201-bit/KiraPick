@@ -59,11 +59,44 @@ def configure() -> RuntimeInfo:
     return RuntimeInfo(ort.__version__, available, any(p in available for p in GPU_PROVIDERS), _preload_error)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Session:
     session: ort.InferenceSession
     device: str  # "cuda" | "directml" | "cpu"
     fallback_reason: str | None
+    model: Path | None = None
+    cpu_threads: int = 0
+
+    def run(self, output_names: list[str] | None, feeds: dict) -> list:
+        """Run; if the graphics card fails at run time, continue on the CPU (once, for good).
+
+        A GPU provider can accept a model and still fail on some inputs (an operator or a shape
+        the driver cannot handle); the photo must still be measured.
+        """
+        try:
+            return self.session.run(output_names, feeds)
+        except Exception as exc:  # noqa: BLE001 - any provider error: try the CPU
+            if self.device == "cpu" or self.model is None:
+                raise
+            name = self.model.name
+            log.warning("GPU (%s) failed on %s: %s; switching this model to the CPU",
+                        self.device, name, type(exc).__name__)
+            self.session = ort.InferenceSession(str(self.model), sess_options=_options(False, self.cpu_threads),
+                                                providers=["CPUExecutionProvider"])
+            self.fallback_reason = f"Card đồ hoạ lỗi khi chạy {name} ({type(exc).__name__}); mô hình này chuyển sang CPU"
+            self.device = "cpu"
+            return self.session.run(output_names, feeds)
+
+
+def _options(directml: bool, cpu_threads: int = 0) -> ort.SessionOptions:
+    opts = ort.SessionOptions()
+    opts.log_severity_level = 3
+    if cpu_threads:
+        opts.intra_op_num_threads = cpu_threads
+    if directml:  # required by the DirectML provider
+        opts.enable_mem_pattern = False
+        opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    return opts
 
 
 def _gpu_attempts(available: list[str], gpu_mem_limit_mb: int) -> list[tuple[str, list]]:
@@ -83,22 +116,17 @@ def _gpu_attempts(available: list[str], gpu_mem_limit_mb: int) -> list[tuple[str
 
 
 def create_session(model: Path, *, prefer_gpu: bool = True, gpu_mem_limit_mb: int = DEFAULT_GPU_MEM_LIMIT_MB,
-                   cpu_threads: int = 0) -> Session:
+                   cpu_threads: int = 0, allow_directml: bool = True) -> Session:
+    """``allow_directml=False``: CUDA or CPU only (models DirectML handles badly)."""
     info = configure()
-
-    def options(directml: bool) -> ort.SessionOptions:
-        opts = ort.SessionOptions()
-        opts.log_severity_level = 3
-        if cpu_threads:
-            opts.intra_op_num_threads = cpu_threads
-        if directml:  # required by the DirectML provider
-            opts.enable_mem_pattern = False
-            opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        return opts
+    options = lambda directml: _options(directml, cpu_threads)  # noqa: E731
 
     errors: list[str] = []
     if prefer_gpu:
         for label, providers in _gpu_attempts(info.available, gpu_mem_limit_mb):
+            if label == "directml" and not allow_directml:
+                errors.append("directml: không dùng cho mô hình này")
+                continue
             assert all((p if isinstance(p, str) else p[0]) in ALLOWED_PROVIDERS for p in providers)
             try:
                 session = ort.InferenceSession(str(model), sess_options=options(label == "directml"),
@@ -108,11 +136,11 @@ def create_session(model: Path, *, prefer_gpu: bool = True, gpu_mem_limit_mb: in
                 continue
             used = session.get_providers()[0]
             if used in GPU_PROVIDERS:
-                return Session(session, GPU_PROVIDERS[used], None)
+                return Session(session, GPU_PROVIDERS[used], None, Path(model), cpu_threads)
             errors.append(f"{label}: không dùng được cho mô hình này")
     session = ort.InferenceSession(str(model), sess_options=options(False), providers=["CPUExecutionProvider"])
     reason = None
     if prefer_gpu:
         reason = (f"Không dùng được card đồ hoạ ({'; '.join(errors)}); dùng CPU" if errors
                   else "Bản ONNX Runtime đang cài không hỗ trợ card đồ hoạ; dùng CPU")
-    return Session(session, "cpu", reason)
+    return Session(session, "cpu", reason, Path(model), cpu_threads)

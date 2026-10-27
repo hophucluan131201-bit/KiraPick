@@ -27,6 +27,7 @@ Xem ảnh lớn: Space. Về lưới: Esc. Phóng tới mắt để xem nét: E.
 
 LƯU Ý
 - Có card đồ hoạ (NVIDIA, AMD hay Intel) thì AI tự dùng card qua DirectML, không thì dùng CPU.
+  Nếu máy bị giật hoặc hiện "Not responding" khi phân tích: tắt nút "⚡ Dùng card đồ hoạ" (chạy bằng CPU).
   Thanh trạng thái ghi "GPU DirectML" hoặc "CPU". Nhận diện + phân tích khoảng
   vài phút cho 400-500 ảnh, tuỳ máy.
 - Có đánh giá mắt nhắm/mở và một "gợi ý thẩm mỹ" nhỏ bằng AI (TOPIQ); điểm chủ yếu là điểm kỹ thuật.
@@ -46,6 +47,7 @@ Gỡ cài đặt: Start -> "Gỡ cài đặt KiraPick", hoặc Settings -> Apps 
 Gỡ chỉ xoá chương trình; ảnh và dữ liệu trên vẫn giữ nguyên.
 
 KIỂM TRA KHI CÓ LỖI
-Mở PowerShell trong thư mục cài đặt và chạy:
-  .\KiraPick.exe --self-test "$env:USERPROFILE\Desktop\kirapick-selftest.json"
+Mở PowerShell trong thư mục cài đặt và chạy (thay đường dẫn thư mục ảnh của bạn; app chỉ sao chép 3 ảnh
+đầu để thử, không đụng tới ảnh gốc):
+  .\KiraPick.exe --self-test "$env:USERPROFILE\Desktop\kirapick-selftest.json" "D:\Ảnh\Buổi chụp"
 rồi gửi file kirapick-selftest.json (trên Desktop) và thư mục logs cho người chia sẻ ứng dụng.

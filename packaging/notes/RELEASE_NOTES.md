@@ -1,5 +1,11 @@
 ## KiraPick 2.0 – bản chính thức
 
+> **2.0.5 – sửa lỗi "không chấm được" trên card đồ hoạ (DirectML).** Mô hình gợi ý thẩm mỹ không chạy trên
+> DirectML nữa (chạy bằng CUDA hoặc CPU); nếu card đồ hoạ lỗi khi chạy một mô hình, mô hình đó tự chuyển sang CPU
+> thay vì bỏ ảnh; lỗi của một mô hình phụ không làm mất điểm của cả ảnh; thanh trạng thái ghi rõ lỗi. Nút mới
+> **⚡ Dùng card đồ hoạ**: tắt nếu máy bị giật / "Not responding". Tự kiểm tra có thể chạy trên vài ảnh thật:
+> `KiraPick.exe --self-test bao-cao.json "D:\thư mục ảnh"`.
+>
 > **2.0.4 – danh sách chủ thể gọn gàng.** Ô chọn cách xếp ngay trên danh sách (theo số / thời gian chụp /
 > nhiều ảnh nhất / tên), mặc định theo số. Chủ thể mới được đánh số theo thứ tự chụp. Nhấp phải vào danh sách →
 > **🔢 Đánh số lại** để có 1, 2, 3… liền nhau (tên đã đặt và mọi lần sửa được giữ).

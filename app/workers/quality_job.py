@@ -98,7 +98,11 @@ def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None
             if face_quality is not None:
                 values["face_quality"] = face_quality.score(full, geo)
             if eyes is not None:
-                state = eyes.measure(full, geo)
+                try:
+                    state = eyes.measure(full, geo)
+                except Exception:  # noqa: BLE001 - eyes stay "not judged" for this face
+                    log.exception("eye state failed for one face")
+                    state = None
                 if state is not None:
                     values.update(state)
                     values["blink"] = max(state["blink_left"], state["blink_right"])
@@ -121,7 +125,8 @@ def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None
 
 
 def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int, int], None],
-        should_cancel: Callable[[], bool], device: list[str] | None = None) -> tuple[int, int, bool]:
+        should_cancel: Callable[[], bool], device: list[str] | None = None, *,
+        prefer_gpu: bool = True) -> tuple[int, int, bool]:
     """Returns (measured photos, failed photos, cancelled); ``device`` receives where the heaviest model runs."""
     todo = queue(project)
     if not todo:
@@ -139,7 +144,7 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
     except ModelUnavailableError:
         eyes = None  # honest: eyes stay "not judged"
     try:
-        aesthetic: AestheticModel | None = AestheticModel(registry)
+        aesthetic: AestheticModel | None = AestheticModel(registry, prefer_gpu=prefer_gpu)
     except ModelUnavailableError:
         aesthetic = None  # honest: aesthetics stay "not judged"
     if device is not None:
@@ -194,7 +199,12 @@ def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refin
         "SELECT id, person_box, face_box, face_score FROM occurrences WHERE asset_id = ? AND is_main = 1",
         (asset_id,),
     ).fetchall()
-    mos = aesthetic.score(small) if aesthetic is not None and rows else None  # one per photo
+    mos = None
+    if aesthetic is not None and rows:  # one per photo; a failing hint must not lose the measurements
+        try:
+            mos = aesthetic.score(small)
+        except Exception:  # noqa: BLE001
+            log.exception("aesthetic hint failed for one photo")
     results = []
     for r in rows:
         person = tuple(json.loads(r["person_box"])) if r["person_box"] else None

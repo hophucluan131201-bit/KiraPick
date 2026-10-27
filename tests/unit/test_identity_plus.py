@@ -409,7 +409,7 @@ def test_person_boxes_of_both_detectors_are_merged() -> None:
             out[0, cell, 4], out[0, cell, 5] = score, 1.0
             return [out]
         inner = SimpleNamespace(run=run, get_inputs=lambda: [SimpleNamespace(name="images")])
-        return SimpleNamespace(session=inner, device="cuda", fallback_reason=None)
+        return SimpleNamespace(session=inner, run=run, device="cuda", fallback_reason=None)
 
     medium_misses_her, small_finds_her = fake(0, 0.0), fake(4000, 0.87)
     found = PersonDetector(medium_misses_her, small_finds_her).detect(np.zeros((640, 640, 3), np.uint8))
@@ -510,3 +510,33 @@ def test_renumbering_keeps_every_reference(project: Project) -> None:
     assert project.conn.execute("PRAGMA foreign_key_check").fetchall() == []
     with project.transaction() as conn:
         assert actions.renumber_subjects(conn) == {}  # already 1, 2, 3
+
+
+def test_gpu_failure_at_run_time_switches_the_model_to_cpu(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Installer 2.0.4 on DirectML: every photo failed in the quality stage; a GPU error must not lose them."""
+    from app.ai import runtime
+
+    model = ModelRegistry().status("face_detector").path  # any small model file; never really loaded here
+    calls: list[str] = []
+
+    class Broken:
+        def run(self, *_a):  # noqa: ANN002, ANN202
+            calls.append("gpu")
+            raise RuntimeError("DML: operator not supported for this shape")
+
+    class Cpu:
+        def __init__(self, path, sess_options=None, providers=None):  # noqa: ANN001
+            assert providers == ["CPUExecutionProvider"] and Path(path) == model
+
+        def run(self, *_a):  # noqa: ANN002, ANN202
+            calls.append("cpu")
+            return ["ok"]
+
+    monkeypatch.setattr(runtime.ort, "InferenceSession", Cpu)
+    session = runtime.Session(Broken(), "directml", None, model)
+    assert session.run(None, {}) == ["ok"] and session.device == "cpu"
+    assert "chuyển sang CPU" in session.fallback_reason
+    assert session.run(None, {}) == ["ok"] and calls == ["gpu", "cpu", "cpu"]  # stays on the CPU
+    cpu_only = runtime.Session(Broken(), "cpu", None, model)
+    with pytest.raises(RuntimeError):  # a CPU error is a real error
+        cpu_only.run(None, {})

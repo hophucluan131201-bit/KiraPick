@@ -41,8 +41,9 @@ def main(argv: list[str] | None = None) -> int:
     if "--self-test" in argv:  # packaged app check, no window: KiraPick.exe --self-test report.json
         from app.selftest import run
 
-        rest = argv[argv.index("--self-test") + 1:]
-        return run(Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json")
+        rest = argv[argv.index("--self-test") + 1:]  # [report.json] [a photo folder to try, read-only]
+        return run(Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json",
+                   Path(rest[1]) if len(rest) > 1 else None)
     app = QApplication(argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(SETTINGS_IDS[0])

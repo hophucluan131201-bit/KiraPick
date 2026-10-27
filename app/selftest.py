@@ -44,7 +44,27 @@ def _synthetic_photo(path: Path, seed: int) -> None:
     Image.fromarray(img).save(path, "JPEG", quality=90)
 
 
-def run(report_path: Path) -> int:
+SAMPLE_PHOTOS = 3  # real photos copied from the folder given on the command line
+
+
+def _copy_samples(folder: Path, dest: Path) -> list[str]:
+    """Copy (read only) the first few supported photos of ``folder``; the originals are never touched."""
+    import shutil
+
+    from app.ingest.formats import format_for
+
+    names = []
+    for f in sorted(folder.iterdir()):
+        if f.is_file() and not f.is_symlink() and format_for(f) is not None:
+            shutil.copy2(f, dest / f.name)
+            names.append(f.name)
+            if len(names) == SAMPLE_PHOTOS:
+                break
+    return names
+
+
+def run(report_path: Path, photos: Path | None = None) -> int:
+    """``photos``: optional folder of real photos; a few are copied and run through every stage."""
     report: dict = {"ok": False, "steps": [], "network_attempts": []}
     _block_network(report["network_attempts"])
     started = time.time()
@@ -99,17 +119,27 @@ def run(report_path: Path) -> int:
         with tempfile.TemporaryDirectory(prefix="kirapick-selftest-") as tmp:
             shoot = Path(tmp) / "Ảnh thử"
             shoot.mkdir()
+            expected = 2
             for i in range(2):
                 _synthetic_photo(shoot / f"TEST_{i:04d}.jpg", i)
+            if photos is not None:
+                copied = _copy_samples(photos, shoot)
+                report["sample_photos"] = copied
+                expected += len(copied)
             with Project.create(Path(tmp) / "session", "selftest") as project:
                 imported = ImportJob(project, shoot).run()
                 report["steps"].append(f"import: {imported.ingested} photos")
-                people = AnalyzeJob(project, registry, prefer_gpu=False).run(mode="people")
+                gpu = photos is not None  # with real photos, use the graphics card like the app does
+                people = AnalyzeJob(project, registry, prefer_gpu=gpu).run(mode="people")
                 report["steps"].append(f"people: {people.analysed} analysed, {people.failed} failed, device {people.device}")
-                quality = AnalyzeJob(project, registry, prefer_gpu=False).run(mode="quality")
-                report["steps"].append(f"quality: {quality.measured} measured, {quality.measure_failed} failed")
-                if imported.ingested != 2 or people.failed or quality.measure_failed:
-                    raise RuntimeError("pipeline reported failures")
+                quality = AnalyzeJob(project, registry, prefer_gpu=gpu).run(mode="quality")
+                report["steps"].append(f"quality: {quality.measured} measured, {quality.measure_failed} failed, "
+                                       f"device {quality.device}")
+                report["stage_errors"] = [dict(r) for r in project.conn.execute(
+                    """SELECT a.relative_path AS file, s.stage, s.error FROM stage_status s
+                       JOIN assets a ON a.id = s.asset_id WHERE s.state = 'failed'""")]
+                if imported.ingested != expected or people.failed or quality.measure_failed:
+                    raise RuntimeError("pipeline reported failures (see stage_errors)")
                 from app.quality import select
 
                 select.select_per_person(project.conn, 3)
