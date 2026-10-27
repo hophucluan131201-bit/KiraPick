@@ -48,14 +48,15 @@ def test_registry_reports_missing_and_tampered_files(tmp_path: Path) -> None:
 def test_runtime_is_offline_only() -> None:
     info = runtime.configure()
     assert "CPUExecutionProvider" in info.available
-    assert runtime.ALLOWED_PROVIDERS == ("CUDAExecutionProvider", "CPUExecutionProvider")  # never Azure/cloud
+    assert runtime.ALLOWED_PROVIDERS == ("CUDAExecutionProvider", "DmlExecutionProvider",
+                                         "CPUExecutionProvider")  # local only: never Azure/cloud
 
 
 @needs_models
 def test_sessions_never_use_cloud_providers() -> None:
     s = runtime.create_session(REG.require("person_detector_s"), prefer_gpu=True)
     assert set(s.session.get_providers()) <= set(runtime.ALLOWED_PROVIDERS)
-    assert s.device in ("cuda", "cpu")
+    assert s.device in ("cuda", "directml", "cpu")
 
 
 @needs_models
@@ -116,3 +117,47 @@ def test_photo_without_people() -> None:
     img = _bgr("public/iss030e122639.NEF")  # Earth from the ISS
     assert PersonDetector.load(REG, prefer_gpu=False).detect(img) == []
     assert FaceDetector(REG).detect(img) == []
+
+
+class _FakeSession:
+    def __init__(self, model: str, sess_options=None, providers=None) -> None:  # noqa: ANN001
+        name = providers[0] if isinstance(providers[0], str) else providers[0][0]
+        opts = {} if isinstance(providers[0], str) else providers[0][1]
+        if name in _FakeSession.broken or (name == "DmlExecutionProvider" and "device_filter" in opts
+                                           and _FakeSession.old_dml):
+            raise RuntimeError("cannot create")
+        self.providers = [name, "CPUExecutionProvider"] if name != "CPUExecutionProvider" else [name]
+        self.sess_options = sess_options
+
+    def get_providers(self) -> list[str]:
+        return self.providers
+
+    broken: set[str] = set()
+    old_dml = False
+
+
+@pytest.fixture
+def fake_ort(monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201
+    monkeypatch.setattr(runtime.ort, "InferenceSession", _FakeSession)
+    monkeypatch.setattr(runtime, "configure", lambda: runtime.RuntimeInfo(
+        "x", ["DmlExecutionProvider", "CPUExecutionProvider"], True, None))
+    _FakeSession.broken, _FakeSession.old_dml = set(), False
+    return _FakeSession
+
+
+def test_directml_is_used_when_available(fake_ort) -> None:  # noqa: ANN001
+    s = runtime.create_session(Path("m.onnx"), prefer_gpu=True)
+    assert s.device == "directml" and s.fallback_reason is None
+    assert s.session.sess_options.enable_mem_pattern is False  # required by DirectML
+
+
+def test_older_directml_without_device_filter_still_works(fake_ort) -> None:  # noqa: ANN001
+    fake_ort.old_dml = True
+    assert runtime.create_session(Path("m.onnx"), prefer_gpu=True).device == "directml"
+
+
+def test_broken_gpu_falls_back_to_cpu_with_a_reason(fake_ort) -> None:  # noqa: ANN001
+    fake_ort.broken = {"DmlExecutionProvider"}
+    s = runtime.create_session(Path("m.onnx"), prefer_gpu=True)
+    assert s.device == "cpu" and "directml" in s.fallback_reason and "CPU" in s.fallback_reason
+    assert runtime.create_session(Path("m.onnx"), prefer_gpu=False).fallback_reason is None

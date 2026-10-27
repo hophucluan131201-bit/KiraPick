@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 import logging
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QItemSelectionModel, QModelIndex, QPointF, QSettings, QSize, QStandardPaths, Qt, QTimer
@@ -92,6 +93,11 @@ def key_hints_html(loupe: bool) -> str:
     items = _KEYS_LOUPE if loupe else _KEYS_GRID
     nb = lambda text: text.replace(" ", "&nbsp;")  # noqa: E731 - a key and its meaning never wrap apart
     return "<b>Phím tắt</b>&nbsp;&nbsp; " + " &nbsp; ".join(chip.format(nb(k), nb(v)) for k, v in items)
+
+
+def _duration(seconds: float) -> str:
+    seconds = int(round(seconds))
+    return f"{seconds // 60} phút {seconds % 60} giây" if seconds >= 60 else f"{seconds} giây"
 
 
 def _long_side(rec: AssetRecord) -> int | None:
@@ -618,6 +624,7 @@ class MainWindow(QMainWindow):
         if self.project is None or self.import_thread is not None or self.analyze_thread is not None:
             return None
         thread = AnalyzeThread(self.project.folder, mode)
+        self._analysis_started = time.monotonic()
         thread.progress.connect(self._on_analyze_progress)
         thread.succeeded.connect(self._on_analyze_done)
         title = "Nhận diện người" if mode == "people" else "Phân tích ảnh"
@@ -668,7 +675,8 @@ class MainWindow(QMainWindow):
             return
         assert self.project is not None
         if summary.get("mode") == "quality":
-            parts = [f"Phân tích xong: {self._step_state()[2]} ảnh có điểm"]
+            took = _duration(time.monotonic() - getattr(self, "_analysis_started", time.monotonic()))
+            parts = [f"Phân tích xong ({took}): {self._step_state()[2]} ảnh có điểm"]
             if summary.get("measure_failed"):
                 parts.append(f"{summary['measure_failed']} ảnh không chấm được")
             self.status.setText(", ".join(parts) + ". Bước tiếp theo: bấm ⭐ Chọn ảnh, hoặc xếp theo điểm.")
@@ -677,7 +685,8 @@ class MainWindow(QMainWindow):
         unknown = self.project.conn.execute(
             "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE is_main = 1 AND subject_id IS NULL").fetchone()[0]
         review = len(merge_suggestions(self.project.conn))
-        device = "GPU" if summary["device"] == "cuda" else "CPU"
+        device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(summary["device"], "CPU")
+        device += f", {_duration(time.monotonic() - getattr(self, '_analysis_started', time.monotonic()))}"
         parts = [f"Nhận diện xong ({device}): {people} người", f"{unknown} ảnh chưa xác định"]
         if review:
             parts.append(f"{review} gợi ý cần xem lại")

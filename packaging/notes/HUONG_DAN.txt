@@ -25,7 +25,8 @@ Phím tắt hiện ở thanh nhỏ dưới khu vực ảnh; F1 để xem đầy 
 Xem ảnh lớn: Space. Về lưới: Esc. Phóng tới mắt để xem nét: E. Phóng to: + / cuộn chuột.
 
 LƯU Ý CỦA BẢN THỬ NGHIỆM
-- Bản này chạy AI bằng CPU (không cần card đồ hoạ). Nhận diện + phân tích khoảng
+- Có card đồ hoạ (NVIDIA, AMD hay Intel) thì AI tự dùng card qua DirectML, không thì dùng CPU.
+  Thanh trạng thái ghi "GPU DirectML" hoặc "CPU". Nhận diện + phân tích khoảng
   vài phút cho 400-500 ảnh, tuỳ máy.
 - Chưa đánh giá được: mắt nhắm/mở và độ đẹp nghệ thuật. Điểm chỉ là điểm kỹ thuật.
 - Mỗi máy có "bộ nhớ học" riêng (các lần bạn sửa nhóm người, giữ/loại ảnh) - chỉ là

@@ -1,7 +1,7 @@
 ## KiraPick – bản thử nghiệm (beta)
 
 Ứng dụng lọc ảnh cosplay / đường phố, chạy **hoàn toàn offline** trên Windows 10/11.
-Không cần cài Git, Python hay card đồ hoạ — mọi thứ đã nằm trong bộ cài.
+Không cần cài Git hay Python — mọi thứ đã nằm trong bộ cài. Có card đồ hoạ (NVIDIA, AMD, Intel) thì AI tự dùng card qua DirectML; không có thì chạy bằng CPU.
 
 ### Tải file nào?
 - **`KiraPick-…-BoCai.zip`** ← tải file này (bộ cài + hướng dẫn tiếng Việt).

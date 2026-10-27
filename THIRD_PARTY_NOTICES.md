@@ -5,7 +5,8 @@ Software
 - Qt 6 / PySide6 6.12 (Essentials) - LGPL-3.0. Qt libraries are shipped as separate,
   replaceable DLLs in this folder; source: https://download.qt.io / https://code.qt.io
 - OpenCV 4.14 (opencv-python-headless) - Apache-2.0
-- ONNX Runtime 1.31 - MIT
+- ONNX Runtime 1.24 (DirectML build) - MIT; DirectML.dll - Microsoft DirectML redistributable
+  license (redistributed with the app as permitted)
 - NumPy - BSD-3-Clause
 - Pillow - MIT-CMU (HPND)
 - rawpy - MIT; LibRaw - LGPL-2.1 or CDDL-1.0
@@ -18,7 +19,7 @@ Software
 AI model weights (bundled, verified by SHA-256; see docs/model-licenses.md in the source)
 - YuNet face detector 2023mar (OpenCV Zoo) - MIT, Shiqi Yu
 - SFace face recognition 2021dec (OpenCV Zoo) - Apache-2.0
-- YOLOX-S (Megvii-BaseDetection/YOLOX 0.1.1rc0) - Apache-2.0
+- YOLOX-S and YOLOX-M (Megvii-BaseDetection/YOLOX 0.1.1rc0) - Apache-2.0
 - eDifFIQA(T) face image quality jun2024 (OpenCV Zoo) - CC BY 4.0.
   Attribution: Ž. Babnik, P. Peer, V. Štruc, "eDifFIQA: Towards Efficient Face Image
   Quality Assessment based on Denoising Diffusion Probabilistic Models",

@@ -2,7 +2,7 @@
 =========================================================
 
 KHÔNG cần cài Git, Python hay bất cứ thứ gì khác. Mọi thứ đã có sẵn trong bộ cài.
-Máy cần: Windows 10 hoặc 11 (64-bit), khoảng 1 GB ổ cứng trống. Không cần card đồ hoạ.
+Máy cần: Windows 10 hoặc 11 (64-bit), khoảng 1 GB ổ cứng trống. Có card đồ hoạ thì AI chạy nhanh hơn, không có vẫn chạy được.
 
 -----------------------------------------------------------------
 BƯỚC 1 - GIẢI NÉN

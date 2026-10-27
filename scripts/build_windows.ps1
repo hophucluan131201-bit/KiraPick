@@ -1,5 +1,5 @@
 ﻿<#
-Build the Windows installer of KiraPick (CPU build, works offline).
+Build the Windows installer of KiraPick (DirectML GPU with CPU fallback, works offline).
 
     powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 
@@ -73,8 +73,7 @@ New-Item -ItemType Directory -Force -Path $models | Out-Null
 Get-ChildItem "models\weights\*.onnx" -ErrorAction SilentlyContinue | ForEach-Object {
     if (-not (Test-Path (Join-Path $models $_.Name))) { Copy-Item $_.FullName $models }
 }
-Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", "identity,quality", "--dest", $models)
-Remove-Item (Join-Path $models "yolox_m.onnx") -ErrorAction SilentlyContinue  # GPU-only model, not shipped
+Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", "identity,quality,gpu", "--dest", $models)
 
 Step "4/6 PyInstaller"
 $dist = Join-Path $Root "dist\KiraPick"

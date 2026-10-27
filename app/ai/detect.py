@@ -65,8 +65,8 @@ class PersonDetector:
         session = create_session(registry.require("person_detector_s"), prefer_gpu=False)
         if prefer_gpu and registry.status("person_detector_m").state is ModelState.READY:  # optional (GPU builds)
             gpu = create_session(registry.require("person_detector_m"), prefer_gpu=True)
-            if gpu.device == "cuda":
-                session = gpu  # the larger model only when it really runs on the GPU
+            if gpu.device != "cpu":
+                session = gpu  # the larger model only when it really runs on a GPU (CUDA or DirectML)
         return cls(session)
 
     @property

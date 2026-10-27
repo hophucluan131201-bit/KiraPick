@@ -71,6 +71,24 @@ def run(report_path: Path) -> int:
         report["onnxruntime"] = {"version": info.ort_version, "providers": list(info.available)}
         report["steps"].append("onnxruntime loaded")
 
+        # Graphics card: informative only (a PC without a usable GPU is fine, it uses the CPU).
+        from app.ai.runtime import create_session
+
+        gpu_model = registry.status("person_detector_m")
+        if gpu_model.state is ModelState.READY:
+            probe = create_session(gpu_model.path, prefer_gpu=True)
+            import numpy as np
+
+            inp = probe.session.get_inputs()[0]
+            dummy = np.zeros([d if isinstance(d, int) else 1 for d in inp.shape], np.float32)
+            probe.session.run(None, {inp.name: dummy})  # warm-up
+            started = time.perf_counter()
+            for _ in range(3):
+                probe.session.run(None, {inp.name: dummy})
+            ms = round((time.perf_counter() - started) / 3 * 1000)
+            report["gpu"] = {"device": probe.device, "note": probe.fallback_reason, "yolox_m_ms": ms}
+            report["steps"].append(f"graphics card: {probe.device}")
+
         from app.storage.project import Project
         from app.workers.analyze_job import AnalyzeJob
         from app.workers.import_job import ImportJob

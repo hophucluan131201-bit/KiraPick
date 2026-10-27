@@ -69,7 +69,7 @@ def main() -> int:
         detector = PersonDetector.load(registry, prefer_gpu=prefer_gpu)
         print(f"\n[{label}] person detector on: {detector.device.upper()}"
               + (f"  ({detector.session.fallback_reason})" if detector.session.fallback_reason else ""))
-        if prefer_gpu and detector.device != "cuda":
+        if prefer_gpu and detector.device == "cpu":
             print("  → GPU KHÔNG chạy được; xem lý do ở trên.")
         detector.detect(images[0])  # warm-up (CUDA kernels, cuDNN autotune)
         t_person, t_face, t_emb, n_person, n_face = [], [], [], 0, 0

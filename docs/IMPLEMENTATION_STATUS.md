@@ -23,7 +23,7 @@ required — a listed provider does not prove inference works).
 | M3 Quality | **implemented + tested (synthetic + 7 real NEF)** | Per-person technical score: eye/face/body sharpness on the full-resolution image, eDifFIQA face quality, face/person exposure, framing; N/A redistribution + confidence; warnings. **Not measured: eyes closed, aesthetics** (no suitable offline model yet). Rubric mappings are starting values, not calibrated on the owner's choices |
 | M4 Best shot | **implemented + tested (synthetic)** | ⭐ Chọn ảnh: N per person or N in the current view, greedy MMR (λ 0.75) over score vs near-copy redundancy (layout similarity rescaled 0.85→0.97, same burst = copy), picks first then by score, optional Keep marks (never overrides user flags). No compare view yet; no burst table (bursts = same person ≤ 1.5 s apart) |
 | M5 Local VLM | not started | |
-| M6 Release | **implemented; Windows build not yet run** | CPU installer: PyInstaller onedir + Inno Setup per-user, verified models (YuNet, SFace, YOLOX-S, eDifFIQA; YOLOX-M GPU-only not shipped), `--self-test` with network blocked, portable zip, CI workflow. Verified here: Linux PyInstaller build launches and passes the self-test offline. **Not verified: the Windows build/installer itself** (no Windows machine in this environment); unsigned (SmartScreen warning); no GPU variant yet. Release flow: a push to main with `[release]` in the commit message (or a `v*` tag) makes GitHub Actions build on Windows, self-test and publish a (pre)release with `…-BoCai.zip` (Setup.exe + Vietnamese click-by-click guide), portable zip and Setup.exe. License: PolyForm Noncommercial 1.0.0 (owner: personal, non-commercial) |
+| M6 Release | **implemented; Windows build not yet run** | DirectML/CPU installer: PyInstaller onedir + Inno Setup per-user, verified models (YuNet, SFace, YOLOX-S, eDifFIQA; YOLOX-M GPU-only not shipped), `--self-test` with network blocked, portable zip, CI workflow. Verified here: Linux PyInstaller build launches and passes the self-test offline. **Not verified: the Windows build/installer itself** (no Windows machine in this environment); unsigned (SmartScreen warning); no GPU variant yet. Release flow: a push to main with `[release]` in the commit message (or a `v*` tag) makes GitHub Actions build on Windows, self-test and publish a (pre)release with `…-BoCai.zip` (Setup.exe + Vietnamese click-by-click guide), portable zip and Setup.exe. License: PolyForm Noncommercial 1.0.0 (owner: personal, non-commercial) |
 
 ## Done in this session — RAW/JPEG ingest (`app/ingest/`)
 
@@ -170,6 +170,14 @@ choice; avoids a name close to a Pokémon trademark). App data moves once from
 settings are copied, old session markers are still recognised; the installer keeps the same AppId so
 it upgrades an earlier install. Internal file names (`project.snorlu.db`) are unchanged on purpose.
 The GitHub repository itself is renamed by the owner (links now point to `…/kirapick`).
+
+**GPU in the installer (0.2.0b3):** the installer ships `onnxruntime-directml` 1.24.4 (newest
+DirectML build) instead of the CPU build: AI runs on any DirectX 12 GPU (NVIDIA/AMD/Intel), asks
+DirectML for the high-performance adapter (falls back to plain options on older builds), and drops
+to CPU with a reason when no GPU works (`app/ai/runtime.py`, fake-provider unit tests). YOLOX-M is
+now shipped and used on any GPU. The status bar shows "GPU NVIDIA / GPU DirectML / CPU" and the
+duration; the self-test reports the GPU device and a YOLOX-M timing. **Not measured yet:** DirectML
+speed and correctness on a real GPU (needs the owner's PC). Development installs keep CUDA.
 
 Export stays **copy only**: the owner asked for “copy or move”; moving would delete the source files,
 which the product invariants forbid. Timing on the owner's 7 NEFs (CPU, dev container): detection +
