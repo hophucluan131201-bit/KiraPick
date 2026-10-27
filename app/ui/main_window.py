@@ -155,8 +155,12 @@ class MainWindow(QMainWindow):
         self.act_client_list.setToolTip("Dán danh sách ảnh khách chọn, app tự chọn ảnh theo tên (Ctrl+L)")
         self.act_client_list.setShortcut(QKeySequence("Ctrl+L"))
         self.act_client_list.triggered.connect(self.open_client_list_dialog)
-        for act in (self.act_import, self.act_analyze, self.act_client_list, self.act_export, self.act_loupe,
-                    self.act_reset):
+        self.act_merge = QAction("🔗 Gộp người", self)
+        self.act_merge.setToolTip("Tick ô vuông cạnh 2 người trở lên trong danh sách NGƯỜI, rồi bấm để gộp thành một người")
+        self.act_merge.setEnabled(False)
+        self.act_merge.triggered.connect(lambda: self.merge_selected_people())
+        for act in (self.act_import, self.act_analyze, self.act_merge, self.act_client_list, self.act_export,
+                    self.act_loupe, self.act_reset):
             tb.addAction(act)
         tb.addSeparator()
         tb.addAction(self.act_auto_advance)
@@ -202,7 +206,9 @@ class MainWindow(QMainWindow):
         self.people.setIconSize(QSize(36, 36))
         self.people.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.people.setToolTip("Bấm để xem ảnh của người này. Nháy đúp để đặt tên. "
-                               "Chọn nhiều người + chuột phải để gộp.")
+                               "Tick ô vuông cạnh nhiều người rồi bấm 🔗 Gộp người để gộp.")
+        self.people.itemChanged.connect(lambda _item: self._update_merge_action())
+        self.people.itemSelectionChanged.connect(self._update_merge_action)
         self.people.currentRowChanged.connect(self._on_person_changed)
         self.people.itemDoubleClicked.connect(lambda _item: self.rename_current_person())
         self.people.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -565,6 +571,7 @@ class MainWindow(QMainWindow):
 
     def _fill_people(self) -> None:
         current = self.people.currentItem().data(Qt.ItemDataRole.UserRole) if self.people.currentItem() else None
+        checked = set(self._checked_subjects())
         self.people.blockSignals(True)
         self.people.clear()
         if self.project is not None:
@@ -576,6 +583,8 @@ class MainWindow(QMainWindow):
                 if r["avatar"]:
                     item.setIcon(QIcon(str(self.project.cache_dir / r["avatar"])))
                 item.setData(Qt.ItemDataRole.UserRole, ("subject", r["id"]))
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked if r["id"] in checked else Qt.CheckState.Unchecked)
                 self.people.addItem(item)
             unknown = self.project.conn.execute(
                 "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE is_main = 1 AND subject_id IS NULL").fetchone()[0]
@@ -592,6 +601,7 @@ class MainWindow(QMainWindow):
             if self.people.item(i).data(Qt.ItemDataRole.UserRole) == current:
                 self.people.setCurrentRow(i)
         self.people.blockSignals(False)
+        self._update_merge_action()
 
     def _on_person_changed(self, row: int) -> None:
         item = self.people.item(row)
@@ -611,6 +621,24 @@ class MainWindow(QMainWindow):
         else:
             self.model.set_filter(Filter.UNIDENTIFIED)
         self._after_filter()
+
+    def _checked_subjects(self) -> list[int]:
+        out = []
+        for i in range(self.people.count()):
+            item = self.people.item(i)
+            kind, sid = item.data(Qt.ItemDataRole.UserRole)
+            if kind == "subject" and item.checkState() == Qt.CheckState.Checked:
+                out.append(sid)
+        return out
+
+    def _people_to_merge(self) -> list[int]:
+        """Ticked people; without ticks, the people selected with Ctrl/Shift."""
+        return self._checked_subjects() or self._selected_subjects()
+
+    def _update_merge_action(self) -> None:
+        n = len(self._people_to_merge())
+        self.act_merge.setEnabled(self.project is not None and n >= 2)
+        self.act_merge.setText(f"🔗 Gộp {n} người" if n >= 2 else "🔗 Gộp người")
 
     def _selected_subjects(self) -> list[int]:
         out = []
@@ -632,18 +660,30 @@ class MainWindow(QMainWindow):
                 actions.rename_subject(conn, sid, name)
             self._fill_people()
 
-    def merge_selected_people(self) -> None:
-        ids = self._selected_subjects()
+    def merge_selected_people(self, ids: list[int] | None = None) -> None:
+        ids = self._people_to_merge() if ids is None else ids
         if self.project is None or len(ids) < 2:
             return
-        counts = {r["id"]: r["photos"] for r in actions.subjects_summary(self.project.conn)}
-        keep = max(ids, key=lambda i: counts.get(i, 0))
+        summary = {r["id"]: r for r in actions.subjects_summary(self.project.conn)}
+        # Keep a named person if there is one (its name stays), otherwise the one with most photos.
+        keep = max(ids, key=lambda i: (summary[i]["display_name"] is not None if i in summary else False,
+                                       summary[i]["photos"] if i in summary else 0))
         names = ", ".join(actions.subject_label(self.project.conn, i) for i in ids)
-        if QMessageBox.question(self, "Gộp người", f"Gộp {names} thành một người?") != QMessageBox.StandardButton.Yes:
+        total = sum(summary[i]["photos"] for i in ids if i in summary)
+        if QMessageBox.question(
+                self, "Gộp người",
+                f"Gộp {names} thành một người ({total} ảnh), giữ tên \"{actions.subject_label(self.project.conn, keep)}\"?\n"
+                "App sẽ nhớ việc gộp này cả khi nhận diện lại.") != QMessageBox.StandardButton.Yes:
             return
         with self.project.transaction() as conn:
             for other in ids:
                 actions.merge_subjects(conn, keep, other)
+        self.people.blockSignals(True)
+        for i in range(self.people.count()):  # merged: clear the ticks
+            item = self.people.item(i)
+            if item.data(Qt.ItemDataRole.UserRole)[0] == "subject":
+                item.setCheckState(Qt.CheckState.Unchecked)
+        self.people.blockSignals(False)
         self._after_people_change()
 
     def open_review(self) -> ReviewDialog | None:
@@ -673,7 +713,7 @@ class MainWindow(QMainWindow):
         if chosen is rename:
             self.rename_current_person()
         elif chosen is merge:
-            self.merge_selected_people()
+            self.merge_selected_people(ids)
         elif chosen is different:
             with self.project.transaction() as conn:
                 actions.mark_different(conn, ids[0], ids[1])

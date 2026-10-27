@@ -62,7 +62,8 @@ CSV/JSON list into the `_snorlu_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\Snor
 
 **People (🧠 Nhận diện người)** runs automatically after an import (GPU if available, CPU otherwise),
 in the background. The **NGƯỜI** list shows each recognised person with a face thumbnail; click to
-filter, double-click to name, select several + right-click to merge. Photos where the face is not
+filter, double-click to name; tick the boxes of several people and press **🔗 Gộp người** in the
+toolbar to merge them (or select several + right-click). Photos where the face is not
 clearly visible are only *suggested* (a "?" badge) or listed under **Chưa xác định**. **Cần xem lại**
 asks about pairs that look alike but are not certain. Right-click photos to confirm, remove from a
 person, or assign to another person. All corrections survive re-analysis. Models: see

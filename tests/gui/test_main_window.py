@@ -350,3 +350,40 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     w2.start_import(shoot)
     qtbot.waitUntil(lambda: w2.import_thread is None and w2.analyze_thread is None, timeout=60000)
     assert any(r["display_name"] == "Aki" for r in actions.subjects_summary(w2.project.conn))
+
+
+def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> None:
+    """No models needed: people are written directly, as the grouping would."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from app.identity import actions
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    conn = w.project.conn
+    assets = [r[0] for r in conn.execute("SELECT id FROM assets WHERE status = 'ok' ORDER BY id")]
+    with w.project.transaction():
+        for sid, owned in ((1, assets[:3]), (2, assets[3:4]), (3, assets[4:5])):
+            conn.execute("INSERT INTO subjects (id, created_at) VALUES (?, 'n')", (sid,))
+            for a in owned:
+                conn.execute("""INSERT INTO occurrences (asset_id, person_box, prominence, is_main, subject_id,
+                                assignment, analysis_version, created_at) VALUES (?, '[0,0,1,1]', 1, 1, ?, 'auto', 1, 'n')""",
+                             (a, sid))
+        actions.rename_subject(conn, 3, "Aki")
+    w._fill_people()
+    assert not w.act_merge.isEnabled()
+    items = {w.people.item(i).data(Qt.ItemDataRole.UserRole)[1]: w.people.item(i) for i in range(w.people.count())}
+    items[1].setCheckState(Qt.CheckState.Checked)
+    assert not w.act_merge.isEnabled()  # one ticked person: nothing to merge
+    items[3].setCheckState(Qt.CheckState.Checked)
+    assert w.act_merge.isEnabled() and w.act_merge.text() == "🔗 Gộp 2 người"
+
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: asked.append(a[2]) or QMessageBox.StandardButton.Yes)
+    w.act_merge.trigger()
+    assert "4 ảnh" in asked[0] and '"Aki"' in asked[0]
+    summary = {r["id"]: r for r in actions.subjects_summary(conn)}
+    assert set(summary) == {2, 3}  # the named person is kept, with all photos
+    assert summary[3]["display_name"] == "Aki" and summary[3]["photos"] == 4
+    assert all(w.people.item(i).checkState() == Qt.CheckState.Unchecked for i in range(w.people.count()))
+    assert not w.act_merge.isEnabled()
