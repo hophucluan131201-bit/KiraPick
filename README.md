@@ -32,7 +32,7 @@ Versions verified so far are in `requirements.lock.txt` (recorded on Linux).
 Double-click **`Snorlu.cmd`** in the project folder (or the desktop shortcut the setup script can
 create). Every start is an empty session: click **📂 Nhập ảnh** and pick a shoot folder; photos are
 only read. There are no projects to manage. Work is remembered per photo folder in hidden app data
-(`%LOCALAPPDATA%\Snorlu\AI Culling\sessions`): importing the same folder again brings back its
+(`%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\sessions`): importing the same folder again brings back its
 Keep/Reject/stars and client lists. A folder not opened for 30 days is forgotten automatically;
 **↺ Làm lại** forgets the current folder immediately (asks first). Importing another folder switches
 to that folder's session.
@@ -58,7 +58,7 @@ dialog; it does not change your own Keep/Reject flags unless you tick that optio
 Export copies the chosen photos (Kept, Favorites, ≥ N stars, or the selection), RAW+JPEG pairs
 together, never overwrites (a different file with the same name gets " (1)"), skips photos already
 exported there (identical bytes), refuses the shoot folder itself as destination, and writes a
-CSV/JSON list into the `_snorlu_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\Snorlu\AI Culling\logs`.
+CSV/JSON list into the `_snorlu_danh_sach` subfolder. Logs: `%LOCALAPPDATA%\Snorlu\Snorlu AI Culling\logs`.
 
 **People (🧠 Nhận diện người)** runs automatically after an import (GPU if available, CPU otherwise),
 in the background. The **NGƯỜI** list shows each recognised person with a face thumbnail; click to
