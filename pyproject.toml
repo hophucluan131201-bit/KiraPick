@@ -42,5 +42,6 @@ markers = [
     "slow: full demosaic of real RAW files",
     "gui: drives the Qt main window (offscreen)",
     "perf: timing measurements; run explicitly with -m perf",
+    "stress: long repeated lifecycle runs; run explicitly with -m stress",
 ]
-addopts = "-m 'not perf'"
+addopts = "-m 'not perf and not stress'"

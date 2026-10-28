@@ -161,6 +161,12 @@ class MainWindow(QMainWindow):
         self.taste = TasteService()
         self._decisions_since_training = 0
         self._taste_pool = QThreadPool(self)
+        # Learning jobs report through these window-owned objects: a QObject created per job would be deleted by
+        # the worker thread when the job ends (Qt objects must die on their own thread).
+        self._taste_signals = _TasteSignals(self)
+        self._taste_signals.done.connect(lambda status: self._on_taste_trained(status))
+        self._focus_signals = _FocusSignals(self)
+        self._focus_signals.done.connect(lambda statuses: self._on_focus_trained(statuses))
         self._tick_anchor: int | None = None
         self._import_progress: tuple[int, int] | None = None  # (done, total) while this window imports
         self._focus_labels_since_training = 0
@@ -869,7 +875,12 @@ class MainWindow(QMainWindow):
             thread.cancel()
             thread.wait(15000)  # resumable: unfinished files continue next time
         self._stop_analysis()
+        # Every pool finishes before the window's objects go away: a worker must never drop the last reference to
+        # a Qt object (the signal objects of these pools belong to the window and its widgets).
         self.viewer.wait_idle(5000)
+        self.model.wait_for_thumbnails(5000)
+        self.detail.score_card.histogram.wait(5000)
+        self._taste_pool.waitForDone(30000)
         self._marking_timer.stop()  # it would read the database after it is closed
         if self.project is not None:
             self.project.close()
@@ -1777,8 +1788,7 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001 - learning is optional
             log.exception("could not read taste examples")
             return
-        job = _TasteJob(examples)
-        job.signals.done.connect(self._on_taste_trained)
+        job = _TasteJob(examples, self._taste_signals)
         self._taste_pool.start(job)
         if wait:
             self._taste_pool.waitForDone(30000)
@@ -1857,8 +1867,7 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001 - learning is optional
             log.exception("could not read sharpness examples")
             return
-        job = _FocusJob(examples)
-        job.signals.done.connect(self._on_focus_trained)
+        job = _FocusJob(examples, self._focus_signals)
         self._taste_pool.start(job)
         if wait:
             self._taste_pool.waitForDone(30000)
@@ -1948,9 +1957,17 @@ class MainWindow(QMainWindow):
         item = self.filters.currentItem()
         data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
         collection_id = data[1] if data and data[0] is Filter.COLLECTION else None
-        if client_list and collection_id is None:
+        if client_list and collection_id is None:  # ask which list; never pick one for the user
             lists = list_collections(self.project.conn)
-            collection_id = lists[0]["id"] if lists else None
+            if not lists:
+                QMessageBox.information(self, "Xuất theo danh sách khách",
+                                        "Chưa có danh sách khách nào. Bấm 📋 Khách chọn để dán danh sách của khách trước.")
+                return None
+            names = [f"{c['name']} ({c['n']} ảnh)" for c in lists]
+            name, ok = QInputDialog.getItem(self, "Xuất theo danh sách khách", "Danh sách:", names, 0, False)
+            if not ok or name not in names:
+                return None
+            collection_id = lists[names.index(name)]["id"]
         dialog = ExportDialog(self.project, [r.id for r in self.selected_records()], self, collection_id=collection_id,
                               settings=self.settings)
         dialog.run_recorded.connect(self.refresh_steps)  # ✓ Xuất ảnh as soon as an export is recorded
@@ -1985,10 +2002,12 @@ class _FocusSignals(QObject):
 
 
 class _FocusJob(QRunnable):
-    def __init__(self, examples: list) -> None:
+    """Runs in the pool; reports through the window's own signal object (never one the worker would delete)."""
+
+    def __init__(self, examples: list, signals: _FocusSignals) -> None:
         super().__init__()
         self.examples = examples
-        self.signals = _FocusSignals()
+        self.signals = signals
 
     def run(self) -> None:
         try:
@@ -2004,10 +2023,12 @@ class _TasteSignals(QObject):
 
 
 class _TasteJob(QRunnable):
-    def __init__(self, examples: list) -> None:
+    """Runs in the pool; reports through the window's own signal object (never one the worker would delete)."""
+
+    def __init__(self, examples: list, signals: _TasteSignals) -> None:
         super().__init__()
         self.examples = examples
-        self.signals = _TasteSignals()
+        self.signals = signals
 
     def run(self) -> None:
         try:

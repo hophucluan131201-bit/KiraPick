@@ -98,8 +98,9 @@ class BottomBar(QWidget):
         more = QMenu(self)
         for n in range(1, 6):
             more.addAction(QAction("★" * n, self, triggered=lambda _c=False, n=n: self.rating.emit(n)))
-        more.addAction(QAction("⟳ Xoay xem", self, triggered=self.rotate))
-        more.addAction(QAction("Xem EXIF", self, triggered=self.exif))
+        more.addAction(QAction("Bỏ chọn", self, triggered=lambda _c=False: self.clear.emit()))  # hidden from the bar in compact mode
+        more.addAction(QAction("⟳ Xoay xem", self, triggered=lambda _c=False: self.rotate.emit()))
+        more.addAction(QAction("Xem EXIF", self, triggered=lambda _c=False: self.exif.emit()))
         self.more_button.setMenu(more)
         row.addWidget(self.more_button)
         self.export_button = QToolButton()
@@ -110,7 +111,7 @@ class BottomBar(QWidget):
                                          f"font-weight: bold; padding: 5px 12px; }}")
         self.export_button.clicked.connect(self.export)
         menu = QMenu(self)
-        menu.addAction(QAction("Xuất theo danh sách khách…", self, triggered=self.export_client))
+        menu.addAction(QAction("Xuất theo danh sách khách…", self, triggered=lambda _c=False: self.export_client.emit()))
         self.export_button.setMenu(menu)
         row.addWidget(self.export_button)
         self._counts: Counts | None = None

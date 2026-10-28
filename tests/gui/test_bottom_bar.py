@@ -116,3 +116,77 @@ def test_export_menu_offers_the_client_list(qtbot, env: dict) -> None:  # noqa: 
     w = _window(qtbot, env)
     texts = [a.text() for a in w.bottom_bar.export_button.menu().actions()]
     assert any("danh sách khách" in t for t in texts)
+
+
+def test_every_menu_action_emits_its_signal(qtbot) -> None:  # noqa: ANN001
+    """Each "⋯" and export-menu entry must reach its signal (a bare signal passed as triggered= never fires)."""
+    bar = BottomBar()
+    qtbot.addWidget(bar)
+    seen: list[str] = []
+    for name in ("clear", "rotate", "exif", "export_client"):
+        getattr(bar, name).connect(lambda name=name: seen.append(name))
+    bar.rating.connect(lambda n: seen.append(f"rating{n}"))
+    for action in (*bar.more_button.menu().actions(), *bar.export_button.menu().actions()):
+        action.trigger()
+    assert seen == [*(f"rating{n}" for n in range(1, 6)), "clear", "rotate", "exif", "export_client"]
+
+
+def test_compact_menu_has_clear_and_it_works(qtbot, env: dict) -> None:  # noqa: F811
+    """Review CR11-01: compact mode hides "Bỏ chọn", so "⋯" must offer it."""
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.bottom_bar.set_compact(True)
+    clear = next(a for a in w.bottom_bar.more_button.menu().actions() if a.text() == "Bỏ chọn")
+    conn = w.project.conn
+    for row, flag in ((0, "keep"), (1, "reject")):
+        w.select_row(row)
+        w.set_flag(flag)
+        clear.trigger()
+        assert decisions.get(conn, w.current_record().id).flag is None
+
+
+def test_client_export_asks_which_list(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    """Review CR11-03: never pick a client list on the user's behalf."""
+    from PySide6.QtWidgets import QInputDialog, QMessageBox
+
+    from app.selection.client_list import MatchResult, save_collection
+
+    def create_collection(conn, name, ids):  # noqa: ANN001, ANN202
+        return save_collection(conn, name, MatchResult(matched={str(i): [i] for i in ids}), source_text="",
+                               pattern="test")
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    told = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: told.append(a[2]))
+    assert w.open_export_dialog(client_list=True) is None and "Khách chọn" in told[0]  # no list yet
+    ids = [r.id for r in w.model.records()]
+    with w.project.transaction() as conn:
+        first = create_collection(conn, "Khách A", ids[:1])
+        second = create_collection(conn, "Khách B", ids[1:3])
+    asked = []
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: (asked.append(a[3]) or ("Khách B (2 ảnh)", True)))
+    dialog = w.open_export_dialog(client_list=True)
+    qtbot.addWidget(dialog)
+    assert asked == [["Khách A (1 ảnh)", "Khách B (2 ảnh)"]]
+    assert dialog.collection.currentData() == second and first != second
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("", False))  # cancelled: nothing opens
+    assert w.open_export_dialog(client_list=True) is None
+
+
+def test_include_pairs_survives_reopening_and_matches_the_bar(qtbot, env: dict) -> None:  # noqa: F811
+    """Review CR11-04."""
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.select_row(0)
+    w.set_flag("keep")
+    dialog = w.open_export_dialog()
+    qtbot.addWidget(dialog)
+    dialog.include_pairs.setChecked(False)
+    dialog.close()
+    again = w.open_export_dialog()
+    qtbot.addWidget(again)
+    assert not again.include_pairs.isChecked() and w.settings.value("export/include_pairs", True, bool) is False
+    assert "gồm JPEG kèm" not in w.bottom_bar.kept.text()
+    w._update_counts()  # a fresh refresh reads the same setting
+    assert "gồm JPEG kèm" not in w.bottom_bar.kept.text()
