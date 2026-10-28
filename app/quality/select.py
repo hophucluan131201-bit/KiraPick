@@ -19,12 +19,16 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
 import numpy as np
 
+from app.quality.rank import Ranked
 from app.quality.score import Score, photo_scores
+
+Ranker = Callable[[int, Score], Ranked]  # (asset id, technical score) -> blended ranking
 from app.storage.project import utc_now
 
 LAMBDA = 0.75
@@ -41,6 +45,12 @@ class Candidate:
     score: Score
     time: float | None
     layout: np.ndarray | None
+    value: float | None = None  # ranking value (technical blended with taste); None = technical score
+    ranked: Ranked | None = None
+
+    @property
+    def rank_value(self) -> float | None:
+        return self.value if self.value is not None else self.score.total
 
 
 @dataclass(slots=True)
@@ -65,11 +75,11 @@ def similarity(a: Candidate, b: Candidate) -> float:
 
 def choose(candidates: list[Candidate], n: int, lam: float = LAMBDA) -> list[tuple[Candidate, float]]:
     """Greedy MMR. Returns (candidate, max similarity to earlier picks) in pick order."""
-    pool = [c for c in candidates if c.score.total is not None]
+    pool = [c for c in candidates if c.rank_value is not None]
     chosen: list[tuple[Candidate, float]] = []
     max_sim = {id(c): 0.0 for c in pool}
     while pool and len(chosen) < n:
-        best = max(pool, key=lambda c: (lam * c.score.total / 100 - (1 - lam) * max_sim[id(c)], c.score.total))
+        best = max(pool, key=lambda c: (lam * c.rank_value / 100 - (1 - lam) * max_sim[id(c)], c.rank_value))
         chosen.append((best, max_sim[id(best)]))
         pool.remove(best)
         for c in pool:
@@ -77,7 +87,8 @@ def choose(candidates: list[Candidate], n: int, lam: float = LAMBDA) -> list[tup
     return chosen
 
 
-def _candidates(conn: sqlite3.Connection, subject_id: int | None, asset_ids: set[int] | None) -> list[Candidate]:
+def _candidates(conn: sqlite3.Connection, subject_id: int | None, asset_ids: set[int] | None,
+                ranker: Ranker | None = None) -> list[Candidate]:
     scored = photo_scores(conn, subject_id)
     if asset_ids is not None:
         scored = {a: v for a, v in scored.items() if a in asset_ids}
@@ -90,29 +101,37 @@ def _candidates(conn: sqlite3.Connection, subject_id: int | None, asset_ids: set
         occ_ids)}
     times = {r[0]: r[1] for r in conn.execute(
         f"SELECT id, capture_time FROM assets WHERE id IN ({','.join('?' * len(scored))})", list(scored))}
-    return [Candidate(a, occ, s, datetime.fromisoformat(times[a]).timestamp() if times.get(a) else None,
-                      layouts.get(occ)) for a, (occ, s) in scored.items()]
+    out = []
+    for a, (occ, s) in scored.items():
+        r = ranker(a, s) if ranker is not None else None
+        out.append(Candidate(a, occ, s, datetime.fromisoformat(times[a]).timestamp() if times.get(a) else None,
+                             layouts.get(occ), r.value if r is not None else None, r))
+    return out
 
 
 def _picks(chosen: list[tuple[Candidate, float]], subject_id: int | None) -> list[Pick]:
     out = []
     for rank, (c, sim) in enumerate(chosen, 1):
-        out.append(Pick(c.asset_id, subject_id, rank, c.score.total or 0.0, {
+        r = c.ranked
+        out.append(Pick(c.asset_id, subject_id, rank, c.rank_value or 0.0, {
             "score": c.score.total, "parts": c.score.parts, "warnings": c.score.warnings,
-            "similar_to_earlier": round(sim, 3),
+            "similar_to_earlier": round(sim, 3), "tech": c.score.total, "taste": r.taste if r else None,
+            "artistic": bool(r and r.artistic),
         }))
     return out
 
 
-def select_per_person(conn: sqlite3.Connection, n: int, asset_ids: set[int] | None = None) -> list[Pick]:
+def select_per_person(conn: sqlite3.Connection, n: int, asset_ids: set[int] | None = None,
+                      ranker: Ranker | None = None) -> list[Pick]:
     picks: list[Pick] = []
     for (sid,) in conn.execute("SELECT id FROM subjects ORDER BY id").fetchall():
-        picks += _picks(choose(_candidates(conn, sid, asset_ids), n), sid)
+        picks += _picks(choose(_candidates(conn, sid, asset_ids, ranker), n), sid)
     return picks
 
 
-def select_in_view(conn: sqlite3.Connection, n: int, asset_ids: set[int], subject_id: int | None = None) -> list[Pick]:
-    return _picks(choose(_candidates(conn, subject_id, asset_ids), n), subject_id)
+def select_in_view(conn: sqlite3.Connection, n: int, asset_ids: set[int], subject_id: int | None = None,
+                   ranker: Ranker | None = None) -> list[Pick]:
+    return _picks(choose(_candidates(conn, subject_id, asset_ids, ranker), n), subject_id)
 
 
 def save_run(conn: sqlite3.Connection, picks: list[Pick], params: dict) -> int:

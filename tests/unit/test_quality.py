@@ -216,3 +216,39 @@ def test_close_up_is_judged_at_portrait_scale_and_framed_from_the_face() -> None
     assert close_up["area"] == 1.0 and close_up["cut_head"] == 0.0
     wide = framing((0.3, 0.0, 0.3, 0.9), (0.4, 0.0, 0.1, 0.1))  # head cut in a wider shot: still a flaw
     assert wide["cut_head"] == 1.0
+
+
+def test_aesthetic_part_averages_topiq_and_laion() -> None:
+    from app.quality.score import AESTHETIC_HIGH, AESTHETIC_LOW, LAION_HIGH, LAION_LOW
+
+    base = {"eye_sharp": 0.5, "face_quality": 0.6, "face_clip": 0.0, "face_luma": 50, "area": 0.3}
+    topiq = (AESTHETIC_LOW + AESTHETIC_HIGH) / 2  # -> 50
+    s = score(base | {"aesthetic_mos": topiq, "laion_mos": LAION_HIGH})  # -> 100
+    assert s.parts["aesthetic"] == 75.0
+    assert "TOPIQ" in s.aesthetic_detail and "LAION" in s.aesthetic_detail
+    only_laion = score(base | {"laion_mos": LAION_LOW})
+    assert only_laion.parts["aesthetic"] == 0.0 and "TOPIQ" not in only_laion.aesthetic_detail
+
+
+def test_technical_and_face_iqa_blend_in() -> None:
+    base = {"eye_sharp": 0.75, "face_quality": 0.75, "face_clip": 0.0, "face_luma": 50, "area": 0.3}
+    plain = score(base)
+    worse = score(base | {"tech_iqa": 0.3, "face_iqa": 0.3})
+    assert plain.parts["focus"] == 100.0 and worse.parts["focus"] == 80.0
+    assert plain.parts["face"] == 100.0 and worse.parts["face"] == 50.0
+    only_face_iqa = score({"face_iqa": 0.8})
+    assert only_face_iqa.parts["face"] == 100.0
+
+
+def test_every_criterion_has_a_reason() -> None:
+    from app.quality.score import WEIGHTS
+
+    s = score({"eye_sharp": 0.5, "area": 0.3})
+    assert set(s.reasons) == set(WEIGHTS)
+    assert all(isinstance(t, str) and t for t in s.reasons.values())
+    assert "chưa chấm" in s.reasons["eyes"]
+
+
+def test_style_tags_are_kept_on_the_score() -> None:
+    s = score({"eye_sharp": 0.5, "style_tags": [["low_key", 0.05], ["bokeh", 0.03]]})
+    assert s.tags == ["low_key", "bokeh"]
