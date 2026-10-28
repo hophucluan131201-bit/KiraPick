@@ -278,7 +278,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - Targets from the spec: open → first paint ≤ 0.5 / 1.5 / 3 s; filter/sort ≤ 0.2 / 0.6 / 1.2 s; scroll paint median ≤ 16 ms, worst ≤ 50 ms; tick/P/X repaint ≤ 50 ms; mode change ≤ 100 / 100 / 150 ms; pixmap cache ≤ 300 MB at DPR 2.
 
 - RV5-03 (review): also run the histogram and burst perf tests on Windows.
-- RV7-04 (review): rewrite `test_empty_state_then_import_without_freezing` so it does not depend on how long the import runs (e.g. import enough synthetic files, or assert the event loop processed a queued call while the import thread was alive).
+- RV7-04 (review) — DONE early in Task 8 (the flake made full runs unreliable); keep it green here: rewrite `test_empty_state_then_import_without_freezing` so it does not depend on how long the import runs (e.g. import enough synthetic files, or assert the event loop processed a queued call while the import thread was alive).
 - RV3-03 (review): add a sustained-culling measure: 200 alternating P/X presses on a 10,000-photo session, worst and median time from key to repainted card and updated counts (target ≤ 50 ms median, ≤ 100 ms worst); run in CI on Windows and report.
 - [ ] **Step 1: Write the perf tests** parametrised over (1000, 5000, 10000), each measuring with `time.perf_counter` and asserting the targets; print the numbers.
 - [ ] **Step 2:** run `.venv/bin/python -m pytest -m perf -q -s` here; record numbers. If any target fails, implement the off-thread reload and rerun.

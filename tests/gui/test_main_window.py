@@ -52,15 +52,25 @@ def _key(qtbot, w: mw.MainWindow, key: Qt.Key) -> None:
     qtbot.keyClick(w, key)
 
 
-def test_empty_state_then_import_without_freezing(qtbot, env: dict) -> None:
+def test_empty_state_then_import_without_freezing(qtbot, env: dict, monkeypatch) -> None:
+    from app.workers.import_job import ImportJob
+
+    real = ImportJob._ingest_one
+
+    def slow(self, asset_id, path):  # noqa: ANN001, ANN202 - each file takes >= 40 ms, so the import lasts long
+        time.sleep(0.04)              # enough to measure, however fast the machine is
+        return real(self, asset_id, path)
+
+    monkeypatch.setattr(ImportJob, "_ingest_one", slow)
     w = _window(qtbot, env)
     assert w.center.currentIndex() == 0  # "Nhập thư mục ảnh" hint
     ticks = []
     timer = QTimer()
-    timer.timeout.connect(lambda: ticks.append(time.perf_counter()))
+    timer.timeout.connect(lambda: ticks.append(time.perf_counter()) if w.import_thread is not None else None)
     timer.start(10)
     _import(qtbot, w, env["photos"])
     timer.stop()
+    # 7 files x 40 ms over 3 workers >= ~80 ms of import: a free event loop ticks many times while it runs.
     assert len(ticks) >= 3, "UI event loop must keep running during import"
     assert w.model.rowCount() == 7 and w.center.currentIndex() == 1
     assert "Nhập xong" in w.status.text() and "1 lỗi" in w.status.text()
