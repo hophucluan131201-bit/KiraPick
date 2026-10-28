@@ -125,7 +125,11 @@ $report = Join-Path $Root "dist\selftest.json"
 Remove-Item $report -ErrorAction SilentlyContinue
 $proc = Start-Process -FilePath (Join-Path $dist "KiraPick.exe") -ArgumentList @("--self-test", "`"$report`"") -Wait -PassThru
 if (Test-Path $report) { Get-Content $report -Encoding UTF8 | ForEach-Object { Write-Host $_ } }
-if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) { throw "Tự kiểm tra thất bại (xem dist\selftest.json)" }
+if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) {
+    $crash = Join-Path $Root "dist\selftest.crash.txt"
+    if (Test-Path $crash) { Get-Content $crash -Encoding UTF8 | Select-Object -Last 30 | ForEach-Object { Write-Host $_ } }
+    throw ("Tự kiểm tra thất bại, mã thoát {0:X8} (xem dist\selftest.json)" -f $proc.ExitCode)
+}
 
 Step "6/6 Bộ cài và file zip"
 $version = (& $bpy -c "import sys; sys.path.insert(0, '.'); from app import __version__; print(__version__)" | Out-String).Trim()

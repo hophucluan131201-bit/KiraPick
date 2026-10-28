@@ -13,11 +13,36 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
+import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import onnxruntime as ort
+
+def _openvino_dll_dir() -> None:
+    """OpenVINO edition on Windows: its DLLs (openvino/libs) must be findable BEFORE ONNX Runtime loads."""
+    if sys.platform != "win32":
+        return
+    try:
+        spec = importlib.util.find_spec("openvino")
+        roots = list(spec.submodule_search_locations or []) if spec else []
+    except (ImportError, ValueError):
+        roots = []
+    if getattr(sys, "frozen", False):
+        roots.append(str(Path(getattr(sys, "_MEIPASS", "")) / "openvino"))
+    for root in roots:
+        libs = Path(root) / "libs"
+        if libs.is_dir():
+            os.add_dll_directory(str(libs))
+            os.environ["PATH"] = str(libs) + os.pathsep + os.environ.get("PATH", "")
+            return
+
+
+_openvino_dll_dir()
+
+import onnxruntime as ort  # noqa: E402 - after the DLL directory is set up
 
 log = logging.getLogger(__name__)
 
