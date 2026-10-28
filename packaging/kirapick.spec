@@ -67,7 +67,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="KiraPick",
-    console=False,  # a windowed app; --self-test writes its report to a file
+    console=os.environ.get("KIRAPICK_CONSOLE") == "1",  # windowed app; a console build only to diagnose a build
     icon=str(icon) if icon.exists() and sys.platform == "win32" else None,
     version=str(ROOT / "packaging" / "version_info.txt") if sys.platform == "win32" else None,
 )

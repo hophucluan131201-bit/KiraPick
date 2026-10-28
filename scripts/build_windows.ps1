@@ -137,6 +137,15 @@ if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) {
         Write-Host ("steps: " + ($r.steps -join " | "))
         if ($r.traceback) { ($r.traceback -split "`n") | Select-Object -Last 12 | ForEach-Object { Write-Host $_ } }
     }
+    # Diagnose: the same app built as a console program shows Python's own error output.
+    $env:KIRAPICK_CONSOLE = "1"
+    Invoke-Tool "PyInstaller (console, chẩn đoán)" $bpy @("-m", "PyInstaller", "--noconfirm", "--workpath", "build\pyi-console", "--distpath", "dist-console", "packaging\kirapick.spec")
+    $env:KIRAPICK_CONSOLE = $null
+    $errFile = Join-Path $Root "dist-console\stderr.txt"
+    $outFile = Join-Path $Root "dist-console\stdout.txt"
+    $diag = Start-Process -FilePath (Join-Path $Root "dist-console\KiraPick\KiraPick.exe") -ArgumentList @("--self-test", "`"$(Join-Path $Root 'dist-console\st.json')`"") -Wait -PassThru -RedirectStandardError $errFile -RedirectStandardOutput $outFile
+    Write-Host ("console exit {0:X8}" -f $diag.ExitCode)
+    foreach ($f in @($outFile, $errFile)) { if (Test-Path $f) { Get-Content $f -Encoding UTF8 | Select-Object -Last 25 | ForEach-Object { Write-Host $_ } } }
     throw ("Tự kiểm tra thất bại, mã thoát {0:X8} (xem dist\selftest.json)" -f $proc.ExitCode)
 }
 
