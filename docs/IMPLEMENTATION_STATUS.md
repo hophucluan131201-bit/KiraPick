@@ -325,6 +325,13 @@ stragglers (profile, motion blur, hands over face) that the owner can merge with
 
 E stays "zoom to the eyes", so the third label is R (not E as first proposed).
 
+Owner NEFs 2026-10-28 (5 × Z5 + 70-200 f/2.8E, 70–85 mm, 1/320 s, ISO 160; checked by eye at 100 % from the RAW):
+SNO_2360 (close-up, eye_sharp 0.51) and SNO_2366 (0.66) are sharp at the eyes; SNO_2368 / 2372 / 2375
+(seated full body, faces ~650 px, eye_sharp 0.42–0.45) are slightly soft at the eyes while the cape weave and
+the collar badge are crisp (focus a little off the eyes). The measure orders them correctly (sharp > soft) but the gap
+is small (0.51 vs 0.45) and the fixed scale calls 0.51 "hơi mềm" (60.8): the per-camera learned scale is the
+right fix. Five photos only: no accuracy claim. Not run here: CLIP / TOPIQ-IQA (model files absent in this container).
+
 ## Release 2.2.0 (2026-10-28): taste learning, new scoring AIs, signed updates, three editions
 
 Spec `docs/superpowers/specs/2026-10-28-kirapick-2.2-design.md`, plan `docs/superpowers/plans/2026-10-28-kirapick-2.2.md`.
