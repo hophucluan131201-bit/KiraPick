@@ -610,11 +610,11 @@ def test_view_buttons_back_button_and_key_hints(qtbot, env: dict) -> None:
     assert not w2.act_help.isChecked() and not w2.key_hints.isVisible()
 
 
-def test_toolbar_keeps_the_key_hints_button_on_a_1080p_screen(qtbot, env: dict) -> None:
-    """Owner's report: after "⚡ Dùng card đồ hoạ" was added, "⌨ Phím tắt" fell off the toolbar."""
+def test_top_bar_fits_and_keeps_the_key_hints_switch_reachable(qtbot, env: dict) -> None:
+    """Owner's report (old toolbar): after "⚡ Dùng card đồ hoạ" was added, "⌨ Phím tắt" fell off the bar.
+    Now the bar holds only the five steps + search + size + ⚙, and "⌨ Phím tắt" lives in ⚙."""
     w = _window(qtbot, env)
-    toolbar = w.findChildren(mw.QToolBar)[0]
-    assert toolbar.sizeHint().width() <= 1880
-    assert w.act_help in toolbar.actions() and w.act_gpu not in toolbar.actions()
-    assert w.act_gpu in w.options_button.menu().actions() and w.act_auto_advance in w.options_button.menu().actions()
+    assert w.top_bar.sizeHint().width() <= 1880
+    menu = w.options_button.menu().actions()
+    assert w.act_help in menu and w.act_gpu in menu and w.act_auto_advance in menu
     assert w.key_hints.isVisible() == w.act_help.isChecked()

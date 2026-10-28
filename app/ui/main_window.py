@@ -41,12 +41,11 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QToolButton,
     QSplitter,
     QStackedWidget,
-    QToolBar,
+    QHBoxLayout,
     QVBoxLayout,
     QWidget,
 )
@@ -81,6 +80,8 @@ from app.ui.people_delegate import PeopleDelegate
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
 from app.ui.detail_panel import DetailPanel
+from app.ui.top_bar import CELL_DEFAULT, TopBar
+from app.storage.workflow import STEPS, StepState, steps
 from app.ui.review_dialog import ReviewDialog
 from app.ui.select_dialog import SelectDialog
 from app.ui.jobs import AnalyzeThread, ImportThread
@@ -156,6 +157,7 @@ class MainWindow(QMainWindow):
         self._decisions_since_training = 0
         self._taste_pool = QThreadPool(self)
         self._tick_anchor: int | None = None
+        self._import_progress: tuple[int, int] | None = None  # (done, total) while this window imports
         self._focus_labels_since_training = 0
         self.focus_status: dict[str, focus_learning.FocusStatus] = {}
 
@@ -216,9 +218,6 @@ class MainWindow(QMainWindow):
             self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
 
     def _build_toolbar(self) -> None:
-        tb = QToolBar("Chính", self)
-        tb.setMovable(False)
-        self.addToolBar(tb)
         self.act_import = QAction("📂 Nhập ảnh", self)
         self.act_import.setToolTip("Nhập một thư mục ảnh (Ctrl+I)")
         self.act_import.setShortcut(QKeySequence("Ctrl+I"))
@@ -278,22 +277,18 @@ class MainWindow(QMainWindow):
         self.act_select = QAction("⭐ Chọn ảnh", self)
         self.act_select.triggered.connect(lambda: self.open_select_dialog())
         for act in (self.act_import, self.act_analyze, self.act_merge, self.act_quality, self.act_select,
-                    self.act_client_list, self.act_export):
-            tb.addAction(act)
-        tb.addSeparator()
-        tb.addAction(self.act_grid_view)
-        tb.addAction(self.act_loupe)
-        tb.addSeparator()
-        tb.addAction(self.act_reset)
+                    self.act_client_list, self.act_export, self.act_grid_view, self.act_loupe):
+            self.addAction(act)  # keyboard shortcuts work without a toolbar
         self.act_learning = QAction("🎓 AI đã học", self)
         self.act_learning.setToolTip("Xem AI đã học gì từ các lần bạn sửa (chỉ trên máy này), hoặc xoá để học lại")
         self.act_learning.triggered.connect(self.show_learning)
-        tb.addAction(self.act_learning)
-        tb.addSeparator()
-        # Settings that are switched rarely live in one small menu, so the toolbar fits a 1080p
-        # screen and "⌨ Phím tắt" stays visible.
+        # Everything that is not a workflow step lives in ⚙, so the top bar fits a 1080p screen.
         options = QMenu(self)
         options.setToolTipsVisible(True)
+        options.addAction(self.act_reset)
+        options.addAction(self.act_learning)
+        options.addAction(self.act_help)
+        options.addSeparator()
         options.addAction(self.act_auto_advance)
         options.addAction(self.act_gpu)
         self.act_taste_weight = QAction("🎯 Mức ảnh hưởng của gu…", self)
@@ -313,13 +308,9 @@ class MainWindow(QMainWindow):
         options.addAction(self.act_auto_update)
         self.options_button = QToolButton(self)
         self.options_button.setText("⚙ Tuỳ chọn")
-        self.options_button.setToolTip("Tự chuyển ảnh sau K/X, dùng card đồ hoạ cho AI")
+        self.options_button.setToolTip("Làm lại, AI đã học, phím tắt, card đồ hoạ, mức gu, cập nhật")
         self.options_button.setMenu(options)
         self.options_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        tb.addAction(self.act_help)
-        tb.addWidget(self.options_button)
-        # The search box lives at the top of the sidebar (always visible; a toolbar
-        # would hide it in its overflow menu on narrow or scaled screens).
         self.search = QLineEdit()
         self.search.setPlaceholderText("🔎 Tìm tên file (Ctrl+F)")
         self.search.setToolTip("Gõ một phần tên file. Nhiều số cách nhau bằng dấu cách, vd: 9645 9650")
@@ -332,6 +323,13 @@ class MainWindow(QMainWindow):
         focus_search.setShortcut(QKeySequence("Ctrl+F"))
         focus_search.triggered.connect(lambda: (self.search.setFocus(), self.search.selectAll()))
         self.addAction(focus_search)
+        self.top_bar = TopBar(self.search, self.options_button)
+        for key, act in (("import", self.act_import), ("people", self.act_analyze), ("quality", self.act_quality),
+                         ("pick", self.act_select), ("export", self.act_export)):
+            self.top_bar.bind(key, act)
+        self.top_bar.size_slider.setValue(int(self.settings.value("grid_cell", CELL_DEFAULT)))
+        self.top_bar.size_slider.valueChanged.connect(self.set_grid_cell)
+        self.setMenuWidget(self.top_bar)
 
     def _build_body(self) -> None:
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
@@ -339,7 +337,6 @@ class MainWindow(QMainWindow):
         side = QWidget()
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(6, 6, 6, 6)
-        side_layout.addWidget(self.search)
         self.sort = QComboBox()
         for label, mode in (("Xếp theo thời gian chụp", Sort.TIME), ("Xếp theo điểm kỹ thuật (K)", Sort.SCORE),
                             ("Xếp theo Hợp gu bạn (G)", Sort.TASTE), ("Xếp theo điểm xếp hạng (K + G)", Sort.RANK),
@@ -388,10 +385,36 @@ class MainWindow(QMainWindow):
         saved = self.settings.value("people_sort", "number", str)
         self.people_sort.setCurrentIndex(max(0, self.people_sort.findData(saved)))
         self.people_sort.currentIndexChanged.connect(self._on_people_sort_changed)
+        self.client_list_button = QToolButton()
+        self.client_list_button.setDefaultAction(self.act_client_list)
+        self.client_list_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.client_list_button.setAutoRaise(True)
+        filters_box = QWidget()
+        filters_layout = QVBoxLayout(filters_box)
+        filters_layout.setContentsMargins(0, 0, 0, 0)
+        filters_layout.setSpacing(2)
+        filters_layout.addWidget(self.filters)
+        filters_layout.addWidget(self.client_list_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.people_filter = QLineEdit()
+        self.people_filter.setPlaceholderText("Tìm chủ thể…")
+        self.people_filter.setClearButtonEnabled(True)
+        self.people_filter.textChanged.connect(lambda _t: self._apply_people_filter())
+        self.merge_button = QToolButton()
+        self.merge_button.setDefaultAction(self.act_merge)
+        self.merge_button.setAutoRaise(True)
+        people_tools = QWidget()
+        tools = QVBoxLayout(people_tools)
+        tools.setContentsMargins(0, 0, 0, 0)
+        tools.setSpacing(2)
+        row = QHBoxLayout()
+        row.addWidget(self.people_sort, 1)
+        row.addWidget(self.merge_button)
+        tools.addWidget(self.people_filter)
+        tools.addLayout(row)
         self.sections = {
             "folders": CollapsibleSection("THƯ MỤC", self.sources, "folders", self.settings),
-            "filters": CollapsibleSection("LỌC", self.filters, "filters", self.settings),
-            "people": CollapsibleSection("CHỦ THỂ", self.people, "people", self.settings, extra=self.people_sort),
+            "filters": CollapsibleSection("LỌC", filters_box, "filters", self.settings),
+            "people": CollapsibleSection("CHỦ THỂ", self.people, "people", self.settings, extra=people_tools),
         }
         side_layout.addWidget(self.sections["folders"])
         side_layout.addWidget(self.sections["filters"])
@@ -407,7 +430,7 @@ class MainWindow(QMainWindow):
         self.empty_hint.setObjectName("emptyHint")
         self.empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_hint.setWordWrap(True)  # long text must never set the window's minimum width
-        self.grid = make_grid(self, 220)
+        self.grid = make_grid(self, int(self.settings.value("grid_cell", CELL_DEFAULT)))
         self.grid.setModel(self.model)
         self.grid.selectionModel().currentChanged.connect(self._on_current_changed)
         self.grid.doubleClicked.connect(lambda _: self.toggle_loupe())
@@ -443,6 +466,16 @@ class MainWindow(QMainWindow):
         center_layout = QVBoxLayout(center_box)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(0)
+        # Grid header: Lưới / Xem lớn (moved out of the old toolbar; the full header comes with the adaptive layout).
+        view_row = QHBoxLayout()
+        view_row.setContentsMargins(4, 2, 4, 0)
+        for act in (self.act_grid_view, self.act_loupe):
+            b = QToolButton()
+            b.setDefaultAction(act)
+            b.setAutoRaise(True)
+            view_row.addWidget(b)
+        view_row.addStretch(1)
+        center_layout.addLayout(view_row)
         center_layout.addWidget(self.center, 1)
         center_layout.addWidget(self.key_hints)
         self.center.currentChanged.connect(self._on_view_changed)
@@ -629,6 +662,9 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, total)
             self.progress.setValue(done)
             self.status.setText(f"{label} {done}/{total}")
+            if phase == "ingest":
+                self._import_progress = (done, total)
+                self.refresh_steps()
         else:
             self.progress.setRange(0, 0)
             self.status.setText(label)
@@ -660,6 +696,7 @@ class MainWindow(QMainWindow):
             return  # window closed meanwhile
         cancelled = self.import_thread is not None and self.import_thread.cancel_requested
         self.import_thread = None
+        self._import_progress = None
         self._reload_timer.stop()
         self.progress.setVisible(False)
         self.act_import.setEnabled(True)
@@ -845,6 +882,14 @@ class MainWindow(QMainWindow):
             "SELECT COUNT(DISTINCT asset_id) FROM measurements WHERE extractor = 'quality'").fetchone()[0]
         return photos, detected, scored
 
+    def refresh_steps(self) -> None:
+        """✓ / ◐ of the five workflow steps in the top bar (app.storage.workflow); cheap COUNT queries."""
+        if self.project is None:
+            self.top_bar.set_states({k: StepState(False, None) for k in STEPS}, busy=False)
+            return
+        busy = self.import_thread is not None or self.analyze_thread is not None
+        self.top_bar.set_states(steps(self.project.conn, importing=self._import_progress), busy=busy)
+
     def _update_steps(self) -> None:
         """Enable each step only when the previous one is done and nothing is running."""
         busy = self.import_thread is not None or self.analyze_thread is not None
@@ -858,6 +903,7 @@ class MainWindow(QMainWindow):
         self.act_select.setToolTip(
             "Bước 4: AI chọn N ảnh đẹp, khác dáng nhau; bạn xem lại rồi ⤴ Xuất ảnh."
             + ("" if scored else " Hãy bấm 📊 Phân tích ảnh trước."))
+        self.refresh_steps()
 
     def start_analysis(self, mode: str = "people") -> AnalyzeThread | None:
         if self.project is None or self.import_thread is not None or self.analyze_thread is not None:
@@ -1054,7 +1100,16 @@ class MainWindow(QMainWindow):
             if self.people.item(i).data(Qt.ItemDataRole.UserRole) == current:
                 self.people.setCurrentRow(i)
         self.people.blockSignals(False)
+        self._apply_people_filter()
         self._update_merge_action()
+
+    def _apply_people_filter(self) -> None:
+        """Hide people whose name does not contain the typed text (the special rows stay visible)."""
+        needle = self.people_filter.text().strip().casefold()
+        for i in range(self.people.count()):
+            item = self.people.item(i)
+            kind = (item.data(Qt.ItemDataRole.UserRole) or ("", None))[0]
+            item.setHidden(bool(needle) and kind == "subject" and needle not in item.text().casefold())
 
     def _on_person_changed(self, row: int) -> None:
         item = self.people.item(row)
@@ -1587,6 +1642,14 @@ class MainWindow(QMainWindow):
         if current is not None and current.id in turns and self.center.currentIndex() == 2:
             self.viewer.show_photo(current.path, self.model.pixmap(current), _long_side(current), current.rotation)
 
+    def set_grid_cell(self, size: int) -> None:
+        """Thumbnail size slider: card size of the grid (remembered)."""
+        self.settings.setValue("grid_cell", size)
+        delegate = self.grid.itemDelegate()
+        delegate.cell = size  # type: ignore[attr-defined]
+        self.grid.doItemsLayout()
+        self.grid.viewport().update()
+
     def on_tick(self, asset_id: int, shift: bool) -> None:
         """Tick box: Chọn ↔ not chosen for that card only (never the current photo or the marking).
         Shift: Chọn on every card from the last tick box clicked to this one, in the order shown."""
@@ -1626,6 +1689,7 @@ class MainWindow(QMainWindow):
             self.model.refresh_record(rec.id)
         self._show_inspector(self.current_record())
         self._update_counts()
+        self.refresh_steps()
 
     def _session_key(self) -> str:
         assert self.project is not None
@@ -1879,6 +1943,7 @@ class MainWindow(QMainWindow):
         collection_id = data[1] if data and data[0] is Filter.COLLECTION else None
         dialog = ExportDialog(self.project, [r.id for r in self.selected_records()], self, collection_id=collection_id,
                               settings=self.settings)
+        dialog.run_recorded.connect(self.refresh_steps)  # ✓ Xuất ảnh as soon as an export is recorded
         dialog.show()
         return dialog
 
