@@ -91,9 +91,10 @@ def deliver_queued() -> int:
 def settle(works: Callable[[], list[Work]], msecs: int, *, rounds: int = SETTLE_ROUNDS,
            deliver: Callable[[], int] = deliver_queued) -> list[str]:
     """Stop, wait, deliver — until a pass delivers nothing while nothing runs. Returns what is still pending
-    (nothing may be released then). The caller closes the gate first."""
+    (nothing may be released then). The caller closes the gate first. ``msecs`` is one deadline for all rounds."""
+    deadline = time.monotonic() + msecs / 1000
     for _ in range(rounds):
-        left = drain(works(), msecs)
+        left = drain(works(), max(0, int((deadline - time.monotonic()) * 1000)))
         if left:
             return left
         if deliver() == 0:

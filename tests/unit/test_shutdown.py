@@ -34,3 +34,21 @@ def test_drain_shares_one_budget_and_reports_what_still_runs() -> None:
 def test_still_running_does_not_wait() -> None:
     assert still_running([Work("x", lambda ms: ms == 0 and False, lambda: None), Work("y", lambda ms: True,
                                                                                      lambda: None)]) == ["x"]
+
+
+def test_settle_uses_one_deadline_for_all_rounds() -> None:
+    """Review RV11-V4-02: many rounds must not multiply the wait."""
+    from app.ui.shutdown import settle
+
+    asked: list[int] = []
+
+    def slow_then_done(ms: int) -> bool:
+        asked.append(ms)
+        time.sleep(min(ms, 60) / 1000)
+        return True
+
+    deliveries = iter([1] * 10 + [0])
+    t0 = time.monotonic()
+    settle(lambda: [Work("x", slow_then_done, lambda: None)], 200, rounds=20, deliver=lambda: next(deliveries))
+    assert time.monotonic() - t0 < 0.5  # ~200 ms budget in total, not 200 ms per round
+    assert asked == sorted(asked, reverse=True) and asked[-1] <= 20
