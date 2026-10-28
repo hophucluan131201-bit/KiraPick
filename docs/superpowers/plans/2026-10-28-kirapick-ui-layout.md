@@ -231,6 +231,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - Produces: `BottomBar.set_counts(c: Counts, include_pairs: bool, marked: int)`; text "Đã chọn N ảnh (x,y GB)" + " (gồm JPEG kèm)" when include_pairs; "Đang đánh dấu M ảnh" when marked ≥ 2; `set_compact(on: bool)` → "✓N ✗M ·K" and a "⋯" menu holding ★, Xoay xem, Xem EXIF; signals `keep, reject, clear, rating(int), rotate, exif, export, export_client`; `message(text: str)`; `progress(done: int, total: int, pausable: bool)` / `progress_done()`; attribute `status: QLabel` (tests read `w.status.text()` today — keep `MainWindow.status` pointing at it).
 
 - Size refresh (Task 3 review CR3-05): the bar recomputes `counts` when a decision changes, when a session opens, after import/analysis, and when `export/include_pairs` changes (`ExportDialog.include_pairs.toggled` → `MainWindow.refresh_counts`); repeated triggers within 100 ms are coalesced (counts take ~23 ms at 10,000 photos). Test: `test_size_follows_include_pairs_toggle`.
+- RV3-01 (review): the bar's tooltip explains photos (a pair = 1) vs files vs the estimated size (from import, may differ from the export: deleted files, files already at the destination, a hidden pair member kept on its own before pairing is copied too). Test: `test_size_tooltip_explains_estimate`.
 - [ ] **Step 1: Failing tests**: `test_counts_and_size_text` (2 kept RAW+JPEG → "Đã chọn 2 ảnh (… GB) (gồm JPEG kèm)"); `test_marking_text_only_for_two_or_more`; `test_compact_keeps_keep_reject_export_visible`; `test_buttons_act_like_keys` (bottom Chọn on current photo == pressing P).
 - [ ] **Steps 2–4** FAIL → implement → PASS.
 - [ ] **Step 5: Commit** `"UI part 1: bottom bar with counts, size and actions"`
@@ -272,6 +273,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 **Interfaces:**
 - Targets from the spec: open → first paint ≤ 0.5 / 1.5 / 3 s; filter/sort ≤ 0.2 / 0.6 / 1.2 s; scroll paint median ≤ 16 ms, worst ≤ 50 ms; tick/P/X repaint ≤ 50 ms; mode change ≤ 100 / 100 / 150 ms; pixmap cache ≤ 300 MB at DPR 2.
 
+- RV3-03 (review): add a sustained-culling measure: 200 alternating P/X presses on a 10,000-photo session, worst and median time from key to repainted card and updated counts (target ≤ 50 ms median, ≤ 100 ms worst); run in CI on Windows and report.
 - [ ] **Step 1: Write the perf tests** parametrised over (1000, 5000, 10000), each measuring with `time.perf_counter` and asserting the targets; print the numbers.
 - [ ] **Step 2:** run `.venv/bin/python -m pytest -m perf -q -s` here; record numbers. If any target fails, implement the off-thread reload and rerun.
 - [ ] **Step 3:** default test run excludes `perf` (`addopts = -m "not perf"`); CI step added.
@@ -279,4 +281,6 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 
 ### Task 15: Finish
 
+- [ ] RV2-04: integration test with a real RAW+JPEG pair (public NEF fixture + its JPEG) through import → grid → Chọn → size == export plan → export copies both.
+- [ ] RV2-05: open a v6 session copy with this build (migrates to v7, data intact) and confirm 2.2.1 refuses v7 with its "update the app" message; write it in the beta release notes.
 - [ ] Full suite `.venv/bin/python -m pytest -q` green; perf numbers in `docs/IMPLEMENTATION_STATUS.md` with status "tested offscreen" (no real Windows GUI run here); screenshots sent; push to `beta` with no release marker; report to the owner in Vietnamese and start the part 2 discussion.
