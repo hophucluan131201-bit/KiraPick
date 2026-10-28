@@ -1,4 +1,4 @@
-"""Grid: K (technical) · G (taste) badge and the new sort orders."""
+"""Grid: the one score badge (ranking value, ⚠ on a hard defect) and the sort orders."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 from app.quality.rank import Ranked
 from app.quality.score import score
 from app.ui.asset_model import AssetRecord, Sort, sort_records
-from app.ui.grid import badge_text
+from app.ui.grid import card_texts
 
 
 def _rec(i: int, tech: float | None, taste: float | None, value: float | None, capped: bool = False) -> AssetRecord:
@@ -19,11 +19,11 @@ def _rec(i: int, tech: float | None, taste: float | None, value: float | None, c
     return r
 
 
-def test_badge_text() -> None:
-    assert badge_text(_rec(1, 78.4, 85.0, 81.7)) == "K 78 · G 85"
-    assert badge_text(_rec(2, 78.4, None, 78.4)) == "K 78"
-    assert badge_text(_rec(3, 40.0, 90.0, 40.0, capped=True)) == "⚠ K 40 · G 90"
-    assert badge_text(_rec(4, None, None, None)) == ""
+def test_badge_is_the_ranking_value() -> None:
+    """One number (K blended with G once taste is ready); K and G separately are in the detail panel."""
+    assert card_texts(_rec(1, 78.4, 85.0, 81.7))[0] == "82"
+    assert card_texts(_rec(2, 78.4, None, 78.4))[0] == "78"
+    assert card_texts(_rec(4, None, None, None))[0] == "—"
 
 
 def test_sort_orders() -> None:

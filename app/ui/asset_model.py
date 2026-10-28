@@ -32,6 +32,7 @@ from PySide6.QtGui import QImage, QPixmap
 from app.identity.actions import UNIDENTIFIED_ASSETS
 from app.quality.rank import Ranked, rank
 from app.quality.score import Score, photo_scores
+from app.storage import view
 from app.storage.stats import SHOWN_PHOTO_SQL
 from app.storage.project import Project
 
@@ -110,6 +111,7 @@ class AssetRecord:
     score: Score | None = None  # of the person shown (person view) or of the main person
     pick_rank: int | None = None  # chosen by "⭐ Chọn ảnh": 1 = first choice
     ranked: Ranked | None = None  # technical score blended with the taste score (None = not scored)
+    rotation: int = 0  # "Xoay xem": quarter turns clockwise, display only (app.storage.view)
 
     @property
     def name(self) -> str:
@@ -265,7 +267,8 @@ class AssetListModel(QAbstractListModel):
             sql += " ORDER BY a.capture_time IS NULL, a.capture_time, a.subsec, a.relative_path"
             conn = self._project.conn
             scores = photo_scores(conn, self._target_id if self._filter is Filter.SUBJECT else None)
-            picks = {r[0]: r[1] for r in conn.execute("SELECT asset_id, rank FROM picks")}
+            picks = {r[0]: r[1] for r in conn.execute("SELECT asset_id, rank FROM picks")}  # newest run only
+            turns = view.rotations(conn)
             pairs = self._pair_names(conn)
             cache = self._project.cache_dir
             for r in conn.execute(sql, params):
@@ -287,7 +290,7 @@ class AssetListModel(QAbstractListModel):
                         flag=r["flag"], rating=int(r["rating"]), favorite=bool(r["favorite"]), focus=r["focus"],
                         uncertain=r["id"] in uncertain,
                         score=scores[r["id"]][1] if r["id"] in scores else None,
-                        pick_rank=picks.get(r["id"]),
+                        pick_rank=picks.get(r["id"]), rotation=turns.get(r["id"], 0),
                     )
                 )
                 rec = rows[-1]
@@ -347,7 +350,7 @@ class AssetListModel(QAbstractListModel):
         if role == ROLE_RECORD:
             return rec
         if role == Qt.ItemDataRole.SizeHintRole:
-            return QSize(THUMB_DISPLAY + 16, THUMB_DISPLAY + 40)
+            return QSize(THUMB_DISPLAY + 16, THUMB_DISPLAY + 48)
         return None
 
     # ------------------------------------------------------------ pixmaps

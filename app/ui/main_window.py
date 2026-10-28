@@ -154,6 +154,7 @@ class MainWindow(QMainWindow):
         self.taste = TasteService()
         self._decisions_since_training = 0
         self._taste_pool = QThreadPool(self)
+        self._tick_anchor: int | None = None
         self._focus_labels_since_training = 0
         self.focus_status: dict[str, focus_learning.FocusStatus] = {}
 
@@ -411,6 +412,7 @@ class MainWindow(QMainWindow):
         self.grid.doubleClicked.connect(lambda _: self.toggle_loupe())
         self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.grid.customContextMenuRequested.connect(self._grid_context_menu)
+        self.grid.tick_clicked.connect(self.on_tick)
 
         loupe = QWidget()
         loupe_layout = QVBoxLayout(loupe)
@@ -420,6 +422,7 @@ class MainWindow(QMainWindow):
         self.filmstrip = make_filmstrip(self, 96)
         self.filmstrip.setModel(self.model)
         self.filmstrip.setSelectionModel(self.grid.selectionModel())  # one shared selection
+        self.filmstrip.tick_clicked.connect(self.on_tick)
         loupe_layout.addWidget(self.viewer, 1)
         loupe_layout.addWidget(self.filmstrip)
 
@@ -1418,6 +1421,7 @@ class MainWindow(QMainWindow):
         self.status.setText(f"Đã tạo danh sách khách: {self.model.rowCount()} ảnh. Bấm “Xuất ảnh” để chép.")
 
     def _after_filter(self) -> None:
+        self._tick_anchor = None  # filter, sort or search changed: a Shift+tick range starts again
         self._update_counts()
         self._update_empty_state()
         if self.model.rowCount():
@@ -1531,11 +1535,36 @@ class MainWindow(QMainWindow):
             return selected
         return [current] if current else selected
 
+    def on_tick(self, asset_id: int, shift: bool) -> None:
+        """Tick box: Chọn ↔ not chosen for that card only (never the current photo or the marking).
+        Shift: Chọn on every card from the last tick box clicked to this one, in the order shown."""
+        records = self.model.records()
+        order = [r.id for r in records]
+        if asset_id not in order:
+            return
+        anchor = self._tick_anchor
+        if shift and anchor in order:
+            lo, hi = sorted((order.index(anchor), order.index(asset_id)))
+            self._apply_to(records[lo:hi + 1], lambda conn, rec: decisions.set_flag(conn, rec.id, "keep"))
+        else:
+            rec = records[order.index(asset_id)]
+            new = None if rec.flag == "keep" else "keep"
+            self._apply_to([rec], lambda conn, r: decisions.set_flag(conn, r.id, new))
+        self._tick_anchor = asset_id
+
     def _apply(self, fn: object, *, advance: bool = False) -> None:
         if self.project is None:
             return
         targets = self._targets()
         if not targets:
+            return
+        self._apply_to(targets, fn)
+        if advance and len(targets) == 1 and self.act_auto_advance.isChecked():
+            self.step(1)
+
+    def _apply_to(self, targets: list[AssetRecord], fn: object) -> None:
+        """Change decisions of these photos in one transaction, teach taste, repaint (keys, buttons, tick boxes)."""
+        if self.project is None or not targets:
             return
         with self.project.transaction() as conn:
             for rec in targets:
@@ -1545,8 +1574,6 @@ class MainWindow(QMainWindow):
             self.model.refresh_record(rec.id)
         self._show_inspector(self.current_record())
         self._update_counts()
-        if advance and len(targets) == 1 and self.act_auto_advance.isChecked():
-            self.step(1)
 
     def _session_key(self) -> str:
         assert self.project is not None
