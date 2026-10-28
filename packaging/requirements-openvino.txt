@@ -1,5 +1,5 @@
 # OpenVINO edition (beta 2.2.0b): like requirements-directml.txt, but ONNX Runtime with OpenVINO (Intel CPU).
-numpy==2.5.4
+numpy==2.3.5  # openvino 2025.4.1 needs numpy < 2.4
 opencv-python-headless==4.14.0.94
 onnxruntime-openvino==1.24.1  # Intel OpenVINO execution provider (2026-02-26)
 openvino==2025.4.1  # the runtime DLLs it is built against (Windows needs them separately)

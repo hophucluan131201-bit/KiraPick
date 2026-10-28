@@ -60,7 +60,15 @@ jobs:
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
       - name: Build, self-test (network blocked), package
         shell: pwsh
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive -Edition ${{ matrix.edition }}
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive -Edition ${{ matrix.edition }} *>&1 | Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            # The end of the log as an annotation: readable through the API without the log storage host.
+            $tail = (Get-Content build.log -Tail 60) -join "%0A"
+            Write-Host "::error title=build_windows.ps1 failed (${{ matrix.edition }})::$tail"
+            exit $code
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
