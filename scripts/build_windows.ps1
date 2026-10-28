@@ -128,6 +128,8 @@ if (Test-Path $report) { Get-Content $report -Encoding UTF8 | ForEach-Object { W
 if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) {
     $crash = Join-Path $Root "dist\selftest.crash.txt"
     if (Test-Path $crash) { Get-Content $crash -Encoding UTF8 | Select-Object -Last 30 | ForEach-Object { Write-Host $_ } }
+    $startup = Join-Path $dist "startup-error.txt"  # Python error before the self-test could start
+    if (Test-Path $startup) { Get-Content $startup -Encoding UTF8 | Select-Object -Last 20 | ForEach-Object { Write-Host $_ } }
     $fallback = Join-Path $env:LOCALAPPDATA "KiraPick\logs\selftest.json"  # where the app writes if dist\ fails
     if (Test-Path $fallback) {
         $r = Get-Content $fallback -Raw -Encoding UTF8 | ConvertFrom-Json
