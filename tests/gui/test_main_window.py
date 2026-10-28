@@ -96,7 +96,7 @@ def test_keyboard_culling_and_new_session_on_restart(qtbot, env: dict) -> None:
     _key(qtbot, w, Qt.Key.Key_U)
     _key(qtbot, w, Qt.Key.Key_0)
     assert decisions.get(w.project.conn, second.id) == decisions.Decision()
-    assert "Giữ 1" in w.counts.text()
+    assert w.counts.text().startswith("Đã chọn 1 ảnh")
     w.close()
 
     w2 = _window(qtbot, env)  # every start is an empty session ...
@@ -117,14 +117,14 @@ def test_reset_forgets_folder_and_switching_folders(qtbot, env: dict, tmp_path: 
     w.select_row(0)
     _key(qtbot, w, Qt.Key.Key_K)
     _import(qtbot, w, other)  # switching folder = switching session
-    assert [r.name for r in w.model.records()] == ["IMG_0001.jpg"] and "Giữ 0" in w.counts.text()
+    assert [r.name for r in w.model.records()] == ["IMG_0001.jpg"] and w.counts.text().startswith("Đã chọn 0 ảnh")
     _import(qtbot, w, env["photos"])
-    assert "Giữ 1" in w.counts.text()
+    assert w.counts.text().startswith("Đã chọn 1 ảnh")
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     w.reset_current_folder()
     qtbot.waitUntil(lambda: w.import_thread is None, timeout=30000)
-    assert w.model.rowCount() == 7 and "Giữ 0" in w.counts.text()
+    assert w.model.rowCount() == 7 and w.counts.text().startswith("Đã chọn 0 ảnh")
     assert "Đã nhớ" not in w.status.text()
     assert sorted(p.name for p in env["photos"].iterdir())[:2] == ["DSC_0000.jpg", "DSC_0001.jpg"]  # photos untouched
 

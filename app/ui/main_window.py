@@ -81,6 +81,9 @@ from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
 from app.ui.detail_panel import DetailPanel
 from app.ui.top_bar import CELL_DEFAULT, TopBar
+from app.ui.bottom_bar import BottomBar
+from app.ui.export_dialog import INCLUDE_PAIRS_KEY
+from app.storage.stats import Counts, counts
 from app.storage.workflow import STEPS, StepState, steps
 from app.ui.review_dialog import ReviewDialog
 from app.ui.select_dialog import SelectDialog
@@ -436,6 +439,7 @@ class MainWindow(QMainWindow):
         self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.grid.customContextMenuRequested.connect(self._grid_context_menu)
         self.grid.tick_clicked.connect(self.on_tick)
+        self.grid.selectionModel().selectionChanged.connect(lambda *_a: self._marking_timer.start())
 
         loupe = QWidget()
         loupe_layout = QVBoxLayout(loupe)
@@ -502,20 +506,26 @@ class MainWindow(QMainWindow):
 
     def _build_statusbar(self) -> None:
         sb = self.statusBar()
-        self.status = QLabel("Sẵn sàng")
-        # Status messages can be long; let them be cut instead of widening the window.
-        self.status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        self.counts = QLabel("")
-        self.progress = QProgressBar()
-        self.progress.setMaximumWidth(260)
-        self.progress.setVisible(False)
-        self.pause_button = QPushButton("Tạm dừng")
-        self.pause_button.setVisible(False)
+        sb.setSizeGripEnabled(False)
+        self.bottom_bar = BottomBar()
+        sb.addWidget(self.bottom_bar, 1)  # the bar spans the whole width under the panels
+        # The window keeps its old names for the bar's parts (status messages, progress, pause).
+        self.status = self.bottom_bar.status
+        self.counts = self.bottom_bar.kept
+        self.progress = self.bottom_bar.progress_bar
+        self.pause_button = self.bottom_bar.pause_button
         self.pause_button.clicked.connect(self._pause_or_resume)
-        sb.addWidget(self.status, 1)
-        sb.addPermanentWidget(self.counts)
-        sb.addPermanentWidget(self.progress)
-        sb.addPermanentWidget(self.pause_button)
+        b = self.bottom_bar
+        b.keep.connect(lambda: self.set_flag("keep"))
+        b.reject.connect(lambda: self.set_flag("reject"))
+        b.clear.connect(lambda: self.set_flag(None))
+        b.rating.connect(self.set_rating)
+        b.rotate.connect(self.rotate_view)
+        b.exif.connect(self.detail.open_exif)
+        b.export.connect(lambda: self.open_export_dialog())
+        b.export_client.connect(lambda: self.open_export_dialog(client_list=True))
+        self._marking_timer = QTimer(self, singleShot=True, interval=100)  # coalesce bursts of selection changes
+        self._marking_timer.timeout.connect(self._update_counts)
 
     def _build_shortcuts(self) -> None:
         def sc(key: str, fn: object) -> None:
@@ -564,6 +574,7 @@ class MainWindow(QMainWindow):
             self.select_row(0)
 
     def _close_session(self) -> None:
+        self._marking_timer.stop()
         self._stop_analysis()
         for dialog in self.findChildren(QDialog):
             dialog.close()
@@ -856,6 +867,7 @@ class MainWindow(QMainWindow):
             thread.wait(15000)  # resumable: unfinished files continue next time
         self._stop_analysis()
         self.viewer.wait_idle(5000)
+        self._marking_timer.stop()  # it would read the database after it is closed
         if self.project is not None:
             self.project.close()
         if self.teacher.store is not None:
@@ -1536,21 +1548,13 @@ class MainWindow(QMainWindow):
         self._update_counts()
 
     def _update_counts(self) -> None:
+        """Bottom bar: photos Chọn / Loại / undecided, export size (follows "Kèm JPEG"), marking (app.storage.stats)."""
+        include_pairs = self.settings.value(INCLUDE_PAIRS_KEY, True, bool)
         if self.project is None:
-            self.counts.setText("")
+            self.bottom_bar.set_counts(Counts(0, 0, 0, 0, 0, 0), include_pairs, 0)
             return
-        c = self.project.conn.execute(
-            """SELECT COUNT(*) AS total,
-                      SUM(d.flag = 'keep') AS keep, SUM(d.flag = 'reject') AS reject,
-                      SUM(a.status = 'error') AS errors
-               FROM assets a LEFT JOIN decisions d ON d.asset_id = a.id AND d.subject_id IS NULL
-               WHERE a.status NOT IN ('missing', 'duplicate')
-                 AND NOT (a.media_kind = 'raster' AND a.pair_group_id IS NOT NULL)"""
-        ).fetchone()
-        self.counts.setText(
-            f"Đang hiện {self.model.rowCount()}  ·  Tổng {c['total'] or 0}  ·  Giữ {c['keep'] or 0}"
-            f"  ·  Loại {c['reject'] or 0}  ·  Lỗi {c['errors'] or 0}"
-        )
+        self.bottom_bar.set_counts(counts(self.project.conn, include_pairs), include_pairs,
+                                   len(self.selected_records()))
 
     def _update_empty_state(self) -> None:
         has_rows = self.model.rowCount() > 0 or (self.project is not None and self.model.is_filtered)
@@ -1933,16 +1937,21 @@ class MainWindow(QMainWindow):
         return dialog
 
     # ----------------------------------------------------------- export
-    def open_export_dialog(self) -> ExportDialog | None:
+    def open_export_dialog(self, client_list: bool = False) -> ExportDialog | None:
+        """``client_list``: start on "Danh sách khách" (the bottom bar's "Xuất theo danh sách khách…")."""
         if self.project is None:
             QMessageBox.information(self, "Xuất ảnh", "Hãy nhập một thư mục ảnh trước.")
             return None
         item = self.filters.currentItem()
         data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
         collection_id = data[1] if data and data[0] is Filter.COLLECTION else None
+        if client_list and collection_id is None:
+            lists = list_collections(self.project.conn)
+            collection_id = lists[0]["id"] if lists else None
         dialog = ExportDialog(self.project, [r.id for r in self.selected_records()], self, collection_id=collection_id,
                               settings=self.settings)
         dialog.run_recorded.connect(self.refresh_steps)  # ✓ Xuất ảnh as soon as an export is recorded
+        dialog.include_pairs.toggled.connect(lambda _on: self._update_counts())  # size follows "Kèm JPEG"
         dialog.show()
         return dialog
 
