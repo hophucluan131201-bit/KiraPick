@@ -145,6 +145,8 @@ if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) {
     $outFile = Join-Path $Root "dist-console\stdout.txt"
     $diag = Start-Process -FilePath (Join-Path $Root "dist-console\KiraPick\KiraPick.exe") -ArgumentList @("--self-test", "`"$(Join-Path $Root 'dist-console\st.json')`"") -Wait -PassThru -RedirectStandardError $errFile -RedirectStandardOutput $outFile
     Write-Host ("console exit {0:X8}" -f $diag.ExitCode)
+    $st = Join-Path $Root "dist-console\st.json"
+    if (Test-Path $st) { $r = Get-Content $st -Raw -Encoding UTF8 | ConvertFrom-Json; Write-Host ("partial report: ok=" + $r.ok + " error=" + $r.error + " steps=" + ($r.steps -join " | ")) }
     foreach ($f in @($outFile, $errFile)) { if (Test-Path $f) { Get-Content $f -Encoding UTF8 | Select-Object -Last 25 | ForEach-Object { Write-Host $_ } } }
     throw ("Tự kiểm tra thất bại, mã thoát {0:X8} (xem dist\selftest.json)" -f $proc.ExitCode)
 }
