@@ -41,4 +41,6 @@ markers = [
     "samples: needs real RAW samples under test_photos/ (skipped when absent)",
     "slow: full demosaic of real RAW files",
     "gui: drives the Qt main window (offscreen)",
+    "perf: timing measurements; run explicitly with -m perf",
 ]
+addopts = "-m 'not perf'"

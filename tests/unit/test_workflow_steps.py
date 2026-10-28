@@ -81,12 +81,12 @@ def test_failed_photos_count_as_processed(conn: sqlite3.Connection) -> None:
     assert steps(conn, importing=None)["quality"] == StepState(True, None)
 
 
-def test_quality_partial_counts_detected_photos(conn: sqlite3.Connection) -> None:
+def test_quality_partial_counts_every_readable_photo(conn: sqlite3.Connection) -> None:
     ids = _photos(conn, 5)
     assert steps(conn, importing=None)["quality"] == StepState(False, None)  # nothing detected yet
     _stage(conn, ids[:4], *DETECT)
     _stage(conn, ids[:1], *QUALITY)
-    assert steps(conn, importing=None)["quality"] == StepState(False, "1/4")
+    assert steps(conn, importing=None)["quality"] == StepState(False, "1/5")  # over every readable photo
 
 
 def test_outdated_stage_version_is_not_done(conn: sqlite3.Connection) -> None:
@@ -133,15 +133,38 @@ def test_photo_that_became_unreadable_after_detection_is_not_waited_for(conn: sq
     assert s["people"].done and s["quality"].done
 
 
-def test_steps_are_fast_on_10000_photos(conn: sqlite3.Connection) -> None:
-    import time
 
-    ids = _photos(conn, 10_000)
-    _stage(conn, ids, *DETECT)
-    _stage(conn, ids, *EMBED)
-    _stage(conn, ids[:6000], *QUALITY)
-    t = time.perf_counter()
-    s = steps(conn, importing=None)
-    elapsed = time.perf_counter() - t
-    assert s["quality"] == StepState(False, "6.000/10.000")
-    assert elapsed < 0.25, elapsed
+def test_quality_is_not_done_before_detection_finished_for_the_session(conn: sqlite3.Connection) -> None:
+    """Review CR4-01: 10 photos, 1 detected and measured -> not ✓ while 9 still wait for detection."""
+    ids = _photos(conn, 10)
+    _stage(conn, ids[:1], *DETECT)
+    _stage(conn, ids[:1], *EMBED)
+    _stage(conn, ids[:1], *QUALITY)
+    assert steps(conn, importing=None)["quality"] == StepState(False, "1/10")
+    _stage(conn, ids[1:], *DETECT, state="failed")  # nothing to measure on these: processed
+    assert steps(conn, importing=None)["quality"] == StepState(True, None)
+
+
+def test_import_that_failed_is_not_shown_done(conn: sqlite3.Connection) -> None:
+    """jobs.state is one of running / paused / done / failed (a cancel is stored as paused)."""
+    _photos(conn, 3)
+    conn.execute("INSERT INTO jobs (kind, state, created_at, updated_at) VALUES ('import', 'failed', 't', 't')")
+    assert steps(conn, importing=None)["import"] == StepState(False, "có lỗi khi nhập")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO jobs (kind, state, created_at, updated_at) VALUES ('import', 'cancelled', 't', 't')")
+
+
+def test_rerun_of_a_stage_never_double_counts_or_reuses_old_results(conn: sqlite3.Connection) -> None:
+    """stage_status has PRIMARY KEY (asset_id, stage): a re-run updates the row (never a second one);
+    a newer stage version resets it to pending, and pending is not counted."""
+    ids = _photos(conn, 2)
+    for _ in range(3):
+        _stage(conn, ids, *DETECT)
+        _stage(conn, ids, *EMBED)
+    assert conn.execute("SELECT COUNT(*) FROM stage_status").fetchone()[0] == 4
+    assert steps(conn, importing=None)["people"].done
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO stage_status (asset_id, stage, stage_version, state, attempts, updated_at) "
+                     "VALUES (?, 'detect', 99, 'done', 1, 't')", (ids[0],))
+    conn.execute("UPDATE stage_status SET state = 'pending' WHERE asset_id = ? AND stage = 'detect'", (ids[0],))
+    assert steps(conn, importing=None)["people"] == StepState(False, "1/2")

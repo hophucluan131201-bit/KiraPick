@@ -64,6 +64,8 @@ def steps(conn: sqlite3.Connection, *, importing: tuple[int, int] | None) -> dic
         out["import"] = StepState(False, fraction(*importing))
     elif last_job is not None and last_job[0] in ("running", "paused"):  # paused, or stopped by a crash
         out["import"] = StepState(False, "tạm dừng")
+    elif last_job is not None and last_job[0] == "failed":  # the import stopped on an error: not finished
+        out["import"] = StepState(False, "có lỗi khi nhập")
     else:
         out["import"] = _DONE if photos else _NOT_STARTED
 
@@ -75,8 +77,12 @@ def steps(conn: sqlite3.Connection, *, importing: tuple[int, int] | None) -> dic
     people_done = det_done - (emb_total - emb_done)
     out["people"] = _progress(people_done, ok)
 
-    q_done, q_total = _processed(conn, "quality", v["quality"], detected)
-    out["quality"] = _progress(q_done, q_total)
+    # Over every readable photo, so the step cannot finish while detection is still running: a photo is
+    # processed once measured (done or failed), or when detection failed on it (nothing to measure).
+    q_done, _ = _processed(conn, "quality", v["quality"], detected)
+    det_failed, _ = _processed(conn, "detect", v["detect"], f"""SELECT asset_id FROM stage_status
+        WHERE stage = 'detect' AND state = 'failed' AND asset_id IN ({readable})""")
+    out["quality"] = _progress(q_done + det_failed, ok) if det_done or q_done else _NOT_STARTED
 
     kept = conn.execute("SELECT 1 FROM decisions WHERE flag = 'keep' AND subject_id IS NULL LIMIT 1").fetchone()
     has_run = conn.execute("SELECT 1 FROM pick_runs LIMIT 1").fetchone()
