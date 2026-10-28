@@ -75,14 +75,17 @@ def steps(conn: sqlite3.Connection, *, importing: tuple[int, int] | None) -> dic
     emb_done, emb_total = _processed(conn, "embed", v["embed"], detected)
     # A photo counts for "people" once detection ended for it and, if detected, its vectors exist.
     people_done = det_done - (emb_total - emb_done)
-    out["people"] = _progress(people_done, ok)
+    ever_detected = conn.execute("SELECT 1 FROM stage_status WHERE stage = 'detect' LIMIT 1").fetchone()
+    # Never run: plain (not "◐ 0/N"); results from an older version still show ◐ to invite a re-run.
+    out["people"] = _progress(people_done, ok) if ever_detected else _NOT_STARTED
 
     # Over every readable photo, so the step cannot finish while detection is still running: a photo is
     # processed once measured (done or failed), or when detection failed on it (nothing to measure).
     q_done, _ = _processed(conn, "quality", v["quality"], detected)
     det_failed, _ = _processed(conn, "detect", v["detect"], f"""SELECT asset_id FROM stage_status
         WHERE stage = 'detect' AND state = 'failed' AND asset_id IN ({readable})""")
-    out["quality"] = _progress(q_done + det_failed, ok) if det_done or q_done else _NOT_STARTED
+    ever_measured = conn.execute("SELECT 1 FROM stage_status WHERE stage = 'quality' LIMIT 1").fetchone()
+    out["quality"] = _progress(q_done + det_failed, ok) if ever_measured or det_failed else _NOT_STARTED
 
     kept = conn.execute("SELECT 1 FROM decisions WHERE flag = 'keep' AND subject_id IS NULL LIMIT 1").fetchone()
     has_run = conn.execute("SELECT 1 FROM pick_runs LIMIT 1").fetchone()

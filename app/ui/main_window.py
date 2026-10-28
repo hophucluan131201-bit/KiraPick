@@ -406,11 +406,10 @@ class MainWindow(QMainWindow):
         tools = QVBoxLayout(people_tools)
         tools.setContentsMargins(0, 0, 0, 0)
         tools.setSpacing(2)
-        row = QHBoxLayout()
-        row.addWidget(self.people_sort, 1)
-        row.addWidget(self.merge_button)
+        self.merge_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         tools.addWidget(self.people_filter)
-        tools.addLayout(row)
+        tools.addWidget(self.people_sort)
+        tools.addWidget(self.merge_button, 0, Qt.AlignmentFlag.AlignLeft)  # own row: its text never gets cut
         self.sections = {
             "folders": CollapsibleSection("THƯ MỤC", self.sources, "folders", self.settings),
             "filters": CollapsibleSection("LỌC", filters_box, "filters", self.settings),

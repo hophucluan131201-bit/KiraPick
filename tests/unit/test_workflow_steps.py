@@ -168,3 +168,18 @@ def test_rerun_of_a_stage_never_double_counts_or_reuses_old_results(conn: sqlite
                      "VALUES (?, 'detect', 99, 'done', 1, 't')", (ids[0],))
     conn.execute("UPDATE stage_status SET state = 'pending' WHERE asset_id = ? AND stage = 'detect'", (ids[0],))
     assert steps(conn, importing=None)["people"] == StepState(False, "1/2")
+
+
+def test_a_step_never_run_is_not_partial(conn: sqlite3.Connection) -> None:
+    """Found on the Task 10 screenshot: a fresh session showed "◐ 0/6" for people recognition."""
+    _photos(conn, 6)
+    s = steps(conn, importing=None)
+    assert s["people"] == StepState(False, None) and s["quality"] == StepState(False, None)
+
+
+def test_quality_never_run_after_detection_is_not_partial(conn: sqlite3.Connection) -> None:
+    ids = _photos(conn, 3)
+    _stage(conn, ids, *DETECT)
+    _stage(conn, ids, *EMBED)
+    s = steps(conn, importing=None)
+    assert s["people"].done and s["quality"] == StepState(False, None)
