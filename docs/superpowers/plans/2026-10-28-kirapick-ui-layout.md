@@ -262,6 +262,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - Modify: `app/ui/asset_model.py` (pixmap request size = cell × DPR; when > 400 px make/cache an 800 px thumbnail `thumb_hd` in the preview cache from the embedded preview in the existing thumb pool), `app/ui/main_window.py` (`P` = keep alongside `K`; `Tab` = `LayoutController.toggle_detail` via an application-level shortcut that is ignored while a `QLineEdit`/`QTextEdit` has focus; key-hint lists, F1 text), `README.md` (keys table, new layout paragraph)
 - Test: `tests/gui/test_keys_and_thumbs.py`
 
+- Task 7 review notes: RV7-01 the marking tint is painted under the picture (card background only; the photo itself is never tinted) — test `test_marking_tint_never_covers_the_photo` (pixel under the picture unchanged when marked); RV7-02 tests `test_tick_and_shift_tick_with_keep_filter` and `test_shift_tick_follows_sorted_order` (anchor, current photo and marking stay right); RV7-03 filmstrip cards without a chip carry the chip text in their tooltip (`test_filmstrip_tooltip_has_status`).
 - [ ] **Step 1: Failing tests**: `test_p_keeps_like_k`; `test_keys_in_search_box_do_not_cull` (focus search, type "pX1\t" → text "pX1", no decision changed, layout unchanged); `test_hd_thumbnail_for_large_cells` (cell 300 at DPR 2 → cached pixmap long side ≥ 600 after `wait_for_thumbnails`; source untouched).
 - [ ] **Steps 2–4** FAIL → implement → PASS.
 - [ ] **Step 5: Commit** `"UI part 1: HD thumbnails, P and Tab keys, help"`
@@ -277,6 +278,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - Targets from the spec: open → first paint ≤ 0.5 / 1.5 / 3 s; filter/sort ≤ 0.2 / 0.6 / 1.2 s; scroll paint median ≤ 16 ms, worst ≤ 50 ms; tick/P/X repaint ≤ 50 ms; mode change ≤ 100 / 100 / 150 ms; pixmap cache ≤ 300 MB at DPR 2.
 
 - RV5-03 (review): also run the histogram and burst perf tests on Windows.
+- RV7-04 (review): rewrite `test_empty_state_then_import_without_freezing` so it does not depend on how long the import runs (e.g. import enough synthetic files, or assert the event loop processed a queued call while the import thread was alive).
 - RV3-03 (review): add a sustained-culling measure: 200 alternating P/X presses on a 10,000-photo session, worst and median time from key to repainted card and updated counts (target ≤ 50 ms median, ≤ 100 ms worst); run in CI on Windows and report.
 - [ ] **Step 1: Write the perf tests** parametrised over (1000, 5000, 10000), each measuring with `time.perf_counter` and asserting the targets; print the numbers.
 - [ ] **Step 2:** run `.venv/bin/python -m pytest -m perf -q -s` here; record numbers. If any target fails, implement the off-thread reload and rerun.
