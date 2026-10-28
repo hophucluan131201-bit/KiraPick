@@ -4,8 +4,9 @@ Lives next to the sessions (``%LOCALAPPDATA%\\KiraPick\\learning``),
 is never purged with them and is never part of an installer, so every person who
 installs the app starts from the defaults and teaches it their own way.
 
-Privacy: only similarity numbers, time gaps and the user's answer are stored — no
-images, file names, paths, people names or capture dates.
+Privacy: only similarity numbers, time gaps, score parts, the user's answer and (v6) the
+photo's CLIP embedding (768 numbers, needed to learn taste) are stored — no images, file names,
+paths, people names or capture dates. Photos and shoot days appear only as one-way hashes.
 """
 
 from __future__ import annotations
@@ -16,12 +17,28 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+import numpy as np
+
 from app import __version__
+from app.learning.taste import TasteExample
 
 log = logging.getLogger(__name__)
 
 DB_NAME = "learning.db"
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
+# v6: taste learning: one row per photo (photo_key, upserted), label/weight from Keep/Reject/stars/❤,
+# client picks and pair answers; the photo's CLIP embedding; a hashed shoot-day group for validation.
+_SCHEMA_V6 = """
+ALTER TABLE culling_feedback ADD COLUMN photo_key TEXT;
+ALTER TABLE culling_feedback ADD COLUMN source TEXT;
+ALTER TABLE culling_feedback ADD COLUMN label INTEGER;
+ALTER TABLE culling_feedback ADD COLUMN weight REAL;
+ALTER TABLE culling_feedback ADD COLUMN stars INTEGER;
+ALTER TABLE culling_feedback ADD COLUMN grp TEXT;
+ALTER TABLE culling_feedback ADD COLUMN clip BLOB;
+ALTER TABLE culling_feedback ADD COLUMN clip_version TEXT;
+CREATE UNIQUE INDEX culling_feedback_photo ON culling_feedback (photo_key) WHERE photo_key IS NOT NULL;
+"""
 # v5: every identity cue is stored (SFace, ArcFace, outfit colours, whole-body ReID), so
 # a later face model does not throw away what was learnt; pairs of one answer share answer_id.
 _SCHEMA_V5 = """
@@ -109,6 +126,8 @@ class LearningStore:
                     self.conn.executescript(_SCHEMA_V4)
                 if version < 5:
                     self.conn.executescript(_SCHEMA_V5)
+                if version < 6:
+                    self.conn.executescript(_SCHEMA_V6)
                 self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def add_identity(self, kind: str, same: bool, pairs: list[PairEvidence], face_version: str,
@@ -154,6 +173,51 @@ class LearningStore:
                  parts.get("focus"), parts.get("face"), parts.get("exposure"), parts.get("framing"), parts.get("eyes"),
                  parts.get("aesthetic")),
             )
+
+    def upsert_taste(self, photo_key: str, source: str, label: int, weight: float, stars: int, group: str,
+                     parts: dict[str, float | None], clip: np.ndarray | None, clip_version: str | None,
+                     profile_version: str) -> None:
+        """The newest answer about one photo replaces the earlier one."""
+        blob = None if clip is None else np.asarray(clip, "<f2").tobytes()
+        p = {k: parts.get(k) for k in ("focus", "face", "exposure", "framing", "eyes", "aesthetic")}
+        with self.conn:
+            self.conn.execute(
+                """INSERT INTO culling_feedback (created_on, app_version, profile_version, decision, focus, face,
+                   exposure, framing, eyes, aesthetic, photo_key, source, label, weight, stars, grp, clip,
+                   clip_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT (photo_key) WHERE photo_key IS NOT NULL DO UPDATE SET
+                   created_on = excluded.created_on, app_version = excluded.app_version,
+                   profile_version = excluded.profile_version, decision = excluded.decision,
+                   focus = excluded.focus, face = excluded.face, exposure = excluded.exposure,
+                   framing = excluded.framing, eyes = excluded.eyes, aesthetic = excluded.aesthetic,
+                   source = excluded.source, label = excluded.label, weight = excluded.weight,
+                   stars = excluded.stars, grp = excluded.grp, clip = excluded.clip,
+                   clip_version = excluded.clip_version""",
+                (date.today().isoformat(), __version__, profile_version, "keep" if label > 0 else "reject",
+                 p["focus"], p["face"], p["exposure"], p["framing"], p["eyes"], p["aesthetic"], photo_key, source,
+                 label, weight, stars, group, blob, clip_version if clip is not None else None),
+            )
+
+    def remove_taste(self, photo_key: str) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM culling_feedback WHERE photo_key = ?", (photo_key,))
+
+    def taste_examples(self, clip_version: str, limit: int = 20000) -> list[TasteExample]:
+        """Newest first. Rows from before v6 count as label from Keep/Reject, weight 1, no CLIP vector."""
+        rows = self.conn.execute(
+            """SELECT label, decision, weight, COALESCE(grp, created_on), clip, clip_version,
+                      focus, face, exposure, framing, eyes, aesthetic
+               FROM culling_feedback ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
+        out = []
+        for label, decision, weight, group, blob, cv, *vals in rows:
+            if label is None:
+                label = 1 if decision == "keep" else -1
+            clip = None
+            if blob is not None and cv == clip_version:
+                clip = np.frombuffer(blob, "<f2").astype(np.float32)
+            parts = dict(zip(("focus", "face", "exposure", "framing", "eyes", "aesthetic"), vals, strict=True))
+            out.append(TasteExample(int(label), 1.0 if weight is None else float(weight), str(group), clip, parts))
+        return out
 
     def culling_count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM culling_feedback").fetchone()[0]

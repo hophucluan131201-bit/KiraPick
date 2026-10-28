@@ -114,12 +114,14 @@ def test_keep_reject_examples_and_upgrade_from_v1(tmp_path: Path) -> None:
     assert store.identity_counts()["same"] == 1  # kept through the upgrade
     teacher = Teacher(store)
     s = score({"eye_sharp": 0.5, "face_quality": 0.6, "face_clip": 0.0, "face_luma": 50, "area": 0.3})
-    teacher.culled("keep", 1, s)
-    teacher.culled("reject", None, s)
-    teacher.culled(None, 1, s)  # clearing a flag teaches nothing
-    teacher.culled("keep", None, None)  # unscored, not picked: nothing to learn from
-    rows = store.conn.execute("SELECT decision, ai_rank, total, focus FROM culling_feedback ORDER BY id").fetchall()
-    assert rows == [("keep", 1, s.total, s.parts["focus"]), ("reject", None, s.total, s.parts["focus"])]
+    from app.learning.teacher import photo_key
+    from app.storage.decisions import Decision
+
+    teacher.decided(photo_key("s", 1), Decision("keep"), s.parts, None, "g")
+    teacher.decided(photo_key("s", 2), Decision("reject"), s.parts, None, "g")
+    teacher.decided(photo_key("s", 3), Decision(None), s.parts, None, "g")  # nothing chosen teaches nothing
+    rows = store.conn.execute("SELECT decision, label, focus FROM culling_feedback ORDER BY id").fetchall()
+    assert rows == [("keep", 1, s.parts["focus"]), ("reject", -1, s.parts["focus"])]
     store.forget()
     assert store.culling_count() == 0
     store.close()

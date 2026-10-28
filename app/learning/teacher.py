@@ -3,8 +3,8 @@
 - People: called around the corrections in app.identity.actions. An example is
   a pair of occurrences with its face / outfit similarity and time gap, and the
   user's answer (same person or not).
-- Taste: each Keep/Reject on a scored photo is stored with its score parts and
-  whether the AI had picked it.
+- Taste: the latest Keep/Reject/stars/❤ of each photo (one row per photo) with its score
+  parts and CLIP embedding; client picks count lightly (they show the client's taste).
 
 Learning must never get in the way: any error here is logged and the user's
 action itself goes ahead.
@@ -12,6 +12,7 @@ action itself goes ahead.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
 
@@ -21,12 +22,44 @@ from app.ai.identity_plus import ARCFACE_VERSION, BODY_VERSION
 from app.identity.cluster import Occ, load_occurrences
 from app.identity.features import OUTFIT_VERSION
 from app.learning.store import LearningStore, PairEvidence
+from app.ai.clip_version import CLIP_VERSION
 from app.quality.score import PROFILE_VERSION
 from app.workers.analyze_job import FACE_VECTOR_VERSION
 
 log = logging.getLogger(__name__)
 
 MAX_PAIRS_PER_ANSWER = 200  # a big merge must not drown the other examples
+CLIENT_WEIGHT = 0.3  # a client pick shows what fits the client, not always the best photo
+PAIR_WEIGHT = 0.5  # one "which do you prefer" answer, per photo
+
+
+def photo_key(session: str, asset_id: int, prefix: str = "") -> str:
+    """One-way key of a photo in a session (no path or name is stored)."""
+    return prefix + hashlib.sha256(f"{session}:{asset_id}".encode()).hexdigest()[:32]
+
+
+def group_key(session: str, day: str | None) -> str:
+    """One-way key of a shoot day: photos of one day are validated together."""
+    return hashlib.sha256(f"{session}:{day or ''}".encode()).hexdigest()[:12]
+
+
+def label_for(flag: str | None, rating: int, favorite: bool) -> tuple[int, float] | None:
+    """(label, weight) from the photo's decision, or None when it says nothing about taste.
+
+    Stars and ❤ are the stronger statement and win over Keep/Reject."""
+    if favorite or rating >= 4:
+        return 1, 1.5
+    if rating == 3:
+        return 1, 1.0
+    if rating == 1:
+        return -1, 1.0
+    if rating == 2:
+        return None
+    if flag == "keep":
+        return 1, 1.0
+    if flag == "reject":
+        return -1, 1.0
+    return None
 
 
 def _occurrences(conn: sqlite3.Connection, where: str, args: tuple) -> list[Occ]:
@@ -104,15 +137,39 @@ class Teacher:
             _occurrences(conn, f"subject_id = ? AND asset_id IN ({marks})", (subject_id, *asset_ids)),
             _occurrences(conn, f"subject_id = ? AND asset_id NOT IN ({marks})", (subject_id, *asset_ids))))
 
-    def culled(self, decision: str | None, ai_rank: int | None, score: object | None) -> None:
-        """The user pressed Keep/Reject on a photo (its technical score, if any, and whether the AI picked it)."""
-        if self.store is None or decision not in ("keep", "reject"):
+    def decided(self, key: str, decision: object, parts: dict[str, float | None], clip: np.ndarray | None,
+                group: str, *, source: str = "app", weight_scale: float = 1.0) -> None:
+        """The user changed Keep/Reject/stars/❤ of one photo: store (or replace, or drop) its example."""
+        if self.store is None:
             return
         try:
-            total = getattr(score, "total", None)
-            parts = getattr(score, "parts", {}) or {}
-            if total is None and ai_rank is None:
-                return  # nothing measured: nothing to learn from
-            self.store.add_culling(decision, ai_rank, total, parts, PROFILE_VERSION)
+            lw = label_for(getattr(decision, "flag", None), getattr(decision, "rating", 0) or 0,
+                           bool(getattr(decision, "favorite", False)))
+            if lw is None:
+                self.store.remove_taste(key)
+                return
+            self.store.upsert_taste(key, source, lw[0], lw[1] * weight_scale, getattr(decision, "rating", 0) or 0,
+                                    group, parts, clip, CLIP_VERSION, PROFILE_VERSION)
         except Exception:  # noqa: BLE001 - learning is optional
-            log.exception("could not save a culling example")
+            log.exception("could not save a taste example")
+
+    def client_picked(self, key: str, parts: dict[str, float | None], clip: np.ndarray | None, group: str) -> None:
+        if self.store is None:
+            return
+        try:
+            self.store.upsert_taste(key, "client", 1, CLIENT_WEIGHT, 0, group, parts, clip, CLIP_VERSION,
+                                    PROFILE_VERSION)
+        except Exception:  # noqa: BLE001
+            log.exception("could not save a client pick")
+
+    def preferred(self, session: str, winner: int, loser: int, clips: dict, parts: dict, groups: dict) -> None:
+        """A "which do you prefer" answer: one liked and one not-liked example, half weight each."""
+        if self.store is None:
+            return
+        for asset_id, label in ((winner, 1), (loser, -1)):
+            try:
+                self.store.upsert_taste(photo_key(session, asset_id, "pair:") + f":{winner}-{loser}", "pair", label,
+                                        PAIR_WEIGHT, 0, groups.get(asset_id, ""), parts.get(asset_id, {}),
+                                        clips.get(asset_id), CLIP_VERSION, PROFILE_VERSION)
+            except Exception:  # noqa: BLE001
+                log.exception("could not save a pair answer")
