@@ -290,7 +290,10 @@ class _Hold(QRunnable):
         super().__init__()
         self.gate = gate
 
+        self.started = threading.Event()
+
     def run(self) -> None:
+        self.started.set()
         self.gate.wait(30)
 
 
@@ -300,7 +303,9 @@ def test_mode_change_while_workers_run(qtbot, env: dict) -> None:  # noqa: F811
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
     gate = threading.Event()
-    w.viewer._pool.start(_Hold(gate))
+    hold = _Hold(gate)
+    w.viewer._pool.start(hold)
+    assert hold.started.wait(10)  # running, not just queued
     project = w.project
     for size, _mode in REFERENCE:
         _at(qtbot, w, size)

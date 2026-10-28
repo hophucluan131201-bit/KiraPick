@@ -21,10 +21,20 @@ class _Hold(QRunnable):
     def __init__(self, gate: threading.Event, events: list[str], name: str) -> None:
         super().__init__()
         self.gate, self.events, self.name = gate, events, name
+        self.started = threading.Event()
 
     def run(self) -> None:
+        self.started.set()
         self.gate.wait(30)
         self.events.append(f"{self.name} done")
+
+
+def _hold(pool, gate: threading.Event, events: list[str], name: str) -> None:  # noqa: ANN001
+    """Run a held task in the pool and wait until it RUNS: a task still queued is dropped by the shutdown's stop
+    (correctly), which would turn the test into a race with the pool's own thumbnail decodes."""
+    task = _Hold(gate, events, name)
+    pool.start(task)
+    assert task.started.wait(10)
 
 
 class _Stubborn(QThread):
@@ -64,7 +74,7 @@ def test_close_waits_without_blocking_then_closes_in_order(qtbot, env: dict, mon
     events: list[str] = []
     project = _watch_db(w, events, monkeypatch)
     gate = threading.Event()
-    w.viewer._pool.start(_Hold(gate, events, "viewer"))
+    _hold(w.viewer._pool, gate, events, "viewer")
 
     t0 = time.monotonic()
     assert w.close() is False  # refused for now…
@@ -94,7 +104,7 @@ def test_hung_worker_asks_then_quits_without_closing_anything(qtbot, env: dict, 
     monkeypatch.setattr(w, "_ask_quit_anyway", lambda left: (asked.append(left), True)[1])
     monkeypatch.setattr(w, "_hard_exit", exits.append)
     gate = threading.Event()
-    w.model._pool.start(_Hold(gate, events, "thumbnail"))
+    _hold(w.model._pool, gate, events, "thumbnail")
 
     w.close()
     qtbot.waitUntil(lambda: exits == [mw.EXIT_ABANDONED], timeout=5000)
@@ -120,7 +130,7 @@ def test_hung_worker_wait_more_then_it_ends(qtbot, env: dict, monkeypatch) -> No
     monkeypatch.setattr(w, "_ask_quit_anyway", lambda left: (asked.append(left), False)[1])  # "chờ thêm"
     monkeypatch.setattr(w, "_hard_exit", lambda code: events.append("hard exit"))
     gate = threading.Event()
-    w.detail.score_card.histogram._pool.start(_Hold(gate, events, "histogram"))
+    _hold(w.detail.score_card.histogram._pool, gate, events, "histogram")
 
     w.close()
     qtbot.waitUntil(lambda: len(asked) >= 2, timeout=5000)  # asked again after another HUNG_AFTER_S
@@ -144,7 +154,7 @@ def test_folder_switch_and_reset_refused_while_a_worker_runs(qtbot, env: dict, t
     monkeypatch.setattr(mw, "delete_session", lambda base, root: deleted.append(root))
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     gate = threading.Event()
-    w.model._pool.start(_Hold(gate, events, "thumbnail"))
+    _hold(w.model._pool, gate, events, "thumbnail")
 
     assert w.start_import(other) is None
     assert w.project is project and _db_open(project) and "Chưa đổi được thư mục" in w.status.text()
