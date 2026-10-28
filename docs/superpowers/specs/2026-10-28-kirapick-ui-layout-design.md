@@ -156,8 +156,9 @@ Formulas are untouched; it reads today's `Score` and `Ranked`.
 - **Colour tokens** (dark theme, contrast ≥ 4.5:1 on the card background for text):
   good `#3FB950`, fair `#D29922`, poor `#F85149`, neutral/unmeasured `#8B949E`, accent (current
   photo, AI suggestion outline) `#2F81F7`, suggestion chip `#E3B341`.
-- **Hard defect** (the existing cap condition in `app/quality/rank.py`: eyes part ≤ 15 or focus part < 30,
-  not lifted by the artistic exception): badge gets a ⚠ glyph next to the number, whatever its band; the chip is "Xem lại".
+- **Hard defect** (the thresholds of the existing cap in `app/quality/rank.py`: eyes part ≤ 15 or focus
+  part < 30; applied for display whether or not taste is ready, and not shown when the artistic exception
+  lifted the cap): badge gets a ⚠ glyph next to the number, whatever its band; the chip is "Xem lại".
 - **Status chips**: ✅ Chọn (good green), ❌ Loại (poor red), ⭐ Đề xuất (suggestion yellow), ⚠ Xem lại
   (fair amber). Every chip has an icon and a word, so meaning never depends on colour alone.
 - Chip rule, first that applies: user Chọn · user Loại · in the newest "⭐ Chọn ảnh" run and undecided ·
