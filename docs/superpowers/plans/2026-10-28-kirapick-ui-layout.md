@@ -200,6 +200,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - Score card: ring with `display_value`; "Kỹ thuật X · Hợp gu Y" only when `ranked.taste` is not None; suggestion text "Đề xuất giữ" when chip kind is "suggested", "Xem lại" when "review", else none; one bar per criterion in `WEIGHTS` order, unmeasured criteria as "— chưa đo được" text (no bar); Hợp gu row; "Bạn chấm nét" row.
 - Chủ thể tab: moves today's grid context-menu person actions into buttons (reuse the existing methods in MainWindow via signals `person_action(str, int)`).
 
+- Task 5 review notes: RV5-01 verify the importer's `capture_time`/`subsec` contract on real imported files (fractional seconds, missing/odd values; timezone only if the importer can store one) and add tests — no change to EXIF storage without a verified cause; RV5-02 the Ảnh tương tự tab header says "Ảnh chụp liền nhau (±3 giây, cùng chủ thể)" — not a pose/visual similarity; RV5-03 histogram off the UI thread with a request token so a late result for a previous photo is dropped (test `test_late_histogram_of_previous_photo_is_ignored`).
 - [ ] **Step 1: Failing tests**: `test_ring_equals_grid_badge` (same record → `ScoreCard.value_text == card_texts(rec)[0]`); `test_unmeasured_criterion_is_not_a_zero_bar`; `test_exif_hidden_until_opened` (EXIF section collapsed; `open_exif()` → Thông tin tab current and expanded); `test_neighbour_click_changes_current_photo`; `test_histogram_arrives_off_thread` (panel shows empty frame, then bins after `wait_for_done`).
 - [ ] **Steps 2–4** FAIL → implement → PASS; update `tests/gui/test_inspector_scores.py` to the new widgets.
 - [ ] **Step 5: Commit** `"UI part 1: detail panel with score card, histogram and tabs"`
@@ -274,6 +275,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 **Interfaces:**
 - Targets from the spec: open → first paint ≤ 0.5 / 1.5 / 3 s; filter/sort ≤ 0.2 / 0.6 / 1.2 s; scroll paint median ≤ 16 ms, worst ≤ 50 ms; tick/P/X repaint ≤ 50 ms; mode change ≤ 100 / 100 / 150 ms; pixmap cache ≤ 300 MB at DPR 2.
 
+- RV5-03 (review): also run the histogram and burst perf tests on Windows.
 - RV3-03 (review): add a sustained-culling measure: 200 alternating P/X presses on a 10,000-photo session, worst and median time from key to repainted card and updated counts (target ≤ 50 ms median, ≤ 100 ms worst); run in CI on Windows and report.
 - [ ] **Step 1: Write the perf tests** parametrised over (1000, 5000, 10000), each measuring with `time.perf_counter` and asserting the targets; print the numbers.
 - [ ] **Step 2:** run `.venv/bin/python -m pytest -m perf -q -s` here; record numbers. If any target fails, implement the off-thread reload and rerun.
