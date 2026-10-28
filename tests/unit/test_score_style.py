@@ -129,3 +129,15 @@ def test_rubric_to_ranking_to_display() -> None:
     assert chip_for(None, False, sharp, rs, False) is None
     with_taste = rank(blurred, 95.0, [])  # taste cannot lift a hard defect above the technical score
     assert with_taste.capped and display_value(with_taste) == display_value(rb)
+
+
+def test_invalid_score_is_logged_once_not_on_every_repaint(caplog) -> None:  # noqa: ANN001
+    import logging
+
+    from app.ui import score_style
+
+    score_style._warned.clear()
+    with caplog.at_level(logging.WARNING, logger="app.ui.score_style"):
+        for _ in range(50):  # a grid repaint calls this for every visible card
+            display_value(Ranked(float("nan"), None, float("nan")))
+    assert len(caplog.records) == 1

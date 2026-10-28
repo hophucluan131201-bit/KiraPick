@@ -15,6 +15,7 @@ from app.quality.rank import EYES_CLOSED, FOCUS_DEFECT, Ranked
 from app.quality.score import GOOD, POOR, Score
 
 log = logging.getLogger(__name__)
+_warned: set[str] = set()
 
 Band = Literal["good", "fair", "poor", "none"]
 ChipKind = Literal["keep", "reject", "suggested", "review"]
@@ -52,7 +53,10 @@ def shown(value: float | None) -> int | None:
     if value is None:
         return None
     if not math.isfinite(value) or not -0.5 < value < 100.5:
-        log.warning("score outside 0..100 not displayed")
+        kind = "not finite" if not math.isfinite(value) else "outside 0..100"
+        if kind not in _warned:  # once per kind: repaints call this for every visible card
+            _warned.add(kind)
+            log.warning("score %s not displayed (further ones not logged)", kind)
         return None
     return min(100, max(0, int(math.floor(value + 0.5))))
 
