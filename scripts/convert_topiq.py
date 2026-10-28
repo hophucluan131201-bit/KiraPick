@@ -79,11 +79,12 @@ def convert(variant: str, out: Path, checkpoint: Path | None) -> int:
     # and many more libraries. Empty packages pointing at the installed folders avoid that.
     import importlib.util
 
-    root = Path(importlib.util.find_spec("pyiqa").submodule_search_locations[0])
-    for pkg, folder in (("pyiqa", root), ("pyiqa.archs", root / "archs"), ("pyiqa.utils", root / "utils")):
-        module = types.ModuleType(pkg)
-        module.__path__ = [str(folder)]
-        sys.modules[pkg] = module
+    if "pyiqa" not in sys.modules:  # once per process (--variant all converts several models)
+        root = Path(importlib.util.find_spec("pyiqa").submodule_search_locations[0])
+        for pkg, folder in (("pyiqa", root), ("pyiqa.archs", root / "archs"), ("pyiqa.utils", root / "utils")):
+            module = types.ModuleType(pkg)
+            module.__path__ = [str(folder)]
+            sys.modules[pkg] = module
     import numpy as np
     import onnx
     import onnxruntime as ort
