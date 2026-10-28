@@ -1,0 +1,41 @@
+"""Garbage is collected on the GUI thread only: Qt objects must never be destroyed from a worker thread
+(a full test run crashed with a segfault while Python collected garbage inside a Qt thread-pool worker)."""
+
+from __future__ import annotations
+
+import gc
+import threading
+
+from tests.gui.test_main_window import _window, env  # noqa: F401 - fixture
+
+
+def test_automatic_gc_is_off_and_the_gui_timer_collects(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    from app.ui import gc_guard
+
+    w = _window(qtbot, env)
+    assert not gc.isenabled()
+    guard = gc_guard.installed()
+    assert guard is not None and guard.timer.isActive()
+    calls: list[tuple[int, bool]] = []
+    real = gc.collect
+    monkeypatch.setattr(gc_guard.gc, "collect",
+                        lambda gen=2: calls.append((gen, threading.current_thread() is threading.main_thread()))
+                        or real(gen))
+    keep = [[i] for i in range(gc_guard.THRESHOLD[0] * 2)]  # pass the generation-0 threshold
+    qtbot.waitUntil(lambda: bool(calls), timeout=3000)
+    assert calls[0] == (0, True)  # run by the timer, on the GUI thread
+    assert keep and w is not None
+
+
+def test_check_follows_pythons_generation_rule(monkeypatch) -> None:
+    from app.ui import gc_guard
+
+    calls: list[int] = []
+    monkeypatch.setattr(gc_guard.gc, "collect", lambda gen=2: calls.append(gen))
+    t0, t1, t2 = gc_guard.THRESHOLD
+    for counts, expected in (((t0, 0, 0), []), ((t0 + 1, t1, 0), [0]), ((t0 + 1, t1 + 1, t2), [0, 1]),
+                             ((t0 + 1, t1 + 1, t2 + 1), [0, 1, 2])):
+        calls.clear()
+        monkeypatch.setattr(gc_guard.gc, "get_count", lambda c=counts: c)
+        gc_guard.GuiThreadCollector.check()
+        assert calls == expected, counts

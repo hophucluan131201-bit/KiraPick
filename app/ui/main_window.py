@@ -28,6 +28,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -82,6 +83,7 @@ from app.ui.grid import make_filmstrip, make_grid
 from app.ui.detail_panel import DetailPanel
 from app.ui.top_bar import CELL_DEFAULT, TopBar
 from app.ui.bottom_bar import BottomBar
+from app.ui import gc_guard
 from app.ui.export_dialog import INCLUDE_PAIRS_KEY
 from app.storage.stats import Counts, counts
 from app.storage.workflow import STEPS, StepState, steps
@@ -164,6 +166,7 @@ class MainWindow(QMainWindow):
         self._focus_labels_since_training = 0
         self.focus_status: dict[str, focus_learning.FocusStatus] = {}
 
+        gc_guard.install(QApplication.instance())  # garbage is collected on the GUI thread only
         self._build_toolbar()
         self._build_body()
         self._build_statusbar()
