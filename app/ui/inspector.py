@@ -1,4 +1,6 @@
-"""Right-hand panel: file facts, culling state, and honest AI status."""
+"""Thông tin ảnh tab: file facts and culling state; full EXIF folded away until asked for.
+
+``explain_html`` (the long text version of the scores) is kept for the selection dialog and tests."""
 
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ from app.quality.rank import Ranked
 from app.learning.focus import KEYS, LABELS as FOCUS_LABELS, NAMES as FOCUS_NAMES
 from app.quality.score import LABELS, WEIGHTS, Score
 from app.ui.asset_model import AssetRecord
+from app.ui.collapsible import CollapsibleSection
 
 _SOURCE_VI = {
     "embedded_jpeg": "ảnh nhúng trong RAW",
@@ -93,27 +96,25 @@ class Inspector(QWidget):
         outer.setContentsMargins(10, 6, 10, 6)
         self.fields: dict[str, QLabel] = {}
         for title, keys in (
-            ("ẢNH", ["Tên file", "Thư mục", "Cặp RAW+JPEG", "Chụp lúc", "Kích thước"]),
-            ("MÁY ẢNH", ["Máy", "Ống kính", "Thông số"]),
+            ("ẢNH", ["Tên file", "Chụp lúc", "Máy", "Ống kính", "Cặp RAW+JPEG", "Thư mục", "Kích thước"]),
             ("CHỌN LỌC", ["Đánh dấu", "Sao", "Yêu thích", "Bạn chấm nét"]),
-            ("PHÂN TÍCH AI", ["Chủ thể", "Điểm chất lượng"]),  # label kept short; content is a list
             ("HIỂN THỊ", ["Nguồn ảnh"]),
         ):
             header = QLabel(title)
             header.setObjectName("sectionTitle")
             outer.addWidget(header)
-            form = QFormLayout()
-            form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-            for key in keys:
-                value = QLabel("—")
-                value.setWordWrap(True)
-                value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                if key == "Điểm chất lượng":  # long, structured content: the whole panel width
-                    form.addRow(value)
-                else:
-                    form.addRow(QLabel(key), value)
-                self.fields[key] = value
-            outer.addLayout(form)
+            outer.addLayout(self._form(keys))
+        exif_body = QWidget()
+        exif_layout = QVBoxLayout(exif_body)
+        exif_layout.setContentsMargins(0, 0, 0, 0)
+        exif_layout.addLayout(self._form(["Thông số"]))
+        self.exif_all = QLabel()
+        self.exif_all.setWordWrap(True)
+        self.exif_all.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.exif_all.setStyleSheet(f"color: {theme.MUTED};")
+        exif_layout.addWidget(self.exif_all)
+        self.exif_section = CollapsibleSection("Thông số EXIF", exif_body, "exif", None)  # never remembered
+        outer.addWidget(self.exif_section)
         self.error = QLabel()
         self.error.setWordWrap(True)
         self.error.setStyleSheet(f"color: {theme.ERROR};")
@@ -121,13 +122,23 @@ class Inspector(QWidget):
         outer.addStretch(1)
         self.show_record(None)
 
-    def show_record(self, rec: AssetRecord | None, view_source: str | None = None, people: str | None = None,
-                    selection: str | None = None, taste: TasteStatus | None = None) -> None:
-        """selection: why the AI picked (or did not pick) this photo, if a selection was made."""
+    def _form(self, keys: list[str]) -> QFormLayout:
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        for key in keys:
+            value = QLabel("—")
+            value.setWordWrap(True)
+            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            form.addRow(QLabel(key), value)
+            self.fields[key] = value
+        return form
+
+    def show_record(self, rec: AssetRecord | None, view_source: str | None = None) -> None:
         f = self.fields
         if rec is None:
             for label in f.values():
                 label.setText("—")
+            self.exif_all.clear()
             self.error.clear()
             return
         f["Tên file"].setText(rec.name)
@@ -145,11 +156,8 @@ class Inspector(QWidget):
         f["Yêu thích"].setText("♥ có" if rec.favorite else "không")
         f["Bạn chấm nét"].setText(f"{FOCUS_NAMES[FOCUS_LABELS[rec.focus]]} ({KEYS[rec.focus]})" if rec.focus
                                   else "chưa — Q nét căng · W hơi soft · R lệch nét")
-        f["Chủ thể"].setText(people or "chưa nhận diện — bấm 🧠 Nhận diện chủ thể")
-        if rec.score is None:
-            f["Điểm chất lượng"].setText("chưa chấm — bấm 📊 Phân tích ảnh")
-        else:
-            f["Điểm chất lượng"].setText(explain_html(rec.score, rec.ranked, taste, rec.pick_rank, selection))
+        self.exif_all.setText("\n".join(f"{k}: {v}" for k, v in sorted(rec.exif.items()) if v not in (None, ""))
+                              or "không có dữ liệu EXIF")
         source = view_source or rec.preview_source
         f["Nguồn ảnh"].setText(_SOURCE_VI.get(source or "", source or "—"))
         self.error.setText(f"Lỗi: {rec.error}" if rec.error else "")

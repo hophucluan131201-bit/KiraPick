@@ -1,4 +1,4 @@
-"""A titled section of the left panel that folds away; its state is kept in the settings."""
+"""A titled section that folds away; its state is kept in the settings (when given)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 
 class CollapsibleSection(QWidget):
-    def __init__(self, title: str, body: QWidget, key: str, settings: QSettings,
+    def __init__(self, title: str, body: QWidget, key: str, settings: QSettings | None,
                  parent: QWidget | None = None, *, extra: QWidget | None = None) -> None:
         super().__init__(parent)
         self._settings, self._key, self.body = settings, f"left/{key}_collapsed", body
@@ -27,7 +27,7 @@ class CollapsibleSection(QWidget):
         if extra is not None:
             layout.addWidget(extra)
         layout.addWidget(body, 1)
-        self.set_collapsed(settings.value(self._key, False, bool))
+        self.set_collapsed(settings.value(self._key, False, bool) if settings is not None else True)
 
     @property
     def collapsed(self) -> bool:
@@ -41,4 +41,5 @@ class CollapsibleSection(QWidget):
         self.body.setVisible(not collapsed)
         if self.extra is not None:
             self.extra.setVisible(not collapsed)
-        self._settings.setValue(self._key, collapsed)
+        if self._settings is not None:
+            self._settings.setValue(self._key, collapsed)

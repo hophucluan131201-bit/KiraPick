@@ -127,3 +127,21 @@ def test_burst_across_a_minute_and_midnight(conn: sqlite3.Connection) -> None:
     a, b = at("2026-10-25T16:00:59", "50"), at("2026-10-25T16:01:01", "00")
     c, d = at("2026-10-25T23:59:59", "00"), at("2026-10-26T00:00:01", "00")
     assert neighbours(conn, a) == [b] and neighbours(conn, c) == [d]
+
+
+def test_capture_time_contract_from_the_importer() -> None:
+    """Review RV5-01. The importer stores DateTimeOriginal as naive ISO local time 'YYYY-MM-DDTHH:MM:SS' (no time
+    zone is read) and SubSecTimeOriginal as text: the owner's Z5 NEFs give two digits ('07', '20', '59')."""
+    from datetime import datetime
+
+    from app.ingest.metadata import _as_datetime
+    from app.quality.burst import _moment
+
+    assert _as_datetime("2026:07:12 15:53:18") == "2026-07-12T15:53:18"
+    base = datetime(2026, 7, 12, 15, 53, 18)
+    assert _moment("2026-07-12T15:53:18", "07") == base.replace(microsecond=70_000)  # hundredths (Nikon)
+    assert _moment("2026-07-12T15:53:18", "123") == base.replace(microsecond=123_000)  # thousandths
+    assert _moment("2026-07-12T15:53:18", "07 ") == base.replace(microsecond=70_000)  # space-padded EXIF text
+    assert _moment("2026-07-12T15:53:18", "") == base and _moment("2026-07-12T15:53:18", None) == base
+    assert _moment("2026-07-12T15:53:18", "ab") == base  # junk ignored, the second still counts
+    assert _moment("not a date", "07") is None and _moment(None, None) is None

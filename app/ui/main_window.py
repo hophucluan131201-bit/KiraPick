@@ -61,7 +61,7 @@ from app.ai.models import ModelRegistry, ModelState
 from app.identity import actions
 from app.identity.cluster import merge_suggestions
 from app.learning.store import LearningStore
-from app.quality import select
+from app.quality import burst, select
 from app.learning.teacher import Teacher, group_key, photo_key
 from app.learning import focus as focus_learning
 from app.learning.taste import TasteStatus, train
@@ -80,7 +80,7 @@ from app.updates.app_update import should_auto_check
 from app.ui.people_delegate import PeopleDelegate
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
-from app.ui.inspector import Inspector
+from app.ui.detail_panel import DetailPanel
 from app.ui.review_dialog import ReviewDialog
 from app.ui.select_dialog import SelectDialog
 from app.ui.jobs import AnalyzeThread, ImportThread
@@ -448,16 +448,19 @@ class MainWindow(QMainWindow):
         self.center.currentChanged.connect(self._on_view_changed)
         self._on_view_changed(self.center.currentIndex())
 
-        self.inspector = Inspector()
-        # Scrollable so the window can shrink to small/scaled screens (e.g. 1080p at 150%).
-        inspector_scroll = QScrollArea()
-        inspector_scroll.setWidget(self.inspector)
-        inspector_scroll.setWidgetResizable(True)
-        inspector_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        inspector_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.detail = DetailPanel(pool=self._taste_pool)
+        self.inspector = self.detail.inspector  # the Thông tin ảnh tab
+        self.detail.keep_clicked.connect(lambda: self.set_flag("keep"))
+        self.detail.reject_clicked.connect(lambda: self.set_flag("reject"))
+        self.detail.clear_clicked.connect(lambda: self.set_flag(None))
+        self.detail.rating_clicked.connect(self.set_rating)
+        self.detail.favorite_clicked.connect(self.toggle_favorite)
+        self.detail.neighbour_clicked.connect(self.go_to_asset)
+        self.detail.open_loupe.connect(lambda: self.show_loupe(True))
+        self.detail.people_menu_requested.connect(lambda pos: self._people_menu_at(pos))
         splitter.addWidget(side)
         splitter.addWidget(center_box)
-        splitter.addWidget(inspector_scroll)
+        splitter.addWidget(self.detail)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
@@ -1175,6 +1178,11 @@ class MainWindow(QMainWindow):
             self._fill_people()
 
     def _grid_context_menu(self, pos: object) -> None:
+        self._people_menu_at(self.grid.viewport().mapToGlobal(pos))  # type: ignore[arg-type]
+
+    def _people_menu_at(self, global_pos: object) -> None:
+        """People actions for the marked photos (or the current one): from the grid's right-click menu and from
+        the detail panel's Chủ thể tab — one menu, one behaviour."""
         if self.project is None:
             return
         assets = [r.id for r in self.selected_records()]
@@ -1195,7 +1203,7 @@ class MainWindow(QMainWindow):
             if r["id"] != target:
                 targets[assign_menu.addAction(r["display_name"] or f"Chủ thể {r['id']}")] = r["id"]
         assign_menu.setEnabled(bool(targets))
-        chosen = menu.exec(self.grid.viewport().mapToGlobal(pos))  # type: ignore[arg-type]
+        chosen = menu.exec(global_pos)  # type: ignore[arg-type]
         if chosen is None:
             return
         if chosen is new_subject:
@@ -1263,8 +1271,22 @@ class MainWindow(QMainWindow):
         return ", ".join(parts) if parts else "không thấy người"
 
     def _show_inspector(self, rec: AssetRecord | None) -> None:
-        self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None,
-                                   selection=self._selection_text(rec), taste=self.taste.status)
+        """Fill the detail panel for this photo (score card, info, burst, people)."""
+        neighbours: list[AssetRecord] = []
+        if rec is not None and self.project is not None:
+            by_id = {r.id: r for r in self.model.records()}
+            # The burst as recorded, limited to photos in the current view (a filter may hide some).
+            neighbours = [by_id[i] for i in burst.neighbours(self.project.conn, rec.id) if i in by_id]
+        self.detail.show_record(
+            rec, taste=self.taste.status, people=self._people_text(rec.id) if rec else None, neighbours=neighbours,
+            pixmap=self.model.pixmap(rec) if rec else None, selection=self._selection_text(rec),
+            neighbour_pixmaps={n.id: pm for n in neighbours if (pm := self.model.pixmap(n)) is not None})
+
+    def go_to_asset(self, asset_id: int) -> None:
+        """Make this photo the current one (Ảnh tương tự)."""
+        idx = self.model.index_of(asset_id)
+        if idx.isValid():
+            self.select_row(idx.row())
 
     # ------------------------------------------------------- navigation
     def reload_preserving_view(self) -> None:
@@ -1307,8 +1329,7 @@ class MainWindow(QMainWindow):
 
     def _on_current_changed(self, current: QModelIndex, _prev: QModelIndex) -> None:
         rec = self.model.record(current)
-        self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None,
-                                   selection=self._selection_text(rec), taste=self.taste.status)
+        self._show_inspector(rec)
         if rec is not None and self.center.currentIndex() == 2:
             self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec), rec.rotation)
 
@@ -1428,7 +1449,7 @@ class MainWindow(QMainWindow):
         if self.model.rowCount():
             self.select_row(0)
         else:
-            self.inspector.show_record(None)
+            self._show_inspector(None)
 
     def _refresh_sidebar(self) -> None:
         self.sources.blockSignals(True)

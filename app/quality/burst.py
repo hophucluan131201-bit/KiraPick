@@ -21,8 +21,9 @@ def _moment(capture_time: str | None, subsec: str | None) -> datetime | None:
         t = datetime.fromisoformat(capture_time)
     except ValueError:
         return None
-    if subsec and subsec.isdigit():
-        t += timedelta(seconds=float("0." + subsec))
+    digits = (subsec or "").strip()  # EXIF text may be space-padded
+    if digits.isdigit():
+        t += timedelta(seconds=float("0." + digits))
     return t
 
 

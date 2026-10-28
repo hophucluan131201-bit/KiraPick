@@ -368,9 +368,9 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     w.people.setCurrentRow(0)  # filter the grid to the first person
     first = w.people.item(0).data(Qt.ItemDataRole.UserRole)[1]
     assert w.model.rowCount() == subjects[0]["photos"]
-    assert w.inspector.fields["Chủ thể"].text().startswith(actions.subject_label(w.project.conn, first))
-    explained = w.inspector.fields["Điểm chất lượng"].text()
-    assert "Kỹ thuật" in explained and "/100" in explained and "Hợp gu bạn" in explained and "mắt" in explained
+    assert w.detail.people_label.text().startswith(actions.subject_label(w.project.conn, first))
+    explained = w.detail.score_card.text()  # the Phân tích AI tab
+    assert w.detail.score_card.value_text.isdigit() and "Hợp gu cá nhân" in explained and "mắt" in explained
     assert "thẩm mỹ" in explained  # judged (hint) when the aesthetic model is present, else listed as not judged
 
     monkeypatch.setattr(mw.QInputDialog, "getText", lambda *a, **k: ("Aki", True))
@@ -515,8 +515,9 @@ def test_ai_selection_puts_picks_first_marks_keep_and_explains(qtbot, env: dict)
     assert recs[ids[3]].flag == "reject"  # never overrides the user's own decision
     assert "AI đã chọn" in w.status.text()
     w.select_row(0)
-    text = w.inspector.fields["Điểm chất lượng"].text()
-    assert "/100" in text and "AI chọn" in text and "Chưa đánh giá" in text and "mắt nhắm/mở" in text
+    text = w.detail.score_card.text()
+    assert w.detail.score_card.value_text.isdigit() and "Được chọn vì" in text
+    assert "Chưa đánh giá" in text and "mắt nhắm/mở" in text
     before = w.teacher.store.culling_count()
     w.set_flag("reject")  # the user disagrees with the AI's first choice: a taste example
     assert w.teacher.store.culling_count() == before + 1
@@ -557,9 +558,9 @@ def test_per_person_selection_covers_everyone_even_from_a_person_view(qtbot, env
     first = [r.id for r in w.model.records()][:5]
     assert set(first) == set(chosen)
     w.select_row(0)
-    assert "Được chọn vì: điểm cao nhất" in w.inspector.fields["Điểm chất lượng"].text()
+    assert "Được chọn vì: điểm cao nhất" in w.detail.score_card.text()
     w.select_row(5)  # the photo of person 1 that was left out
-    assert "Không được chọn" in w.inspector.fields["Điểm chất lượng"].text()
+    assert "Không được chọn" in w.detail.score_card.text()
 
 
 def test_ctrl_and_shift_click_select_several_in_grid_and_filmstrip(qtbot, env: dict) -> None:
