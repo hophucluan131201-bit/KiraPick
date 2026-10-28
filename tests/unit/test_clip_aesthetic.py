@@ -119,3 +119,29 @@ def test_tags_use_the_margin_over_the_neutral_prompt(tmp_path: Path) -> None:
     assert model.tags(emb) == []  # 0.01 margin: not enough
     emb[1] = 0.5
     assert model.tags(emb) == [("low_key", pytest.approx(0.1))]
+
+
+def test_gpu_embedding_must_match_the_cpu(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A graphics card giving a different embedding would silently skew taste and LAION: use the CPU then."""
+    reg = registry(tmp_path)
+    real = ca.create_session
+
+    def fake(path, prefer_gpu=True, **k):  # noqa: ANN001, ANN202
+        s = real(path, prefer_gpu=False, **k)
+        if prefer_gpu and Path(path).name == "clip.onnx":
+            s.device = "directml"
+            inner = s.session
+
+            class Skewed:  # the "GPU" returns a different vector
+                def get_inputs(self):  # noqa: ANN202
+                    return inner.get_inputs()
+
+                def run(self, names, feeds):  # noqa: ANN001, ANN202
+                    out = inner.run(names, feeds)
+                    return [out[0][:, ::-1].copy()]
+            s.session = Skewed()
+        return s
+
+    monkeypatch.setattr(ca, "create_session", fake)
+    model = ca.ClipAesthetic(reg, prefer_gpu=True)
+    assert model.device == "cpu" and "khác CPU" in model.check["problem"]

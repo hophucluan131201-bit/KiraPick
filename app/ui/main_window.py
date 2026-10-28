@@ -55,7 +55,7 @@ from app.branding import APP_NAME, SETTINGS_IDS, data_dir
 from app.storage import decisions
 from app.storage.project import Project
 from app.storage.sessions import delete_session, open_session, purge_old_sessions
-from app.ai.models import ModelRegistry
+from app.ai.models import ModelRegistry, ModelState
 from app.identity import actions
 from app.identity.cluster import merge_suggestions
 from app.learning.store import LearningStore
@@ -1586,6 +1586,11 @@ class MainWindow(QMainWindow):
         store = self.teacher.store
         self._decisions_since_training = 0
         if store is None:
+            return
+        clip = self._registry_or_default().status("clip_l14_image")
+        if clip.state is not ModelState.READY:
+            self._on_taste_trained(TasteStatus(False, "Chưa có mô hình CLIP nên chưa học được gu "
+                                                      f"({clip.state.value}: {clip.path.name})"))
             return
         try:
             examples = store.taste_examples(CLIP_VERSION)

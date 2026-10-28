@@ -45,13 +45,17 @@ def preprocess(bgr: np.ndarray) -> np.ndarray:
 
 
 class ClipAesthetic:
+    GPU_MIN_COSINE = 0.99  # the graphics card's embedding must match the CPU's on a probe image
+
     def __init__(self, registry: ModelRegistry, *, prefer_gpu: bool = True) -> None:
-        self.session = create_session(registry.require("clip_l14_image"), prefer_gpu=prefer_gpu)
+        path = registry.require("clip_l14_image")
+        self.session = create_session(path, prefer_gpu=prefer_gpu)
         self._input = self.session.session.get_inputs()[0].name
+        problem = self._differs_from_cpu(path) if self.session.device != "cpu" else None
         self.head = create_session(registry.require("laion_aesthetic"), prefer_gpu=False)  # tiny
         self._head_input = self.head.session.get_inputs()[0].name
         self.device = self.session.device
-        self.check: dict = {"device": self.device, "note": self.session.fallback_reason}
+        self.check: dict = {"device": self.device, "note": self.session.fallback_reason, "problem": problem}
         self._prompt_ids: list[str] = []
         self._prompts = np.zeros((0, 768), np.float32)
         self._thresholds = np.zeros(0, np.float32)
@@ -67,6 +71,26 @@ class ClipAesthetic:
                     self._negatives = neg / np.linalg.norm(neg, axis=1, keepdims=True)
         except ModelUnavailableError:
             self.check["prompts"] = "missing"
+
+    def _differs_from_cpu(self, path) -> str | None:  # noqa: ANN001
+        """Keep the GPU only if its embedding of a probe image matches the CPU's (else switch to the CPU)."""
+        gx, gy = np.meshgrid(np.linspace(0, 255, 300), np.linspace(0, 255, 200))
+        probe = preprocess(np.dstack([gx, gy, np.full((200, 300), 128.0)]).astype(np.uint8))
+        cpu = create_session(path, prefer_gpu=False)
+        ref = cpu.run(None, {self._input: probe})[0].reshape(-1)
+        try:
+            got = self.session.run(None, {self._input: probe})[0].reshape(-1)
+        except Exception as exc:  # noqa: BLE001
+            got, problem = None, f"card đồ hoạ lỗi ({type(exc).__name__})"
+        if got is not None:
+            cos = float(ref @ got / (np.linalg.norm(ref) * np.linalg.norm(got) + 1e-12))
+            problem = None if cos >= self.GPU_MIN_COSINE and self.session.device != "cpu" else (
+                f"kết quả trên card đồ hoạ khác CPU (cosine {cos:.3f})" if self.session.device != "cpu"
+                else "card đồ hoạ lỗi khi chạy")
+        if problem:
+            cpu.fallback_reason = f"CLIP chạy bằng CPU: {problem}"
+            self.session = cpu
+        return problem
 
     def embed(self, bgr: np.ndarray) -> np.ndarray:
         out = self.session.run(None, {self._input: preprocess(bgr)})[0].reshape(-1).astype(np.float32)
