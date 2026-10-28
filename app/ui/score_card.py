@@ -87,8 +87,8 @@ class HistogramWidget(QWidget):
         # Keyed by the preview FILE (unique per session folder), not the asset id: ids restart at 1 in every session.
         self._key: Path | None = None
         self._cache: dict[Path, Histogram] = {}
-        self._pool = pool or QThreadPool.globalInstance()
-        self._signals = _HistSignals()
+        self._pool = pool or QThreadPool(self)  # its own pool: waiting for it never waits for unrelated work
+        self._signals = _HistSignals(self)  # destroyed by this widget, on the GUI thread (app.ui.shutdown)
         self._signals.done.connect(self.deliver)
 
     def request(self, asset_id: int | None, preview: Path | None) -> None:
@@ -115,6 +115,10 @@ class HistogramWidget(QWidget):
 
     def wait(self, msecs: int = 5000) -> bool:
         return self._pool.waitForDone(msecs)
+
+    def stop_pending(self) -> None:
+        """Drop curves not started yet; the shown photo's curve is asked again when it is shown again."""
+        self._pool.clear()
 
     def paintEvent(self, _event: object) -> None:  # noqa: N802 - Qt override
         p = QPainter(self)

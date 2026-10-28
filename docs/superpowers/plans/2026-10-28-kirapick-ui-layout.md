@@ -288,6 +288,8 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - RV9-02 (review): time closing/switching a session while the thread pool still runs a learning job (histogram.wait + taste/focus jobs); target ≤ 1 s added.
 - RV10-03 (review): the sustained P/X measure includes `_show_inspector`, `_update_counts`/bottom-bar counts, `refresh_steps` and the repaint — end-to-end per key press, not SQL alone.
 - RV3-03 (review): add a sustained-culling measure: 200 alternating P/X presses on a 10,000-photo session, worst and median time from key to repainted card and updated counts (target ≤ 50 ms median, ≤ 100 ms worst); run in CI on Windows and report.
+- Task 11 review (V2/V3): measure GC pauses (the GUI-thread timer's `gc.collect` duration, worst and median) and process memory after a long session (e.g. 2,000 P/X + browsing on 10,000 photos), with `app.ui.gc_guard` on.
+- Task 11 review: run `-m stress` (`tests/gui/test_worker_lifecycle.py`, `tests/gui/test_shutdown_timeout.py`) on Windows / Python 3.12 in CI; close and switch session while analysis, thumbnails and histograms run (real models where available). A run without a crash is not proof that the crash is gone; report it as "not reproduced in N runs".
 - [ ] **Step 1: Write the perf tests** parametrised over (1000, 5000, 10000), each measuring with `time.perf_counter` and asserting the targets; print the numbers.
 - [ ] **Step 2:** run `.venv/bin/python -m pytest -m perf -q -s` here; record numbers. If any target fails, implement the off-thread reload and rerun.
 - [ ] **Step 3:** default test run excludes `perf` (`addopts = -m "not perf"`); CI step added.
@@ -298,4 +300,5 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - [ ] RV9-03: integration test on a real session DB: the panel's people action changes only the current photo's occurrences/subject rows; marked photos' rows are byte-identical before/after.
 - [ ] RV2-04: integration test with a real RAW+JPEG pair (public NEF fixture + its JPEG) through import → grid → Chọn → size == export plan → export copies both.
 - [ ] RV2-05: open a v6 session copy with this build (migrates to v7, data intact) and confirm 2.2.1 refuses v7 with its "update the app" message; write it in the beta release notes.
+- [ ] Task 11 review: on the owner's Windows PC, close KiraPick during an analysis and during a large import; it must close within a few seconds or show the "Đang đợi … dừng hẳn" status, never crash.
 - [ ] Full suite `.venv/bin/python -m pytest -q` green; perf numbers in `docs/IMPLEMENTATION_STATUS.md` with status "tested offscreen" (no real Windows GUI run here); screenshots sent; push to `beta` with no release marker; report to the owner in Vietnamese and start the part 2 discussion.

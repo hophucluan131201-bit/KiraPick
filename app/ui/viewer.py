@@ -83,7 +83,7 @@ class ImageViewer(QGraphicsView):
 
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(2)
-        self._signals = _Signals()
+        self._signals = _Signals(self)  # destroyed by the viewer, on the GUI thread (app.ui.shutdown)
         self._signals.done.connect(self._on_loaded)
         self._token = 0
         self._rotation = 0  # Xoay xem of the photo shown (quarter turns clockwise)
@@ -165,6 +165,10 @@ class ImageViewer(QGraphicsView):
 
     def wait_idle(self, msecs: int = 30000) -> bool:
         return self._pool.waitForDone(msecs)
+
+    def stop_pending(self) -> None:
+        """Drop loads not started yet (a running decode cannot be interrupted; it finishes)."""
+        self._pool.clear()
 
     # ----------------------------------------------------------- loading
     def _request(self, quality: Quality) -> None:

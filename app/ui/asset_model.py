@@ -199,7 +199,7 @@ class AssetListModel(QAbstractListModel):
         self._pending: set[int] = set()
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(2)
-        self._signals = _ThumbSignals()
+        self._signals = _ThumbSignals(self)  # destroyed by the model, on the GUI thread (app.ui.shutdown)
         self._signals.loaded.connect(self._on_thumb_loaded)
 
     # ---------------------------------------------------------------- data
@@ -397,5 +397,10 @@ class AssetListModel(QAbstractListModel):
         self.dataChanged.emit(idx, idx)
 
     def wait_for_thumbnails(self, msecs: int = 5000) -> bool:
-        """Test helper: block until queued thumbnail decodes finish."""
+        """Block at most msecs until thumbnail decodes finish; True when none runs any more."""
         return self._pool.waitForDone(msecs)
+
+    def stop_pending(self) -> None:
+        """Drop decodes not started yet (they are asked again when a thumbnail is next painted)."""
+        self._pool.clear()
+        self._pending.clear()

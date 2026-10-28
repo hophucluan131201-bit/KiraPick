@@ -7,6 +7,7 @@ from html import escape
 from datetime import date
 from collections.abc import Callable
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from PySide6.QtCore import (
     QSize,
     QStandardPaths,
     Qt,
+    QThread,
     QThreadPool,
     QTimer,
     Signal,
@@ -83,7 +85,7 @@ from app.ui.grid import make_filmstrip, make_grid
 from app.ui.detail_panel import DetailPanel
 from app.ui.top_bar import CELL_DEFAULT, TopBar
 from app.ui.bottom_bar import BottomBar
-from app.ui import gc_guard
+from app.ui import gc_guard, shutdown
 from app.ui.export_dialog import INCLUDE_PAIRS_KEY
 from app.storage.stats import Counts, counts
 from app.storage.workflow import STEPS, StepState, steps
@@ -161,6 +163,12 @@ class MainWindow(QMainWindow):
         self.taste = TasteService()
         self._decisions_since_training = 0
         self._taste_pool = QThreadPool(self)
+        self._retiring: list[QThread] = []  # stopped threads that did not finish in time (app.ui.shutdown)
+        self._shutdown_ready = False  # every worker stopped: the next closeEvent releases everything
+        self._shutdown_since: float | None = None
+        self._shutdown_ask_at = 0.0
+        self._shutdown_timer = QTimer(self, interval=100)
+        self._shutdown_timer.timeout.connect(self._shutdown_tick)
         # Learning jobs report through these window-owned objects: a QObject created per job would be deleted by
         # the worker thread when the job ends (Qt objects must die on their own thread).
         self._taste_signals = _TasteSignals(self)
@@ -493,7 +501,7 @@ class MainWindow(QMainWindow):
         self.center.currentChanged.connect(self._on_view_changed)
         self._on_view_changed(self.center.currentIndex())
 
-        self.detail = DetailPanel(pool=self._taste_pool)
+        self.detail = DetailPanel()
         self.inspector = self.detail.inspector  # the Thông tin ảnh tab
         self.detail.keep_clicked.connect(lambda: self.set_flag("keep"))
         self.detail.reject_clicked.connect(lambda: self.set_flag("reject"))
@@ -582,16 +590,21 @@ class MainWindow(QMainWindow):
         if self.model.rowCount():
             self.select_row(0)
 
-    def _close_session(self) -> None:
-        self._marking_timer.stop()
+    def _close_session(self) -> bool:
+        """Close the current session once nothing reads it any more; False (session left open) if work is still
+        running after SWITCH_WAIT_MS — the caller must then not switch or delete anything."""
         self._stop_analysis()
         for dialog in self.findChildren(QDialog):
             dialog.close()
         self.viewer.show_photo(None)
-        self.viewer.wait_idle(10000)
-        self.detail.score_card.histogram.wait(10000)
+        left = self._settle(self._session_work, SWITCH_WAIT_MS)
+        if left:
+            log.warning("session kept open: %s still running", ", ".join(left))
+            self.status.setText(f"Chưa đổi được thư mục: {', '.join(left)} vẫn đang chạy. Thử lại sau vài giây.")
+            self._on_current_changed(self.grid.currentIndex(), QModelIndex())  # show again what was dropped
+            return False
+        self._marking_timer.stop()
         self.detail.score_card.histogram.clear_cache()
-        self.model.wait_for_thumbnails(10000)  # Windows cannot delete files still being read
         self.model.set_project(None)
         if self.project is not None:
             self.project.close()
@@ -600,6 +613,42 @@ class MainWindow(QMainWindow):
         self._paused_job = None
         self._fill_people()
         self._update_steps()
+        return True
+
+    # ------------------------------------------------------- background work
+    @staticmethod
+    def _settle(works: Callable[[], list[shutdown.Work]], msecs: int) -> list[str]:
+        """Stop and wait; then deliver results the workers already queued (while the session is still open) and stop
+        again whatever those results started. Returns what still runs (then nothing may be released)."""
+        left = shutdown.drain(works(), msecs)
+        if left:
+            return left
+        QCoreApplication.sendPostedEvents()
+        return shutdown.drain(works(), msecs)
+
+    def _session_work(self) -> list[shutdown.Work]:
+        """Everything that reads the current session (database, preview and thumbnail files)."""
+        works = [
+            shutdown.Work("đọc ảnh để xem", self.viewer.wait_idle, self.viewer.stop_pending),
+            shutdown.Work("tạo ảnh nhỏ", self.model.wait_for_thumbnails, self.model.stop_pending),
+            shutdown.Work("biểu đồ sáng", self.detail.score_card.histogram.wait,
+                          self.detail.score_card.histogram.stop_pending),
+        ]
+        threads = [("nhập ảnh", self.import_thread), ("phân tích AI", self.analyze_thread),
+                   *(("phân tích AI", t) for t in self._retiring)]
+        threads += [("sao chép ảnh xuất", d.copy_thread) for d in self.findChildren(ExportDialog)]
+        works += [shutdown.Work(name, t.wait, t.cancel) for name, t in threads if t is not None]
+        return works
+
+    def _all_work(self) -> list[shutdown.Work]:
+        """Session work plus what only the window's lifetime depends on (learning, app update)."""
+        works = self._session_work()
+        works.append(shutdown.Work("học gu", self._taste_pool.waitForDone, self._taste_pool.clear))
+        updater = getattr(self, "_updater", None)
+        for t in (getattr(updater, "worker", None), getattr(self, "_auto_worker", None)):
+            if t is not None:  # a network call cannot be cancelled; it ends with its own time limit
+                works.append(shutdown.Work("kiểm tra cập nhật", t.wait, lambda: None))
+        return works
 
     def _remembered_summary(self) -> str:
         assert self.project is not None
@@ -624,7 +673,8 @@ class MainWindow(QMainWindow):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        self._close_session()
+        if not self._close_session():
+            return  # still in use: nothing is deleted
         try:
             delete_session(sessions_dir(), root)
         except OSError as exc:
@@ -649,7 +699,8 @@ class MainWindow(QMainWindow):
         root = root.resolve()
         if self.project is None or self._session_root != root:
             # One session per photo folder: switching folders closes the current one.
-            self._close_session()
+            if not self._close_session():
+                return None
             project, restored = open_session(sessions_dir(), root)
             self._set_project(project, root)
             self._restored_note = (
@@ -867,27 +918,78 @@ class MainWindow(QMainWindow):
             return None
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
-        self.settings.setValue("geometry", self.saveGeometry())
-        for dialog in self.findChildren(QDialog):  # they use the project database
-            dialog.close()
-        if self.import_thread is not None:
-            thread, self.import_thread = self.import_thread, None
-            thread.cancel()
-            thread.wait(15000)  # resumable: unfinished files continue next time
-        self._stop_analysis()
-        # Every pool finishes before the window's objects go away: a worker must never drop the last reference to
-        # a Qt object (the signal objects of these pools belong to the window and its widgets).
-        self.viewer.wait_idle(5000)
-        self.model.wait_for_thumbnails(5000)
-        self.detail.score_card.histogram.wait(5000)
-        self._taste_pool.waitForDone(30000)
+        """Stop every worker, then release the session (order and fallbacks: app.ui.shutdown)."""
+        if self._shutdown_since is not None and not self._shutdown_ready:  # already waiting for workers
+            event.ignore()
+            return
+        if not self._shutdown_ready:
+            self.settings.setValue("geometry", self.saveGeometry())
+            for dialog in self.findChildren(QDialog):  # they use the project database
+                dialog.close()
+            if self.import_thread is not None:  # resumable: unfinished files continue next time
+                self.import_thread.cancel()
+        left = self._settle(self._all_work, 0 if self._shutdown_ready else CLOSE_WAIT_MS)
+        if left:
+            self._shutdown_ready = False
+            event.ignore()
+            self._wait_then_close(left)
+            return
+        self._shutdown_timer.stop()
         self._marking_timer.stop()  # it would read the database after it is closed
         if self.project is not None:
             self.project.close()
+            self.project = None  # a late signal must find no session, not a closed one
         if self.teacher.store is not None:
             self.teacher.store.close()
             self.teacher.store = None
         super().closeEvent(event)
+
+    def _wait_then_close(self, left: list[str]) -> None:
+        """Workers still run: keep everything open, wait on a GUI timer (the window stays responsive)."""
+        log.warning("closing waits for: %s", ", ".join(left))
+        self._shutdown_since = time.monotonic()
+        self._shutdown_ask_at = self._shutdown_since + HUNG_AFTER_S
+        # Nothing new may start (the window itself stays enabled: the "Thoát ngay?" question is its child).
+        for widget in (self.menuWidget(), self.centralWidget(), self.bottom_bar):
+            widget.setEnabled(False)
+        for action in self.findChildren(QAction):
+            action.setEnabled(False)
+        for shortcut in self.findChildren(QShortcut):
+            shortcut.setEnabled(False)
+        self.status.setText(f"Đang đợi {', '.join(left)} dừng hẳn rồi mới đóng…")
+        self._shutdown_timer.start()
+
+    def _shutdown_tick(self) -> None:
+        left = shutdown.still_running(self._all_work())
+        if not left:
+            self._shutdown_timer.stop()
+            self._shutdown_ready = True
+            self.close()
+            return
+        if time.monotonic() >= self._shutdown_ask_at:
+            self._shutdown_timer.stop()  # no tick while the question is open
+            if self._ask_quit_anyway(left):
+                self._quit_now(left)
+                return
+            self._shutdown_ask_at = time.monotonic() + HUNG_AFTER_S
+            self._shutdown_timer.start()
+
+    def _ask_quit_anyway(self, left: list[str]) -> bool:
+        answer = QMessageBox.question(
+            self, "Đang đóng KiraPick",
+            f"{', '.join(left).capitalize()} chưa dừng sau {HUNG_AFTER_S:.0f} giây.\n\n"
+            "Thoát ngay? Các lựa chọn Chọn/Loại đã được lưu; phần nhập ảnh hoặc phân tích dở dang sẽ chạy tiếp lần "
+            "sau. Ảnh gốc không bị ảnh hưởng.\n\nBấm No để chờ thêm.")
+        return answer == QMessageBox.StandardButton.Yes
+
+    def _quit_now(self, left: list[str]) -> None:
+        """A worker hangs: end the process WITHOUT tearing down objects or connections it may still use."""
+        log.warning("quit while still running: %s", ", ".join(left))
+        self.settings.sync()
+        logging.shutdown()
+        self._hard_exit(0)
+
+    _hard_exit = staticmethod(os._exit)  # replaced in tests
 
     # ------------------------------------------------------------ people (AI)
     def models_ready(self) -> bool:
@@ -960,11 +1062,17 @@ class MainWindow(QMainWindow):
             return
         self.analyze_thread = None
         thread.cancel()
-        thread.wait(30000)
+        if not thread.wait(ANALYSIS_STOP_MS):  # still finishing a photo: keep it referenced until it ends
+            self._retire(thread)
         self._update_steps()
         if self.import_thread is None:
             self.progress.setVisible(False)
             self.pause_button.setVisible(False)
+
+    def _retire(self, thread: QThread) -> None:
+        """A stopped thread that has not ended: Qt aborts the process if a running QThread is destroyed."""
+        self._retiring.append(thread)
+        thread.finished.connect(lambda t=thread: t in self._retiring and self._retiring.remove(t))
 
     def _on_analyze_progress(self, phase: str, done: int, total: int) -> None:
         if phase.startswith("gpu_name:"):  # the graphics card the speed check picked
@@ -1992,6 +2100,11 @@ class MainWindow(QMainWindow):
             "Trong lưới có thể chọn nhiều ảnh (Ctrl/Shift + click) rồi bấm K/X/số để áp dụng cho tất cả.",
         )
 
+
+SWITCH_WAIT_MS = 10000  # switching folder: how long to wait for workers before refusing
+CLOSE_WAIT_MS = 3000  # closing: blocking wait; afterwards a non-blocking one (GUI timer)
+HUNG_AFTER_S = 15.0  # closing: ask whether to quit at once after this long
+ANALYSIS_STOP_MS = 30000
 
 RETRAIN_EVERY = 20  # decisions between two trainings of the taste model
 FOCUS_RETRAIN_EVERY = 5  # Q/W/R labels between two trainings of the sharpness models (small and fast)

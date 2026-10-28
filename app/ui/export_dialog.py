@@ -244,6 +244,11 @@ class ExportDialog(QDialog):
             return
         self.start_copy()
 
+    @property
+    def copy_thread(self) -> ExportThread | None:
+        """The copy started from this dialog (the window waits for it before closing the session)."""
+        return self._thread
+
     def start_copy(self) -> ExportThread:
         """Starts copying the current plan (tests call this directly, skipping the confirm box)."""
         assert self.plan is not None
