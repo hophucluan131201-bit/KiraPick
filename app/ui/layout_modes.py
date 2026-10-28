@@ -13,6 +13,10 @@ from enum import Enum
 
 TINY_W, TINY_H = 600, 300  # below either: grid only, sidebar and details as overlays (no Snap layout gets here)
 SHORT_H = 560  # horizontal split (top/bottom half): details below the grid, Grid Focus / Detail Focus
+# A wide strip is SHORT too, even taller than SHORT_H: at 3:1 or flatter and under 760 px high (e.g. a 4K top half at
+# 150 %, 2560×683) a column layout leaves ~2 grid rows next to a squeezed detail column, while Grid Focus uses the
+# whole width. Not flat enough (1080p full screen at 150 %, 1280×667 = 1.9:1) or tall enough (≥ 760) → not SHORT.
+STRIP_RATIO, STRIP_MAX_H = 3.0, 760
 NARROW_W = 1100  # vertical split: icon rail, details docked or overlay, grid first
 MEDIUM_W = 1440
 HYSTERESIS = 40  # leaving the current mode needs the size to pass its threshold by this much
@@ -35,12 +39,14 @@ def _below(value: int, threshold: int, staying: bool) -> bool:
 
 
 def mode_for(width: int, height: int, previous: Mode | None = None) -> Mode:
-    """First rule that matches: TINY, SHORT, NARROW, MEDIUM, else WIDE. Unknown sizes (≤ 0) → WIDE."""
+    """First rule that matches: TINY, SHORT (low, or a wide strip), NARROW, MEDIUM, else WIDE. Sizes ≤ 0 → WIDE."""
     if width <= 0 or height <= 0:
         return Mode.WIDE
     if _below(width, TINY_W, previous is Mode.TINY) or _below(height, TINY_H, previous is Mode.TINY):
         return Mode.TINY
-    if _below(height, SHORT_H, previous is Mode.SHORT):
+    # While in SHORT the window counts as HYSTERESIS px lower, for both SHORT rules.
+    h = height - (HYSTERESIS if previous is Mode.SHORT else 0)
+    if h < SHORT_H or (h < STRIP_MAX_H and width >= STRIP_RATIO * h):
         return Mode.SHORT
     if _below(width, NARROW_W, previous is Mode.NARROW):
         return Mode.NARROW

@@ -13,7 +13,8 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from app.ui.layout_modes import (
-    DEBOUNCE_MS, HYSTERESIS, MEDIUM_W, MIN_WINDOW, NARROW_DOCK_W, NARROW_W, SHORT_H, TINY_H, TINY_W, Mode,
+    DEBOUNCE_MS, HYSTERESIS, MEDIUM_W, MIN_WINDOW, NARROW_DOCK_W, NARROW_W, SHORT_H, STRIP_MAX_H, STRIP_RATIO,
+    TINY_H, TINY_W, Mode,
     client_size, detail_docked, detail_visible_default, mode_for,
 )
 
@@ -21,6 +22,7 @@ from app.ui.layout_modes import (
 def test_constants() -> None:
     assert (TINY_W, TINY_H, SHORT_H, NARROW_W, MEDIUM_W) == (600, 300, 560, 1100, 1440)
     assert (HYSTERESIS, DEBOUNCE_MS, NARROW_DOCK_W, MIN_WINDOW) == (40, 120, 900, (560, 300))
+    assert (STRIP_RATIO, STRIP_MAX_H) == (3.0, 760)
 
 
 # Client sizes of real Windows Snap layouts (taskbar 48 px; the title bar is outside the client area and is never
@@ -37,7 +39,12 @@ SNAP = [
     ("1080p 150% left half", 640, 667, Mode.NARROW),
     ("1080p 150% top half", 1280, 323, Mode.SHORT),
     ("4K 150% full screen", 2560, 1387, Mode.WIDE),
-    ("4K 150% top half", 2560, 683, Mode.WIDE),
+    ("4K 150% top half", 2560, 683, Mode.SHORT),  # a wide strip: SHORT like every other top/bottom half
+    ("4K 100% top half", 3840, 1024, Mode.WIDE),  # 1024 px high: room for the column layout
+    ("1440p 100% top half", 2560, 664, Mode.SHORT),
+    ("ultrawide 3440x1440 top half", 3440, 664, Mode.SHORT),
+    ("ultrawide 3440x1440 full screen", 3440, 1360, Mode.WIDE),
+    ("super-ultrawide 5120x1440 full screen", 5120, 1360, Mode.WIDE),  # 3.8:1 but tall enough
     ("4K 200% left half", 960, 1040, Mode.NARROW),
     ("4K 200% top half", 1920, 512, Mode.SHORT),
 ]
@@ -116,3 +123,27 @@ def test_client_size_reads_the_qt_widget_size_not_the_frame(qtbot) -> None:  # n
     assert client_size(w) == (w.width(), w.height()) == (1920, 484)
     assert w.frameGeometry().height() >= w.height()  # the frame (title bar on Windows) is never inside
     assert mode_for(*client_size(w)) is Mode.SHORT
+
+
+@pytest.mark.parametrize(("w", "h", "mode"), [
+    (2049, 683, Mode.SHORT), (2048, 683, Mode.WIDE),  # strip rule: width >= 3 x height ...
+    (2277, 759, Mode.SHORT), (2280, 760, Mode.WIDE),  # ... and height < 760
+    (2560, 759, Mode.SHORT), (2560, 760, Mode.WIDE),
+    (1280, 667, Mode.MEDIUM),  # 1080p full screen at 150 %: 1.9:1, never SHORT
+    (1920, 640, Mode.SHORT), (1919, 640, Mode.WIDE),
+])
+def test_wide_strip_rule(w: int, h: int, mode: Mode) -> None:
+    assert mode_for(w, h) is mode
+
+
+def test_strip_rule_has_hysteresis_on_both_axes() -> None:
+    """While in SHORT the window counts as 40 px lower, for the height rule and for the strip rule."""
+    assert mode_for(2000, 683, Mode.SHORT) is Mode.SHORT and mode_for(2000, 683, Mode.WIDE) is Mode.WIDE
+    assert mode_for(1930, 683, Mode.SHORT) is Mode.SHORT and mode_for(1928, 683, Mode.SHORT) is Mode.WIDE
+    assert mode_for(2560, 790, Mode.SHORT) is Mode.SHORT and mode_for(2560, 800, Mode.SHORT) is Mode.WIDE
+    mode = Mode.WIDE
+    seen = []
+    for w in (2045, 2052, 2040, 2060, 2000, 1990, 2050):  # dragging the width around 3 x 683 = 2049
+        mode = mode_for(w, 683, mode)
+        seen.append(mode)
+    assert seen == [Mode.WIDE, Mode.SHORT, Mode.SHORT, Mode.SHORT, Mode.SHORT, Mode.SHORT, Mode.SHORT]

@@ -57,8 +57,13 @@ TINY. Thresholds were re-derived from real Snap client sizes, below.)
 
 Real Windows Snap client sizes (taskbar 48 px): 1080p laptop at 100 / 125 / 150 % — full screen 1920×1000 /
 1536×800 / 1280×667, left/right half 960 / 768 / 640 wide, top/bottom half 484 / 387 / 323 high; 4K at 150 % —
-2560×1387, top half 683 high; 4K at 200 % — left half 960 wide, top half 512 high. Every one of them gets the
+2560×1387, top half 2560×683; 4K at 200 % — left half 960 wide, top half 512 high. Every one of them gets the
 intended mode (full → WIDE/MEDIUM, left/right half → NARROW, top/bottom half and quarters → SHORT).
+The wide-strip rule (revision 3, Task 6 review) makes the 4K/1440p/ultrawide top halves (2560×683, 2560×664,
+3440×664) SHORT as well: at 2560×683 a column layout leaves a ~1,900 px wide, ~2-row grid beside a detail column only
+683 px tall, while Grid Focus gives the grid the full width. It never catches a normal full screen (1280×667 is
+1.9:1) nor a tall window (a 4K top half at 100 %, 3840×1024, stays WIDE; a 5120×1440 monitor full screen stays WIDE).
+While in SHORT the window counts as 40 px lower for both rules (hysteresis on both axes).
 A change needs the size to pass the threshold by **40 px** (hysteresis) and is applied after the
 resize settles (**120 ms** debounce) so dragging a window edge never flickers.
 
@@ -67,7 +72,7 @@ resize settles (**120 ms** debounce) so dragging a window edge never flickers.
 | Mode | Content area | Grid | Sidebar | Detail panel |
 |---|---|---|---|---|
 | `TINY` | width < 600 or height < 300 | full area | icon rail hidden; ☰ opens overlay drawer | overlay sheet over the grid (Tab), closed by default |
-| `SHORT` (horizontal split) | height < 560 | see Grid Focus / Detail Focus | icon rail + overlay drawer | below the grid, horizontal, only in Detail Focus |
+| `SHORT` (horizontal split) | height < 560, or a wide strip: width ≥ 3 × height and height < 760 | see Grid Focus / Detail Focus | icon rail + overlay drawer | below the grid, horizontal, only in Detail Focus |
 | `NARROW` (vertical split) | width < 1100 | priority, ≥ 2 columns | icon rail + overlay drawer | docked ~280 px column if width ≥ 900, else overlay sheet; hidden/shown with Tab |
 | `MEDIUM` | width < 1440 | | sidebar ~210 px | ~300 px column, smaller preview |
 | `WIDE` | otherwise | | sidebar ~240 px | ~360 px column (up to 420 when width ≥ 2200), large preview |
