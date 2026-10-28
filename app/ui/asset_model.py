@@ -56,7 +56,31 @@ class Filter(str, Enum):
 class Sort(str, Enum):
     TIME = "time"  # capture order
     SCORE = "score"  # technical score, best first
+    TASTE = "taste"  # "Hợp gu bạn", best first (photos without it last)
+    RANK = "rank"  # ranking value (technical blended with taste), best first
     PICKS_FIRST = "picks"  # photos the AI chose (in pick order), then the rest by score
+
+
+def sort_records(rows: list["AssetRecord"], sort: Sort) -> list["AssetRecord"]:
+    """Stable sort (equal values keep capture order); photos without the value go last."""
+    def key_of(value: float | None) -> float:
+        return -(value if value is not None else -1.0)
+
+    def tech(rec: "AssetRecord") -> float | None:
+        if rec.ranked is not None:
+            return rec.ranked.tech
+        return rec.score.total if rec.score is not None else None
+
+    if sort is Sort.SCORE:
+        return sorted(rows, key=lambda r: key_of(tech(r)))
+    if sort is Sort.TASTE:
+        return sorted(rows, key=lambda r: key_of(r.ranked.taste if r.ranked else None))
+    if sort is Sort.RANK:
+        return sorted(rows, key=lambda r: key_of(r.ranked.value if r.ranked else tech(r)))
+    if sort is Sort.PICKS_FIRST:
+        return sorted(rows, key=lambda r: (r.pick_rank is None, r.pick_rank or 0,
+                                           key_of(r.ranked.value if r.ranked else tech(r))))
+    return rows
 
 
 @dataclass(slots=True)
@@ -271,14 +295,7 @@ class AssetListModel(QAbstractListModel):
                 rec = rows[-1]
                 if rec.score is not None:
                     rec.ranked = self._ranker(rec.id, rec.score) if self._ranker else rank(rec.score, None, [], 0.0)
-            if self._sort is not Sort.TIME:
-                def by_score(rec: AssetRecord) -> float:
-                    return -(rec.score.total if rec.score is not None and rec.score.total is not None else -1.0)
-
-                if self._sort is Sort.SCORE:
-                    rows.sort(key=by_score)  # stable: equal scores stay in capture order
-                else:
-                    rows.sort(key=lambda rec: (rec.pick_rank is None, rec.pick_rank or 0, by_score(rec)))
+            rows = sort_records(rows, self._sort)
         self.beginResetModel()
         self._rows = rows
         self._row_of = {rec.id: i for i, rec in enumerate(rows)}

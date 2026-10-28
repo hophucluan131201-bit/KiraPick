@@ -10,6 +10,15 @@ from app.ui import theme
 from app.ui.asset_model import ROLE_RECORD, AssetRecord
 
 
+def badge_text(rec: AssetRecord) -> str:
+    """"K 78 · G 85": technical and taste scores; ⚠ when a hard defect caps the ranking."""
+    r = rec.ranked
+    if r is None or r.tech is None:
+        return ""
+    text = f"K {r.tech:.0f}" + (f" · G {r.taste:.0f}" if r.taste is not None else "")
+    return ("⚠ " + text) if r.capped else text
+
+
 class ThumbnailDelegate(QStyledItemDelegate):
     def __init__(self, cell: int, parent: QWidget | None = None, *, caption: bool = True) -> None:
         super().__init__(parent)
@@ -59,10 +68,15 @@ class ThumbnailDelegate(QStyledItemDelegate):
             p.setPen(QColor(theme.TEXT if selected else theme.MUTED))
             caption = QRect(cell.left() + 6, cell.bottom() - 22, cell.width() - 12, 20)
             name = rec.name + ("  +" + ",".join(n.rsplit(".", 1)[-1].upper() for n in rec.paired_with) if rec.paired_with else "")
-            if rec.score is not None and rec.score.total is not None:
-                name += f"  ·  {rec.score.total:.0f}đ"
-            p.drawText(caption, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                       p.fontMetrics().elidedText(name, Qt.TextElideMode.ElideMiddle, caption.width()))
+            badge = badge_text(rec)
+            badge_w = p.fontMetrics().horizontalAdvance(badge) + 8 if badge else 0
+            if badge:
+                p.setPen(QColor(theme.ERROR if rec.ranked and rec.ranked.capped else theme.STAR))
+                p.drawText(caption, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, badge)
+                p.setPen(QColor(theme.TEXT if selected else theme.MUTED))
+            name_rect = QRect(caption.left(), caption.top(), caption.width() - badge_w, caption.height())
+            p.drawText(name_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                       p.fontMetrics().elidedText(name, Qt.TextElideMode.ElideMiddle, name_rect.width()))
         p.restore()
 
     @staticmethod

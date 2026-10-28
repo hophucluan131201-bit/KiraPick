@@ -304,7 +304,8 @@ class MainWindow(QMainWindow):
         side_layout.setContentsMargins(6, 6, 6, 6)
         side_layout.addWidget(self.search)
         self.sort = QComboBox()
-        for label, mode in (("Xếp theo thời gian chụp", Sort.TIME), ("Xếp theo điểm (cao → thấp)", Sort.SCORE),
+        for label, mode in (("Xếp theo thời gian chụp", Sort.TIME), ("Xếp theo điểm kỹ thuật (K)", Sort.SCORE),
+                            ("Xếp theo Hợp gu bạn (G)", Sort.TASTE), ("Xếp theo điểm xếp hạng (K + G)", Sort.RANK),
                             ("Ảnh AI chọn trước, rồi theo điểm", Sort.PICKS_FIRST)):
             self.sort.addItem(label, mode.value)
         self.sort.currentIndexChanged.connect(lambda _i: self._on_sort_changed())
