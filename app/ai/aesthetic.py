@@ -21,9 +21,9 @@ def _round32(v: float) -> int:
     return max(32, int(round(v / 32)) * 32)
 
 
-def _input_size(h: int, w: int) -> tuple[int, int]:
+def _input_size(h: int, w: int, short_side: int = SHORT_SIDE) -> tuple[int, int]:
     """(height, width) the model sees for a photo of ``h`` x ``w``."""
-    k = SHORT_SIDE / min(h, w)
+    k = short_side / min(h, w)
     return _round32(h * k), _round32(w * k)
 
 
@@ -32,12 +32,14 @@ class AestheticModel:
     size-free graph: Reshape error, owner's self-test 2.1.0b5), checked against the CPU first and
     dropped for good on any GPU error."""
 
-    PROBES = ((384, 576), (576, 384))  # (height, width) of a landscape and a portrait 3:2 photo
+    MODEL_ID = "aesthetic"
+    SHORT_SIDE = SHORT_SIDE
+    PROBES: tuple[tuple[int, int], ...] = ((384, 576), (576, 384))  # landscape and portrait 3:2 photos
     TOLERANCE = 0.02  # on the 1..10 scale
     MAX_GPU_SHAPES = 4  # each fixed-size graph holds its own GPU memory
 
     def __init__(self, registry: ModelRegistry, *, prefer_gpu: bool = True) -> None:
-        self._path = registry.require("aesthetic")
+        self._path = registry.require(self.MODEL_ID)
         self.session = create_session(self._path, prefer_gpu=False)  # any size; the GPU's reference
         self._input = self.session.session.get_inputs()[0].name
         self._gpu: dict[tuple[int, int], Session] = {}
@@ -93,10 +95,9 @@ class AestheticModel:
                 return "kết quả trên card đồ hoạ khác CPU"
         return None
 
-    @staticmethod
-    def _tensor(bgr: np.ndarray) -> np.ndarray:
+    def _tensor(self, bgr: np.ndarray) -> np.ndarray:
         h, w = bgr.shape[:2]
-        th, tw = _input_size(h, w)
+        th, tw = _input_size(h, w, self.SHORT_SIDE)
         img = cv2.resize(bgr, (tw, th), interpolation=cv2.INTER_AREA if th < h else cv2.INTER_CUBIC)
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32).transpose(2, 0, 1)[None] / 255.0
 

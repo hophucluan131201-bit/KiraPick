@@ -157,6 +157,30 @@
    "size": 0,
    "runtime": "numpy",
    "purpose": "quality_plus"
+  },
+  {
+   "id": "tech_iqa",
+   "name": "TOPIQ technical quality (CFANet NR, ResNet50, KonIQ-10k) — ONNX",
+   "file": "topiq_nr_koniq_res50.onnx",
+   "provenance": "Converted at build time by scripts/convert_topiq.py --variant nr from cfanet_nr_koniq_res50-9a73138b.pth (IQA-PyTorch weights; Chen et al., TOPIQ, IEEE TIP 2024); trained on KonIQ-10k (research dataset). ONNX checked against PyTorch. Non-commercial weights: approved by the owner (2026-10-28).",
+   "sha256": "",
+   "size": 0,
+   "runtime": "onnxruntime",
+   "purpose": "quality_plus",
+   "url": "build:scripts/convert_topiq.py",
+   "license": "PolyForm-Noncommercial-1.0.0"
+  },
+  {
+   "id": "face_iqa",
+   "name": "TOPIQ face quality (ResNet50, CGFIQA-40k) — ONNX",
+   "file": "topiq_nr_face_res50.onnx",
+   "provenance": "Converted at build time by scripts/convert_topiq.py --variant face from topiq_nr_cgfiqa_res50-0a8b8e4f.pth (IQA-PyTorch weights); trained on CGFIQA-40k (research dataset). ONNX checked against PyTorch at 512x512. Non-commercial weights: approved by the owner (2026-10-28).",
+   "sha256": "",
+   "size": 0,
+   "runtime": "onnxruntime",
+   "purpose": "quality_plus",
+   "url": "build:scripts/convert_topiq.py",
+   "license": "PolyForm-Noncommercial-1.0.0"
   }
  ]
 }
