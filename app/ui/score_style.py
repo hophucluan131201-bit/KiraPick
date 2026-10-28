@@ -6,12 +6,15 @@ Display only: the numbers come unchanged from the rubric (app.quality.score) and
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Literal
 
 from app.quality.rank import EYES_CLOSED, FOCUS_DEFECT, Ranked
 from app.quality.score import GOOD, POOR, Score
+
+log = logging.getLogger(__name__)
 
 Band = Literal["good", "fair", "poor", "none"]
 ChipKind = Literal["keep", "reject", "suggested", "review"]
@@ -20,7 +23,8 @@ COLORS: dict[str, str] = {
     "good": "#3FB950", "fair": "#D29922", "poor": "#F85149", "none": "#8B949E",
     "accent": "#2F81F7", "suggestion": "#E3B341",
 }
-# Rubric warnings that ask for a second look (exact texts from app.quality.score).
+# Rubric warnings that ask for a second look. The rubric has no warning codes, only these texts, and
+# Part 1 must not change it; tests/unit/test_score_style.py fails if a text here stops being produced.
 REVIEW_WARNINGS = ("lệch nét / rung", "người không nét", "mắt nhắm hoặc nhìn xuống (nếu cố ý thì bỏ qua)",
                    "mặt bị cháy sáng", "đầu chạm mép ảnh")
 
@@ -40,17 +44,35 @@ _CHIPS = {
 }
 
 
+def shown(value: float | None) -> int | None:
+    """A 0..100 number as displayed: rounded half-up; not finite or outside 0..100 -> None ("—").
+
+    Scores are 0..100 by construction; anything else is a data error and is shown as "not scored",
+    never silently as 0 or 100 (it is logged, without photo details)."""
+    if value is None:
+        return None
+    if not math.isfinite(value) or not -0.5 < value < 100.5:
+        log.warning("score outside 0..100 not displayed")
+        return None
+    return min(100, max(0, int(math.floor(value + 0.5))))
+
+
 def display_value(ranked: Ranked | None) -> int | None:
     """The number on the grid badge and in the score ring: the ranking value, rounded half-up."""
-    if ranked is None or ranked.value is None:
-        return None
-    return int(math.floor(ranked.value + 0.5))
+    return shown(ranked.value) if ranked is not None else None
 
 
 def band(value: float | None) -> Band:
-    if value is None:
+    """Colour band of a number, judged on the number as shown (74.5 is shown 75: good)."""
+    v = shown(value)
+    if v is None:
         return "none"
-    return "good" if value >= GOOD else "fair" if value >= POOR else "poor"
+    return "good" if v >= GOOD else "fair" if v >= POOR else "poor"
+
+
+def display_band(ranked: Ranked | None) -> Band:
+    """Band of the badge / ring number; the same function serves both, so they always agree."""
+    return band(display_value(ranked))
 
 
 def hard_defect(score: Score | None, ranked: Ranked | None) -> bool:
@@ -61,14 +83,18 @@ def hard_defect(score: Score | None, ranked: Ranked | None) -> bool:
     return (eyes is not None and eyes <= EYES_CLOSED) or (focus is not None and focus < FOCUS_DEFECT)
 
 
-def chip_for(flag: str | None, pick_rank: int | None, score: Score | None, ranked: Ranked | None,
+def chip_for(flag: str | None, suggested: bool, score: Score | None, ranked: Ranked | None,
              uncertain: bool) -> Chip | None:
-    """One chip per photo; the user's decision always wins over AI hints, and the AI never rejects."""
+    """One chip per photo; the user's decision always wins over AI hints, and the AI never rejects.
+
+    ``suggested``: the photo is in the picks table. That table only ever holds the newest
+    "⭐ Chọn ảnh" run (app.quality.select.save_run deletes older runs), so callers pass
+    ``asset_id in picks`` and never an older suggestion."""
     if flag == "keep":
         return _CHIPS["keep"]
     if flag == "reject":
         return _CHIPS["reject"]
-    if pick_rank is not None:
+    if suggested:
         return _CHIPS["suggested"]
     measured_problem = score is not None and (
         hard_defect(score, ranked) or any(w in REVIEW_WARNINGS for w in score.warnings))
