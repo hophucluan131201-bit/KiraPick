@@ -213,7 +213,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 
 **Interfaces:**
 - Consumes: Task 4 `steps`.
-- Produces: `TopBar.step_clicked = Signal(str)` (keys of `STEPS`); `TopBar.set_states(states: dict[str, StepState], busy: bool)`; `TopBar.set_compact(on: bool)` (icons only, height 36 vs 48); exposes `search: QLineEdit`, `size_slider: QSlider`, `options_button: QToolButton`. `MainWindow.refresh_steps()` calls `steps(...)` after import/analysis/decision/export. The suggested next step is the first not-done step and gets the accent style; running steps are disabled while busy.
+- Produces: `TopBar.step_clicked = Signal(str)` (keys of `STEPS`); `TopBar.set_states(states: dict[str, StepState], busy: bool)`; `TopBar.set_compact(on: bool)` (icons only, height 36 vs 48); exposes `search: QLineEdit`, `size_slider: QSlider`, `options_button: QToolButton`. `MainWindow.refresh_steps()` calls `steps(...)` after import/analysis/decision/export; for export it is connected to `ExportDialog.run_recorded` (added in Task 2 review), so ✓ Xuất ảnh appears as soon as a run is recorded. Test: `test_export_step_turns_done_when_run_recorded`. The suggested next step is the first not-done step and gets the accent style; running steps are disabled while busy.
 
 - [ ] **Step 1: Failing tests**: `test_steps_show_done_partial_and_next` (after import: ✓ Nhập ảnh, next = people); `test_options_menu_has_moved_actions` (menu texts include "↺ Làm lại", "🎓 AI đã học", "⌨ Phím tắt"); `test_people_filter_and_merge_button` (typing "2" shows only "Chủ thể 2…"; Gộp enabled after ticking two).
 - [ ] **Steps 2–4** FAIL → implement → PASS (all GUI tests updated for the removed toolbar: use `w.top_bar` / menu actions).

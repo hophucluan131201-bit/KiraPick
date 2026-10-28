@@ -77,6 +77,7 @@ class ExportResult:
     cancelled: bool = False
     manifest_csv: Path | None = None
     manifest_json: Path | None = None
+    copied_ids: list[int] = field(default_factory=list)  # asset id of each entry of `copied`, same order
 
 
 def select_assets(
@@ -272,6 +273,7 @@ def run_export(
             result.failed[item.dest_relative] = exc.strerror or str(exc)
         else:
             result.copied.append(actual)
+            result.copied_ids.append(item.asset_id)
             if actual != item.dest_relative:
                 result.renamed[item.dest_relative] = actual
             done_items.append((item, actual))

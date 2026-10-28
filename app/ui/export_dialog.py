@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -53,6 +53,7 @@ def _gb(n: int) -> str:
 
 
 class ExportDialog(QDialog):
+    run_recorded = Signal()  # an export finished and was recorded: the "Xuất ảnh" step can show ✓
     def __init__(self, project: Project, selected_ids: list[int], parent: QWidget | None = None,
                  default_destination: Path | None = None, collection_id: int | None = None,
                  settings: QSettings | None = None) -> None:
@@ -211,16 +212,15 @@ class ExportDialog(QDialog):
 
     def _record_run(self, result: ExportResult) -> None:
         """A finished, not cancelled export that copied something counts for the "Xuất ảnh" step."""
-        if result.cancelled or not result.copied or self.plan is None:
+        if result.cancelled or not result.copied:
             return
-        planned = {actual: planned for planned, actual in result.renamed.items()}
-        copied = {planned.get(c, c) for c in result.copied}
-        ids = [i.asset_id for i in self.plan.items if i.dest_relative in copied]
-        try:
+        try:  # copied_ids lists the asset of every copied file, renames and subfolders included
             with self.project.transaction() as conn:
-                exports.record(conn, exports.photo_count(conn, ids), len(result.copied))
+                exports.record(conn, exports.photo_count(conn, result.copied_ids), len(result.copied))
         except Exception:  # noqa: BLE001 - the copies are done; only the step mark is lost
             log.exception("could not record the export run")
+            return
+        self.run_recorded.emit()
 
     def _set_summary(self, html: str, *, error: bool, ready: bool = False) -> None:
         self.summary.setText(f"<span style='color:{theme.REJECT}'>{html}</span>" if error else html)
