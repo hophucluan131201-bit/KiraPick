@@ -457,7 +457,7 @@ class MainWindow(QMainWindow):
         self.detail.favorite_clicked.connect(self.toggle_favorite)
         self.detail.neighbour_clicked.connect(self.go_to_asset)
         self.detail.open_loupe.connect(lambda: self.show_loupe(True))
-        self.detail.people_menu_requested.connect(lambda pos: self._people_menu_at(pos))
+        self.detail.people_menu_requested.connect(lambda pos: self._people_menu_for_current(pos))
         splitter.addWidget(side)
         splitter.addWidget(center_box)
         splitter.addWidget(self.detail)
@@ -537,6 +537,8 @@ class MainWindow(QMainWindow):
             dialog.close()
         self.viewer.show_photo(None)
         self.viewer.wait_idle(10000)
+        self.detail.score_card.histogram.wait(10000)
+        self.detail.score_card.histogram.clear_cache()
         self.model.wait_for_thumbnails(10000)  # Windows cannot delete files still being read
         self.model.set_project(None)
         if self.project is not None:
@@ -1178,15 +1180,23 @@ class MainWindow(QMainWindow):
             self._fill_people()
 
     def _grid_context_menu(self, pos: object) -> None:
-        self._people_menu_at(self.grid.viewport().mapToGlobal(pos))  # type: ignore[arg-type]
+        """Right-click in the grid: acts on every marked photo (batch)."""
+        self._people_menu_at(self.grid.viewport().mapToGlobal(pos),  # type: ignore[arg-type]
+                             [r.id for r in self.selected_records()])
 
-    def _people_menu_at(self, global_pos: object) -> None:
-        """People actions for the marked photos (or the current one): from the grid's right-click menu and from
-        the detail panel's Chủ thể tab — one menu, one behaviour."""
-        if self.project is None:
-            return
-        assets = [r.id for r in self.selected_records()]
-        if not assets:
+    def _people_menu_for_current(self, global_pos: object) -> None:
+        """Chủ thể tab of the detail panel: acts on the photo shown there only, whatever is marked in the grid."""
+        rec = self.current_record()
+        if rec is not None:
+            self._people_menu_at(global_pos, [rec.id])
+
+    @staticmethod
+    def _run_menu(menu: QMenu, global_pos: object) -> object:
+        return menu.exec(global_pos)  # type: ignore[arg-type]  # tests replace this to pick an entry
+
+    def _people_menu_at(self, global_pos: object, assets: list[int]) -> None:
+        """People actions for exactly these photos — one menu and one behaviour for the grid and the panel."""
+        if self.project is None or not assets:
             return
         menu = QMenu(self)
         flt, target = self.model.current_filter, self.model.current_target
@@ -1203,7 +1213,7 @@ class MainWindow(QMainWindow):
             if r["id"] != target:
                 targets[assign_menu.addAction(r["display_name"] or f"Chủ thể {r['id']}")] = r["id"]
         assign_menu.setEnabled(bool(targets))
-        chosen = menu.exec(global_pos)  # type: ignore[arg-type]
+        chosen = self._run_menu(menu, global_pos)
         if chosen is None:
             return
         if chosen is new_subject:
@@ -1274,9 +1284,12 @@ class MainWindow(QMainWindow):
         """Fill the detail panel for this photo (score card, info, burst, people)."""
         neighbours: list[AssetRecord] = []
         if rec is not None and self.project is not None:
-            by_id = {r.id: r for r in self.model.records()}
-            # The burst as recorded, limited to photos in the current view (a filter may hide some).
-            neighbours = [by_id[i] for i in burst.neighbours(self.project.conn, rec.id) if i in by_id]
+            # The burst as recorded, limited to photos in the current view (a filter may hide some). Looked up
+            # through the model's id -> row map: no pass over all records on every Chọn / sao / ♥.
+            for i in burst.neighbours(self.project.conn, rec.id):
+                other = self.model.record(self.model.index_of(i))
+                if other is not None:
+                    neighbours.append(other)
         self.detail.show_record(
             rec, taste=self.taste.status, people=self._people_text(rec.id) if rec else None, neighbours=neighbours,
             pixmap=self.model.pixmap(rec) if rec else None, selection=self._selection_text(rec),

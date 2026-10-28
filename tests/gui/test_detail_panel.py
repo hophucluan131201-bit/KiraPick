@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import QPoint
+
 from app.learning.taste import TasteStatus
 from app.quality.rank import Ranked
 from app.quality.score import score
@@ -135,6 +137,70 @@ def test_people_tab_opens_the_same_actions_as_the_grid_menu(qtbot, env: dict) ->
     _import(qtbot, w, env["photos"])
     w.select_row(0)
     calls = []
-    w._people_menu_at = lambda pos: calls.append(pos)  # noqa: SLF001
+    w._people_menu_at = lambda pos, assets: calls.append(assets)  # noqa: SLF001
     w.detail.people_button.click()
     assert len(calls) == 1
+
+
+def _choose_new_subject(monkeypatch, w) -> None:  # noqa: ANN001
+    """Make the people menu pick "➕ Tạo chủ thể mới…" instead of waiting for a click."""
+    monkeypatch.setattr(w, "_run_menu", lambda menu, _pos: next(
+        a for a in menu.actions() if a.text().startswith("➕")))
+
+
+def test_people_button_acts_on_the_current_photo_only(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    """Review CR9-01: photos 1-2 are marked in the grid, photo 4 is shown in the panel."""
+    from PySide6.QtCore import QItemSelectionModel
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    sel = w.grid.selectionModel()
+    sel.select(w.model.index(1), QItemSelectionModel.SelectionFlag.ClearAndSelect)
+    sel.select(w.model.index(2), QItemSelectionModel.SelectionFlag.Select)
+    sel.setCurrentIndex(w.model.index(4), QItemSelectionModel.SelectionFlag.NoUpdate)
+    current = w.current_record().id
+    calls = []
+    monkeypatch.setattr(w, "create_subject_from", lambda assets, frm=None: calls.append(list(assets)))
+    _choose_new_subject(monkeypatch, w)
+    w.detail.people_button.click()
+    assert calls == [[current]]
+    w._grid_context_menu(QPoint(5, 5))  # the grid's own menu still acts on every marked photo
+    marked = sorted(w.model.records()[i].id for i in (1, 2))
+    assert sorted(calls[1]) == marked
+
+
+def test_exif_stays_open_while_the_photo_is_the_same(qtbot, env: dict) -> None:  # noqa: F811
+    """Review CR9-02: Chọn / sao / ♥ refresh the panel but must not fold EXIF; another photo does."""
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.select_row(0)
+    w.detail.open_exif()
+    w.detail.keep_button.click()
+    w.detail.star_buttons[2].click()
+    w.detail.favorite_button.click()
+    assert not w.detail.exif_section.collapsed
+    assert w.detail.tabs.tabText(w.detail.tabs.currentIndex()) == "Thông tin ảnh"  # the tab is kept too
+    w.select_row(1)
+    assert w.detail.exif_section.collapsed
+
+
+def test_histogram_cache_does_not_leak_across_sessions(qtbot, tmp_path) -> None:  # noqa: ANN001
+    """Review CR9-04: asset ids restart at 1 in every session; the cache must not reuse another session's curve."""
+    from PIL import Image
+
+    from app.ui.score_card import HistogramWidget
+
+    black, white = tmp_path / "a" / "thumb.jpg", tmp_path / "b" / "thumb.jpg"
+    for path, value in ((black, 0), (white, 255)):
+        path.parent.mkdir()
+        Image.new("RGB", (40, 30), (value,) * 3).save(path)
+    hist = HistogramWidget()
+    qtbot.addWidget(hist)
+    hist.request(1, black)
+    hist.wait()
+    qtbot.waitUntil(lambda: hist.data is not None)
+    assert hist.data.shadows > 0.9
+    hist.request(1, white)  # same asset id, another session's thumbnail
+    hist.wait()
+    qtbot.waitUntil(lambda: hist.data is not None)
+    assert hist.data.highlights > 0.9

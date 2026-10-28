@@ -140,6 +140,7 @@ class DetailPanel(QWidget):
                               strict=True):
             self.tabs.addTab(page, name)
 
+        self._shown_id: int | None = -1  # photo shown last (to tell a refresh from a change of photo)
         self._box.addWidget(top, 0)
         self._box.addWidget(self.tabs, 1)
         self.show_record(None, taste=None, people=None, neighbours=[])
@@ -162,7 +163,10 @@ class DetailPanel(QWidget):
             b.setEnabled(rec is not None)
         self.score_card.show_record(rec, taste, selection)
         self.inspector.show_record(rec)
-        self.exif_section.set_collapsed(True)  # EXIF stays folded until asked for, photo after photo
+        shown_id = rec.id if rec is not None else None
+        if shown_id != self._shown_id:  # another photo: EXIF folds again; a refresh of the same photo keeps it open
+            self.exif_section.set_collapsed(True)
+            self._shown_id = shown_id
         self.people_label.setText(people or ("chưa nhận diện — bấm 🧠 Nhận diện chủ thể" if rec is not None else "—"))
         self.burst.clear()
         for other in neighbours:

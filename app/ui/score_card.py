@@ -84,19 +84,24 @@ class HistogramWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.data: Histogram | None = None
         self.token = 0
-        self._key: int | None = None
-        self._cache: dict[int, Histogram] = {}
+        # Keyed by the preview FILE (unique per session folder), not the asset id: ids restart at 1 in every session.
+        self._key: Path | None = None
+        self._cache: dict[Path, Histogram] = {}
         self._pool = pool or QThreadPool.globalInstance()
         self._signals = _HistSignals()
         self._signals.done.connect(self.deliver)
 
     def request(self, asset_id: int | None, preview: Path | None) -> None:
         self.token += 1
-        self._key = asset_id
-        self.data = self._cache.get(asset_id) if asset_id is not None else None
-        if self.data is None and asset_id is not None and preview is not None:
-            self._pool.start(_HistTask(self.token, preview, self._signals))
+        self._key = preview if asset_id is not None else None
+        self.data = self._cache.get(self._key) if self._key is not None else None
+        if self.data is None and self._key is not None:
+            self._pool.start(_HistTask(self.token, self._key, self._signals))
         self.update()
+
+    def clear_cache(self) -> None:
+        """A session was closed: its preview files may be deleted and their names reused."""
+        self._cache.clear()
 
     def deliver(self, token: int, result: Histogram | None) -> None:
         if token != self.token:  # the user moved on to another photo
