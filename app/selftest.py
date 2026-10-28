@@ -74,6 +74,9 @@ def run(report_path: Path, photos: Path | None = None) -> int:
         from app.ai.runtime import configure
 
         report["version"] = __version__
+        from app.edition import EDITION
+
+        report["edition"] = EDITION
         import os
 
         if os.environ.get("ORT_DISABLE_TELEMETRY") != "1":

@@ -862,7 +862,7 @@ class MainWindow(QMainWindow):
             device = phase[len("device:"):]
             name = getattr(self, "_gpu_name", None)
             self._run_device = ("CPU" if device == "cpu" else f"GPU {name}" if name
-                                else {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(device, "GPU"))
+                                else {"cuda": "GPU NVIDIA", "directml": "GPU DirectML", "openvino": "OpenVINO"}.get(device, "GPU"))
             return
         label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện chủ thể…",
                  "embed": "Đang so khuôn mặt và dáng người (ArcFace + ReID)…",
@@ -887,7 +887,7 @@ class MainWindow(QMainWindow):
         assert self.project is not None
         if summary.get("mode") == "quality":
             took = _duration(time.monotonic() - getattr(self, "_analysis_started", time.monotonic()))
-            device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(summary["device"], "CPU")
+            device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML", "openvino": "OpenVINO"}.get(summary["device"], "CPU")
             parts = [f"Phân tích xong ({device}, {took}): {self._step_state()[2]} ảnh có điểm"]
             if summary.get("measure_failed"):
                 parts.append(f"{summary['measure_failed']} ảnh không chấm được ({self._main_error('quality')})")
@@ -901,7 +901,7 @@ class MainWindow(QMainWindow):
         unknown = self.project.conn.execute(
             f"SELECT COUNT(*) FROM ({actions.UNIDENTIFIED_ASSETS})").fetchone()[0]
         review = len(merge_suggestions(self.project.conn))
-        device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML"}.get(summary["device"], "CPU")
+        device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML", "openvino": "OpenVINO"}.get(summary["device"], "CPU")
         device += f", {_duration(time.monotonic() - getattr(self, '_analysis_started', time.monotonic()))}"
         parts = [f"Nhận diện xong ({device}): {people} chủ thể", f"{unknown} ảnh chưa xác định"]
         if review:

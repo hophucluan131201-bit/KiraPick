@@ -3,6 +3,7 @@
 # Output: dist/KiraPick/ (one folder). Model weights are NOT bundled here:
 # the build script copies the verified files to "dist/KiraPick/models".
 # ruff: noqa
+import os
 import sys
 from pathlib import Path
 
@@ -22,16 +23,28 @@ if sys.platform == "win32":
     for pattern in ("msvcp140*.dll", "vcruntime140_1.dll", "concrt140.dll", "vcomp140.dll"):
         msvc_runtime += [(str(f), ".") for f in pyside_dir.glob(pattern)]
 
+# Edition (scripts/build_windows.ps1 -Edition): which ONNX Runtime build's native files to add.
+EDITION = os.environ.get("KIRAPICK_EDITION", "directml")
+edition_bins = []
+if EDITION == "cuda" and sys.platform == "win32":
+    # CUDA 12 / cuDNN 9 DLLs from NVIDIA's pip wheels, next to KiraPick.exe (on the DLL search path),
+    # so onnxruntime_providers_cuda.dll finds them without a CUDA installation.
+    import importlib.util
+
+    nvidia = Path(importlib.util.find_spec("nvidia").submodule_search_locations[0])
+    edition_bins += [(str(f), ".") for f in nvidia.glob("*/bin/*.dll")]
+
 a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(ROOT)],
-    binaries=msvc_runtime,
+    binaries=msvc_runtime + edition_bins,
     datas=[
         (str(ROOT / "configs" / "model-manifest.json"), "configs"),
         (str(ROOT / "configs" / "update-public-key.txt"), "configs"),  # checks the signed AI-model catalogue
         (str(ROOT / "packaging" / "kirapick.png"), "assets"),
     ],
-    hiddenimports=["app.selftest"],
+    hiddenimports=["app.selftest"] + (["openvino", "onnxruntime.tools.add_openvino_win_libs"]
+                                      if EDITION == "openvino" else []),
     excludes=[
         "tkinter", "pytest", "onnx", "pytestqt", "IPython", "matplotlib", "scipy", "pandas",
         "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtQml", "PySide6.QtQuick",

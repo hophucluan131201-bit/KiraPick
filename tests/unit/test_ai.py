@@ -53,7 +53,7 @@ def test_registry_reports_missing_and_tampered_files(tmp_path: Path) -> None:
 def test_runtime_is_offline_only() -> None:
     info = runtime.configure()
     assert "CPUExecutionProvider" in info.available
-    assert runtime.ALLOWED_PROVIDERS == ("CUDAExecutionProvider", "DmlExecutionProvider",
+    assert runtime.ALLOWED_PROVIDERS == ("CUDAExecutionProvider", "DmlExecutionProvider", "OpenVINOExecutionProvider",
                                          "CPUExecutionProvider")  # local only: never Azure/cloud
 
 

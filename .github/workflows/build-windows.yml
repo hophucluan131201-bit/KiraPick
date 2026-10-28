@@ -1,26 +1,54 @@
-# Builds the Windows installer on a clean Windows machine.
-# - A push to main whose commit message contains "[release]": build + self-test + publish a
-#   GitHub release (pre-release for a/b/rc versions) "v<app version>" with the files (the tag is created by the release).
-# - A pushed version tag (v*) does the same.
-# - Actions tab -> "Build Windows installer" -> Run workflow: build + downloadable artifact only.
+# Builds the Windows installers on a clean Windows machine and publishes them.
+# Which edition is built and published is chosen by a marker in the pushed commit message
+# (main or beta branch):
+#   [release]          DirectML edition, version from app/__init__.py (official if it has no a/b/rc suffix)
+#   [release-cuda]     CUDA edition (NVIDIA), version + "a", always a pre-release
+#   [release-openvino] OpenVINO edition (Intel CPU), version + "b", always a pre-release
+#   [release-all]      all three
+# Actions tab -> "Build Windows installer" -> Run workflow: build all three, artifacts only (no release).
 name: Build Windows installer
 
 on:
   workflow_dispatch:
   push:
     branches: [main, beta]
-    tags: ["v*"]
 
 permissions:
   contents: write  # needed to create the Release
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      editions: ${{ steps.pick.outputs.editions }}
+    steps:
+      - id: pick
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          msg, event = os.environ.get("MESSAGE", ""), os.environ["EVENT"]
+          if event != "push" or "[release-all]" in msg:
+              editions = ["directml", "cuda", "openvino"]
+          else:
+              editions = [e for e, m in (("directml", "[release]"), ("cuda", "[release-cuda]"),
+                                         ("openvino", "[release-openvino]")) if m in msg]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"editions={json.dumps(editions)}\n")
+          print(editions)
+          EOF
+
   build:
-    if: >-
-      github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') ||
-      contains(github.event.head_commit.message, '[release]')
+    needs: plan
+    if: needs.plan.outputs.editions != '[]'
     runs-on: windows-2022
-    timeout-minutes: 60
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: ${{ fromJson(needs.plan.outputs.editions) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,11 +60,11 @@ jobs:
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
       - name: Build, self-test (network blocked), package
         shell: pwsh
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive -Edition ${{ matrix.edition }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: kirapick-windows-installer
+          name: kirapick-windows-${{ matrix.edition }}
           path: |
             dist/installer/*
             dist/selftest.json
@@ -47,13 +75,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = (Select-String -Path app/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          $edition = "${{ matrix.edition }}"
+          $version = (python -c "from app import __version__; from app.edition import version_for; print(version_for(__version__, '$edition'))").Trim()
+          $title = (python -c "from app.edition import release_name; print(release_name('$version', '$edition'))").Trim()
           $tag = "v$version"
-          # Only the zips: the small Setup.exe is useless without its .bin data file (both are in BoCai.zip).
-          $files = Get-ChildItem dist/installer -File -Filter *.zip | ForEach-Object { $_.FullName }
-          if (gh release view $tag 2>$null) { Write-Host "Release $tag already exists: left untouched"; exit 0 }
-          if ($version -match '(a|b|rc)\d+$') {  # 0.3.0b4 -> pre-release; 2.0.0 -> the official latest release
-            gh release create $tag $files --target "${{ github.sha }}" --title "KiraPick $version (beta)" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease
+          if ($edition -eq "cuda") {
+            # Over GitHub's 2 GB per file as one zip: Setup.exe + its .bin data files + the install guide.
+            $files = Get-ChildItem dist/installer -File | Where-Object { $_.Extension -in ".exe", ".bin", ".txt" } | ForEach-Object { $_.FullName }
           } else {
-            gh release create $tag $files --target "${{ github.sha }}" --title "KiraPick $version" --notes-file packaging/notes/RELEASE_NOTES.md --latest
+            # Only the zips: the small Setup.exe is useless without its .bin data file (both are in BoCai.zip).
+            $files = Get-ChildItem dist/installer -File -Filter *.zip | ForEach-Object { $_.FullName }
+          }
+          if (gh release view $tag 2>$null) { Write-Host "Release $tag already exists: left untouched"; exit 0 }
+          if ($edition -ne "directml" -or $version -match '(a|b|rc)\d+$') {  # betas: pre-release
+            gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease
+          } else {
+            gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file packaging/notes/RELEASE_NOTES.md --latest
           }

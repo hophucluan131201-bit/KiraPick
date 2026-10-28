@@ -10,6 +10,9 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
+#ifndef SliceSize
+  #define SliceSize "max"
+#endif
 #define AppName "KiraPick"
 #define SourceDir "..\dist\KiraPick"
 
@@ -35,7 +38,7 @@ UninstallDisplayName={#AppName}
 Compression=lzma2/max
 SolidCompression=yes
 DiskSpanning=yes
-DiskSliceSize=max
+DiskSliceSize={#SliceSize}
 SlicesPerDisk=1
 WizardStyle=modern
 CloseApplications=yes

@@ -1,19 +1,21 @@
 ﻿<#
 Build the Windows installer of KiraPick (DirectML GPU with CPU fallback, works offline).
 
-    powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+    powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 [-Edition directml|cuda|openvino]
 
 Normally GitHub Actions runs this (.github/workflows/build-windows.yml) and publishes the result on
 the Releases page; running it by hand is only needed to build locally.
-Steps: separate build venv (.venv-build, Python 3.12) with the exact versions in
-packaging\requirements-installer.txt -> verified model weights -> PyInstaller folder
+Editions: directml (official, any DirectX 12 card), cuda (beta "a": NVIDIA, CUDA/cuDNN DLLs
+included), openvino (beta "b": Intel CPU). Steps: separate build venv per edition
+(.venv-build-<edition>, Python 3.12) with the exact versions in
+packaging\requirements-<edition>.txt -> verified model weights -> PyInstaller folder
 -> offline self-test of the packaged exe (network blocked) -> Inno Setup installer
 (if Inno Setup 6 is installed) -> zips with the Vietnamese install guide.
 Changes nothing outside the project folder. Needs Internet only to download packages
 and model weights (build time, never at app run time).
 Output: dist\installer\
 #>
-param([switch]$NonInteractive)
+param([switch]$NonInteractive, [ValidateSet("directml", "cuda", "openvino")][string]$Edition = "directml")
 $ErrorActionPreference = "Stop"
 # Python must print Vietnamese text even where the console code page is cp1252 (e.g. CI machines).
 $env:PYTHONUTF8 = "1"
@@ -59,13 +61,25 @@ if ((Get-Command py -ErrorAction SilentlyContinue) -and (Test-Python312 "py" @("
 if (-not $pyExe) { throw "Cần Python 3.12: winget install --id Python.Python.3.12 -e" }
 Write-Host "Dùng: $pyExe $pyArgs"
 
-Step "2/6 Môi trường build riêng (.venv-build)"
-if (-not (Test-Path ".venv-build\Scripts\python.exe")) {
-    Invoke-Tool "Tạo .venv-build" $pyExe ($pyArgs + @("-m", "venv", ".venv-build"))
+Step "2/6 Môi trường build riêng (.venv-build-$Edition)"
+$venv = ".venv-build-$Edition"
+if (-not (Test-Path "$venv\Scripts\python.exe")) {
+    Invoke-Tool "Tạo $venv" $pyExe ($pyArgs + @("-m", "venv", $venv))
 }
-$bpy = Join-Path $Root ".venv-build\Scripts\python.exe"
+$bpy = Join-Path $Root "$venv\Scripts\python.exe"
 Invoke-Tool "Cập nhật pip" $bpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "--upgrade", "pip")
-Invoke-Tool "Cài thư viện" $bpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "packaging\requirements-installer.txt")
+Invoke-Tool "Cài thư viện" $bpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "packaging\requirements-$Edition.txt")
+# The edition and its version ("2.2.0" -> "2.2.0a" CUDA / "2.2.0b" OpenVINO) are written into the app;
+# the original files are restored at the end of the build.
+$editionFile = "app\edition.py"
+$initFile = "app\__init__.py"
+$savedEdition = Get-Content $editionFile -Raw -Encoding UTF8
+$savedInit = Get-Content $initFile -Raw -Encoding UTF8
+$suffix = @{ directml = ""; cuda = "a"; openvino = "b" }[$Edition]
+[IO.File]::WriteAllText((Join-Path $Root $editionFile), ($savedEdition -replace 'EDITION = "directml"', "EDITION = `"$Edition`""))
+[IO.File]::WriteAllText((Join-Path $Root $initFile), ($savedInit -replace '__version__ = "([^"]+)"', "__version__ = `"`$1$suffix`""))
+$env:KIRAPICK_EDITION = $Edition
+try {
 
 Step "3/6 Mô hình AI (kiểm tra SHA-256)"
 $models = Join-Path $Root "build\models"
@@ -127,21 +141,35 @@ Copy-Item "packaging\notes\HUONG_DAN_CAI_DAT.txt", "LICENSE.md" $dist
 
 $guide = Join-Path $Root "packaging\notes\HUONG_DAN_CAI_DAT.txt"
 $portable = Join-Path $out "KiraPick-$version-portable.zip"
-Compress-Archive -Path $dist -DestinationPath $portable
-Write-Host "Bản giải nén là chạy: $portable"
+if ($Edition -eq "cuda") { $portable = $null }  # > 2 GB: GitHub cannot host it; the installer slices can
+if ($portable) {
+    Compress-Archive -Path $dist -DestinationPath $portable
+    Write-Host "Bản giải nén là chạy: $portable"
+}
 
 $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
           "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) {
     Write-Host "Chưa có Inno Setup 6 nên chưa tạo được file Setup.exe (winget install --id JRSoftware.InnoSetup -e)." -ForegroundColor Yellow
 } else {
-    Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "packaging\installer.iss")
+    $slice = if ($Edition -eq "cuda") { "/DSliceSize=1800000000" } else { "/DSliceSize=max" }
+    Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "/DEdition=$Edition", $slice, "packaging\installer.iss")
     $setup = Join-Path $out "KiraPick-Setup-$version.exe"
     $bundle = Join-Path $out "KiraPick-$version-BoCai.zip"
     # Small Setup.exe + its data file(s) (.bin); they must stay together in one folder.
     $slices = @(Get-ChildItem $out -Filter "KiraPick-Setup-$version-*.bin" | ForEach-Object { $_.FullName })
     if (-not $slices) { throw "Không thấy file dữ liệu .bin của bộ cài" }
-    Compress-Archive -Path (@($setup) + $slices + @($guide)) -DestinationPath $bundle
-    Write-Host "Bộ cài (gửi file này cho bạn bè): $bundle" -ForegroundColor Green
+    if ($Edition -eq "cuda") {
+        # Too big for one zip on GitHub (2 GB per file): publish Setup.exe + its .bin slices + the guide.
+        Copy-Item $guide $out
+        Write-Host "Bộ cài CUDA: tải Setup.exe và mọi file .bin vào cùng một thư mục" -ForegroundColor Green
+    } else {
+        Compress-Archive -Path (@($setup) + $slices + @($guide)) -DestinationPath $bundle
+        Write-Host "Bộ cài (gửi file này cho bạn bè): $bundle" -ForegroundColor Green
+    }
 }
 Get-ChildItem $out | Format-Table Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB) } } | Out-String | Write-Host
+} finally {
+    [IO.File]::WriteAllText((Join-Path $Root $editionFile), $savedEdition)
+    [IO.File]::WriteAllText((Join-Path $Root $initFile), $savedInit)
+}

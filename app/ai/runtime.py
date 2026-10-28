@@ -1,8 +1,8 @@
 """ONNX Runtime setup: offline-only providers, GPU first, CPU fallback.
 
-- Providers are an explicit allow-list: CUDA (NVIDIA, development installs with
-  onnxruntime-gpu), DirectML (any DirectX 12 GPU: NVIDIA, AMD, Intel; the Windows
-  installer ships onnxruntime-directml) and CPU. ONNX Runtime also ships an Azure
+- Providers are an explicit allow-list: CUDA (NVIDIA; the CUDA edition ships onnxruntime-gpu),
+  DirectML (any DirectX 12 GPU; the main installer ships onnxruntime-directml), OpenVINO
+  (Intel CPU; the OpenVINO edition) and CPU. ONNX Runtime also ships an Azure
   (cloud) execution provider; it is never requested.
 - Telemetry events (Windows ETW) are disabled before any session is created.
 - On Windows the CUDA/cuDNN DLLs come from pip packages inside the venv and
@@ -21,8 +21,11 @@ import onnxruntime as ort
 
 log = logging.getLogger(__name__)
 
-ALLOWED_PROVIDERS = ("CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider")
-GPU_PROVIDERS = {"CUDAExecutionProvider": "cuda", "DmlExecutionProvider": "directml"}
+ALLOWED_PROVIDERS = ("CUDAExecutionProvider", "DmlExecutionProvider", "OpenVINOExecutionProvider",
+                     "CPUExecutionProvider")
+# Accelerated providers ("GPU" in the code's naming; OpenVINO runs on the Intel CPU, faster than plain ORT CPU).
+GPU_PROVIDERS = {"CUDAExecutionProvider": "cuda", "DmlExecutionProvider": "directml",
+                 "OpenVINOExecutionProvider": "openvino"}
 # DirectML: ask for the discrete, high-performance GPU (laptops also have an integrated one).
 # Older ONNX Runtime builds reject these keys; then the plain provider is tried.
 _DML_PREFERRED_OPTIONS = {"device_id": 0, "performance_preference": "high_performance", "device_filter": "gpu"}
@@ -54,6 +57,14 @@ def configure() -> RuntimeInfo:
             except Exception as exc:  # noqa: BLE001 - reported, CPU still works
                 _preload_error = f"{type(exc).__name__}: {exc}"
                 log.warning("CUDA DLL preload failed: %s", _preload_error)
+        if "OpenVINOExecutionProvider" in ort.get_available_providers():
+            try:  # Windows: the OpenVINO DLLs come from the openvino pip package
+                from onnxruntime.tools import add_openvino_win_libs
+
+                add_openvino_win_libs.add_openvino_libs_to_path()
+            except Exception as exc:  # noqa: BLE001 - reported; plain CPU still works
+                _preload_error = f"OpenVINO: {type(exc).__name__}: {exc}"
+                log.warning("OpenVINO DLL setup failed: %s", _preload_error)
         _configured = True
     available = ort.get_available_providers()
     return RuntimeInfo(ort.__version__, available, any(p in available for p in GPU_PROVIDERS), _preload_error)
@@ -113,6 +124,8 @@ def _gpu_attempts(available: list[str], gpu_mem_limit_mb: int) -> list[tuple[str
             "arena_extend_strategy": "kSameAsRequested",
             "cudnn_conv_algo_search": "HEURISTIC",
         }), "CPUExecutionProvider"]))
+    if "OpenVINOExecutionProvider" in available:
+        attempts.append(("openvino", [("OpenVINOExecutionProvider", {"device_type": "CPU"}), "CPUExecutionProvider"]))
     if "DmlExecutionProvider" in available:
         if _dml_device is not None:  # the graphics card measured fastest (gpu_speed_check)
             attempts.append(("directml", [("DmlExecutionProvider", {"device_id": _dml_device}), "CPUExecutionProvider"]))
@@ -236,6 +249,21 @@ GPU_MUST_BE_FASTER = 0.8  # the GPU is used only if it takes at most 80% of the 
 _speed_cache: dict[str, tuple[bool, str]] = {}
 
 
+def _time_session(session: Session, runs: int) -> float:
+    """Milliseconds per run on a zero input (after one warm-up run: GPU providers compile then)."""
+    import time
+
+    import numpy as np
+
+    inp = session.session.get_inputs()[0]
+    dummy = np.zeros([d if isinstance(d, int) else 1 for d in inp.shape], np.float32)
+    session.run(None, {inp.name: dummy})
+    start = time.perf_counter()
+    for _ in range(runs):
+        session.run(None, {inp.name: dummy})
+    return (time.perf_counter() - start) / runs * 1000
+
+
 def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
     """Is a graphics card really faster than the CPU here? Picks the fastest one for DirectML.
 
@@ -254,13 +282,7 @@ def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
         return _speed_cache[key]
 
     def timed(session: Session) -> float:
-        inp = session.session.get_inputs()[0]
-        dummy = np.zeros([d if isinstance(d, int) else 1 for d in inp.shape], np.float32)
-        session.run(None, {inp.name: dummy})  # warm-up (DirectML compiles on the first run)
-        start = time.perf_counter()
-        for _ in range(runs):
-            session.run(None, {inp.name: dummy})
-        return (time.perf_counter() - start) / runs * 1000
+        return _time_session(session, runs)
 
     try:
         info = configure()
@@ -283,6 +305,10 @@ def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
                     continue
                 ms = timed(Session(sess, "directml", None, Path(model)))
                 candidates.append((ms, f"GPU DirectML: {gpu['name'].strip()}", gpu["index"]))
+        if not candidates and "OpenVINOExecutionProvider" in info.available:
+            ov = create_session(model, prefer_gpu=True)
+            if ov.device == "openvino":
+                candidates.append((timed(ov), "OpenVINO (CPU Intel)", None))
         if not candidates:
             result = (False, "Không có card đồ hoạ dùng được; dùng CPU")
         else:
@@ -292,6 +318,8 @@ def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
                 _dml_device = best_index
                 gpu_name = best_label.split(": ", 1)[-1]
                 result = (True, f"Dùng {best_label} ({measured})")
+            elif best_label.startswith("OpenVINO"):
+                result = (False, f"OpenVINO không nhanh hơn CPU thường trên máy này ({measured}); dùng CPU")
             else:
                 result = (False, f"Card đồ hoạ chậm hơn CPU trên máy này ({measured}); dùng CPU")
     except Exception as exc:  # noqa: BLE001 - the CPU always works
