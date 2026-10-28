@@ -13,6 +13,7 @@ import logging
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -20,6 +21,9 @@ import numpy as np
 
 from app.ai.detect import pil_to_bgr
 from app.ai.aesthetic import AestheticModel
+from app.ai.clip_aesthetic import ClipAesthetic
+from app.ai.clip_version import CLIP_VERSION
+from app.ai.iqa import FaceIQA, TechnicalIQA
 from app.ai.eyes import EyeState
 from app.ai.face_quality import FaceQuality, FaceRefiner
 from app.ai.models import ModelRegistry, ModelUnavailableError
@@ -38,11 +42,13 @@ from app.quality.measure import (
     layout_descriptor,
 )
 from app.storage.project import Project, utc_now
+from app.storage.vectors import save_vector
 
 log = logging.getLogger(__name__)
 
 STAGE = "quality"
-STAGE_VERSION = 4  # 2: eyes open/closed (MediaPipe blendshapes); 3: aesthetic hint (TOPIQ); 4: close-up sharpness
+STAGE_VERSION = 5  # 2: eyes (MediaPipe); 3: aesthetic hint (TOPIQ); 4: close-up sharpness;
+# 5: CLIP vector + LAION + style tags, TOPIQ technical and face quality
 EXTRACTOR = "quality"
 WORK_LONG_SIDE = 1600  # exposure / layout are measured at this size
 FACE_FOR_FOCUS = 0.6  # detection score needed to look for the eyes
@@ -130,10 +136,39 @@ def measure_occurrence(full: np.ndarray, small: np.ndarray, person: tuple | None
     return values, layout_descriptor(small, person)
 
 
+@dataclass(slots=True)
+class Extras:
+    """Optional 2.2 models; each may be None (missing model = its values stay "not judged")."""
+    clip: ClipAesthetic | None = None
+    tech: TechnicalIQA | None = None
+    face: FaceIQA | None = None
+
+
+def load_extras(registry: ModelRegistry, prefer_gpu: bool) -> Extras:
+    def make(cls, **kw):  # noqa: ANN001, ANN003, ANN202
+        try:
+            return cls(registry, prefer_gpu=prefer_gpu, **kw)
+        except ModelUnavailableError:
+            return None
+        except Exception:  # noqa: BLE001 - a broken optional model must not stop the stage
+            log.exception("could not load %s", cls.__name__)
+            return None
+    return Extras(make(ClipAesthetic), make(TechnicalIQA), make(FaceIQA))
+
+
+def _guard(what: str, fn):  # noqa: ANN001, ANN202
+    try:
+        return fn()
+    except Exception:  # noqa: BLE001 - one model failing on one photo loses only its value
+        log.exception("%s failed for one photo", what)
+        return None
+
+
 # Where the time of the last run went (seconds), and how the aesthetic model's GPU check went:
 # for the self-test report and the log, to find what is slow on a given PC.
 last_timings: dict[str, float] = {}
 last_aesthetic_check: dict = {}
+last_extras: dict = {}
 
 
 def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int, int], None],
@@ -160,8 +195,13 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
         aesthetic: AestheticModel | None = AestheticModel(registry, prefer_gpu=prefer_gpu)
     except ModelUnavailableError:
         aesthetic = None  # honest: aesthetics stay "not judged"
+    extras = load_extras(registry, prefer_gpu)
     last_timings.clear()
     last_timings["load_models"] = round(time.perf_counter() - t_load, 2)
+    last_extras.clear()
+    last_extras.update({"clip": extras.clip.check if extras.clip else "missing",
+                        "tech_iqa": extras.tech.check if extras.tech else "missing",
+                        "face_iqa": extras.face.check if extras.face else "missing"})
     last_aesthetic_check.clear()
     last_aesthetic_check.update(aesthetic.check if aesthetic is not None else {"device": "none"})
     log.info("aesthetic model: %s", last_aesthetic_check)
@@ -196,7 +236,7 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
                 t0 = time.perf_counter()
                 full, source = fut.result()
                 _add_time("wait_for_photo_decode", t0)
-                _store(project, asset_id, full, source, refiner, face_quality, eyes, aesthetic)
+                _store(project, asset_id, full, source, refiner, face_quality, eyes, aesthetic, extras)
                 done += 1
             except (ImageReadError, cv2.error, OSError, MemoryError) as exc:
                 _mark(project, asset_id, "failed", f"{type(exc).__name__}: {exc}"[:300])
@@ -216,7 +256,7 @@ def _add_time(key: str, since: float) -> None:
 
 def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refiner: FaceRefiner | None,
            face_quality: FaceQuality | None, eyes: EyeState | None = None,
-           aesthetic: AestheticModel | None = None) -> None:
+           aesthetic: AestheticModel | None = None, extras: Extras | None = None) -> None:
     h, w = full.shape[:2]
     scale = min(1.0, WORK_LONG_SIDE / max(h, w))
     small = cv2.resize(full, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else full
@@ -232,6 +272,15 @@ def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refin
         except Exception:  # noqa: BLE001
             log.exception("aesthetic hint failed for one photo")
     _add_time("aesthetic", t0)
+    extras = extras or Extras()
+    t0 = time.perf_counter()
+    emb = _guard("CLIP", lambda: extras.clip.embed(small)) if extras.clip is not None else None
+    laion = _guard("LAION", lambda: extras.clip.laion(emb)) if emb is not None else None
+    tags = (_guard("style tags", lambda: extras.clip.tags(emb)) or []) if emb is not None else []
+    _add_time("clip", t0)
+    t0 = time.perf_counter()
+    tech = _guard("technical IQA", lambda: extras.tech.score(small)) if extras.tech is not None and rows else None
+    _add_time("iqa", t0)
     results = []
     t0 = time.perf_counter()
     for r in rows:
@@ -240,6 +289,13 @@ def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refin
         values, layout = measure_occurrence(full, small, person, face, r["face_score"], refiner, face_quality, eyes)
         values["full_long_side"] = float(max(h, w))
         values["aesthetic_mos"] = mos
+        values["laion_mos"], values["tech_iqa"] = laion, tech
+        values["style_tags"] = [[t, round(sim, 4)] for t, sim in tags]
+        values["face_iqa"] = None
+        if extras.face is not None and face is not None:
+            t1 = time.perf_counter()
+            values["face_iqa"] = _guard("face IQA", lambda: extras.face.score(full, face))
+            _add_time("iqa", t1)
         results.append((r["id"], values, layout))
     _add_time("sharpness_eyes_face", t0)
     now = utc_now()
@@ -255,6 +311,8 @@ def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refin
             if layout is not None:
                 conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'layout', ?, ?)",
                              (occ_id, LAYOUT_VERSION, np.asarray(layout, "<f4").tobytes()))
+        if emb is not None:
+            save_vector(conn, asset_id, "clip", CLIP_VERSION, emb)
         _mark(project, asset_id, "done", None, conn)
 
 

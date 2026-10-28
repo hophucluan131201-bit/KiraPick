@@ -146,6 +146,7 @@ def run(report_path: Path, photos: Path | None = None) -> int:
 
                 report["quality_timings_s"] = dict(quality_job.last_timings)
                 report["aesthetic_gpu_check"] = dict(quality_job.last_aesthetic_check)
+                report["quality_plus_models"] = dict(quality_job.last_extras)
                 report["stage_errors"] = [dict(r) for r in project.conn.execute(
                     """SELECT a.relative_path AS file, s.stage, s.error FROM stage_status s
                        JOIN assets a ON a.id = s.asset_id WHERE s.state = 'failed'""")]
