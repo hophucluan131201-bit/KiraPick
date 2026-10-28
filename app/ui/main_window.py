@@ -44,7 +44,9 @@ from app.identity import actions
 from app.identity.cluster import merge_suggestions
 from app.learning.store import LearningStore
 from app.quality import select
-from app.learning.teacher import Teacher
+from app.learning.teacher import Teacher, group_key, photo_key
+from app.ai.clip_version import CLIP_VERSION
+from app.storage.vectors import load_vector
 from app.selection.client_list import delete_collection, list_collections
 from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter, Sort
 from app.ui.client_list_dialog import ClientListDialog
@@ -1238,6 +1240,7 @@ class MainWindow(QMainWindow):
         """After creating a client list: show it and select all its photos (ready for export)."""
         if collection_id is None:
             return
+        self._learn_client_picks(collection_id)
         self.search.clear()
         self.model.set_search("")
         self._fill_filters(select_collection=collection_id)
@@ -1367,6 +1370,7 @@ class MainWindow(QMainWindow):
         with self.project.transaction() as conn:
             for rec in targets:
                 fn(conn, rec)  # type: ignore[operator]
+        self._learn_taste(targets)
         for rec in targets:
             self.model.refresh_record(rec.id)
         self._show_inspector(self.current_record())
@@ -1374,13 +1378,40 @@ class MainWindow(QMainWindow):
         if advance and len(targets) == 1 and self.act_auto_advance.isChecked():
             self.step(1)
 
-    def set_flag(self, flag: str | None) -> None:
-        def apply(conn, rec: AssetRecord) -> None:  # noqa: ANN001
-            decisions.set_flag(conn, rec.id, flag)
-            if flag != rec.flag:
-                self.teacher.culled(flag, rec.pick_rank, rec.score)  # numbers only, for learning your taste
+    def _session_key(self) -> str:
+        assert self.project is not None
+        row = self.project.conn.execute("SELECT name, created_at FROM project").fetchone()
+        return f"{row[0]}|{row[1]}"
 
-        self._apply(apply, advance=flag is not None)
+    def _learn_taste(self, targets: list[AssetRecord]) -> None:
+        """Each changed photo's latest Keep/Reject/stars/❤ becomes one taste example (numbers only)."""
+        if self.project is None or self.teacher.store is None:
+            return
+        session = self._session_key()
+        conn = self.project.conn
+        for rec in targets:
+            clip = load_vector(conn, rec.id, "clip", CLIP_VERSION)
+            parts = dict(rec.score.parts) if rec.score is not None else {}
+            self.teacher.decided(photo_key(session, rec.id), decisions.get(conn, rec.id), parts, clip,
+                                 group_key(session, (rec.capture_time or "")[:10]))
+
+    def _learn_client_picks(self, collection_id: int) -> None:
+        """Client picks teach a little (they show the client's taste, not always the best photo)."""
+        if self.project is None or self.teacher.store is None:
+            return
+        session = self._session_key()
+        conn = self.project.conn
+        recs = {r.id: r for r in self.model.records()}
+        for (asset_id,) in conn.execute("SELECT asset_id FROM collection_items WHERE collection_id = ?",
+                                        (collection_id,)).fetchall():
+            rec = recs.get(asset_id)
+            parts = dict(rec.score.parts) if rec is not None and rec.score is not None else {}
+            day = (rec.capture_time or "")[:10] if rec is not None else ""
+            self.teacher.client_picked(photo_key(session, asset_id, "client:"), parts,
+                                       load_vector(conn, asset_id, "clip", CLIP_VERSION), group_key(session, day))
+
+    def set_flag(self, flag: str | None) -> None:
+        self._apply(lambda conn, rec: decisions.set_flag(conn, rec.id, flag), advance=flag is not None)
 
     def set_rating(self, rating: int) -> None:
         self._apply(lambda conn, rec: decisions.set_rating(conn, rec.id, rating))

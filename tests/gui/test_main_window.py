@@ -504,6 +504,9 @@ def test_ai_selection_puts_picks_first_marks_keep_and_explains(qtbot, env: dict)
     before = w.teacher.store.culling_count()
     w.set_flag("reject")  # the user disagrees with the AI's first choice: a taste example
     assert w.teacher.store.culling_count() == before + 1
+    w.set_rating(5)  # the same photo again: its example is replaced, not added
+    assert w.teacher.store.culling_count() == before + 1
+    assert w.teacher.store.conn.execute("SELECT MAX(stars) FROM culling_feedback").fetchone()[0] == 5
     w.set_sort(mw.Sort.TIME)
     assert [r.id for r in w.model.records() if r.status == "ok"] == ids
 
