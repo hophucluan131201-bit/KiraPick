@@ -121,6 +121,42 @@
    "provenance": "Converted at build time by scripts/convert_topiq.py from cfanet_iaa_ava_res50-3cd62bb3.pth (IQA-PyTorch GitHub release v0.1-weights, SHA-256 3cd62bb3…6975; Chen et al., TOPIQ, IEEE TIP 2024); trained on AVA. ONNX checked against PyTorch on 4 shapes (< 1e-3). The export is not byte-reproducible, so the converter writes a .sha256 file next to it that the registry checks. Non-commercial weights: approved by the owner for this non-commercial app (2026-10-27).",
    "runtime": "onnxruntime",
    "purpose": "aesthetic"
+  },
+  {
+   "id": "clip_l14_image",
+   "name": "OpenAI CLIP ViT-L/14 image encoder — ONNX",
+   "file": "clip_l14_image.onnx",
+   "license": "MIT (code); OpenAI model card: deployed use out of scope — accepted by the owner (2026-10-28)",
+   "url": "build:scripts/convert_clip.py",
+   "provenance": "Converted at build time by scripts/convert_clip.py from OpenAI ViT-L-14.pt (openaipublic, SHA-256 b8cca3fd…3836, Radford et al. 2021). Image tower + projection, static 1x3x224x224 input; checked against PyTorch (cosine >= 0.999). The converter writes a .sha256 file next to it.",
+   "sha256": "",
+   "size": 0,
+   "runtime": "onnxruntime",
+   "purpose": "quality_plus"
+  },
+  {
+   "id": "laion_aesthetic",
+   "name": "LAION improved aesthetic predictor (sac+logos+ava1, linear MSE) — ONNX",
+   "file": "laion_aesthetic.onnx",
+   "license": "Apache-2.0",
+   "url": "build:scripts/convert_clip.py",
+   "provenance": "MLP head from christophschuhmann/improved-aesthetic-predictor (sac+logos+ava1-l14-linearMSE.pth), trained on SAC, LAION-Logos and AVA ratings of CLIP ViT-L/14 embeddings. Converted and checked (|delta| <= 0.01) by scripts/convert_clip.py.",
+   "sha256": "",
+   "size": 0,
+   "runtime": "onnxruntime",
+   "purpose": "quality_plus"
+  },
+  {
+   "id": "clip_prompts",
+   "name": "CLIP text embeddings of KiraPick style prompts",
+   "file": "clip_prompts_v1.npz",
+   "license": "derived from OpenAI CLIP (same terms as clip_l14_image)",
+   "url": "build:scripts/convert_clip.py",
+   "provenance": "Text embeddings of the fixed English prompts in scripts/convert_clip.py (PROMPTS), computed with the OpenAI CLIP ViT-L/14 text tower at build time.",
+   "sha256": "",
+   "size": 0,
+   "runtime": "numpy",
+   "purpose": "quality_plus"
   }
  ]
 }
