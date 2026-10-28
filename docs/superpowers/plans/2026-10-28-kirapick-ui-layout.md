@@ -265,6 +265,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 
 - Task 7 review notes: RV7-01 the marking tint is painted under the picture (card background only; the photo itself is never tinted) — test `test_marking_tint_never_covers_the_photo` (pixel under the picture unchanged when marked); RV7-02 tests `test_tick_and_shift_tick_with_keep_filter` and `test_shift_tick_follows_sorted_order` (anchor, current photo and marking stay right); RV7-03 filmstrip cards without a chip carry the chip text in their tooltip (`test_filmstrip_tooltip_has_status`).
 - Task 8 review notes: RV8-01 `test_fast_rotations_while_loading_keep_the_latest` (several Xoay xem presses while the preview/full image loads: the last rotation wins, no stale callback); RV8-02 `test_user_pan_after_eye_zoom_is_not_overridden` (a pan/zoom by the user while the full image loads clears the pending E point); RV8-03 `test_four_turns_back_to_zero` (UI at 0°, no view_rotation row); RV8-04 document and test what a rotation does to a zoomed loupe (`test_rotation_while_zoomed_keeps_the_same_spot`).
+- Task 9 review notes: RV9-01 `test_exif_folds_when_switching_to_another_session_with_the_same_asset_id` (reset the panel's shown id on session close if it fails).
 - [ ] **Step 1: Failing tests**: `test_p_keeps_like_k`; `test_keys_in_search_box_do_not_cull` (focus search, type "pX1\t" → text "pX1", no decision changed, layout unchanged); `test_hd_thumbnail_for_large_cells` (cell 300 at DPR 2 → cached pixmap long side ≥ 600 after `wait_for_thumbnails`; source untouched).
 - [ ] **Steps 2–4** FAIL → implement → PASS.
 - [ ] **Step 5: Commit** `"UI part 1: HD thumbnails, P and Tab keys, help"`
@@ -282,6 +283,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - RV5-03 (review): also run the histogram and burst perf tests on Windows.
 - RV7-04 (review) — DONE early in Task 8 (the flake made full runs unreliable); keep it green here: rewrite `test_empty_state_then_import_without_freezing` so it does not depend on how long the import runs (e.g. import enough synthetic files, or assert the event loop processed a queued call while the import thread was alive).
 - CR9-03 (review): measure `_show_inspector` (detail refresh incl. burst lookup) after Chọn/sao/♥ on a 10,000-photo session; target ≤ 30 ms median.
+- RV9-02 (review): time closing/switching a session while the thread pool still runs a learning job (histogram.wait + taste/focus jobs); target ≤ 1 s added.
 - RV3-03 (review): add a sustained-culling measure: 200 alternating P/X presses on a 10,000-photo session, worst and median time from key to repainted card and updated counts (target ≤ 50 ms median, ≤ 100 ms worst); run in CI on Windows and report.
 - [ ] **Step 1: Write the perf tests** parametrised over (1000, 5000, 10000), each measuring with `time.perf_counter` and asserting the targets; print the numbers.
 - [ ] **Step 2:** run `.venv/bin/python -m pytest -m perf -q -s` here; record numbers. If any target fails, implement the off-thread reload and rerun.
@@ -290,6 +292,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 
 ### Task 15: Finish
 
+- [ ] RV9-03: integration test on a real session DB: the panel's people action changes only the current photo's occurrences/subject rows; marked photos' rows are byte-identical before/after.
 - [ ] RV2-04: integration test with a real RAW+JPEG pair (public NEF fixture + its JPEG) through import → grid → Chọn → size == export plan → export copies both.
 - [ ] RV2-05: open a v6 session copy with this build (migrates to v7, data intact) and confirm 2.2.1 refuses v7 with its "update the app" message; write it in the beta release notes.
 - [ ] Full suite `.venv/bin/python -m pytest -q` green; perf numbers in `docs/IMPLEMENTATION_STATUS.md` with status "tested offscreen" (no real Windows GUI run here); screenshots sent; push to `beta` with no release marker; report to the owner in Vietnamese and start the part 2 discussion.
