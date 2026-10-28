@@ -51,6 +51,7 @@ def apply_dark_theme(app: QApplication) -> None:
         QListWidget::item:selected {{ background: #2d4a78; color: #ffffff; }}
         QSplitter::handle {{ background: {BG}; }}
         QLabel#sectionTitle {{ color: {MUTED}; font-weight: 600; padding: 8px 4px 2px 4px; }}
+        QToolButton#sectionHeader {{ color: {MUTED}; font-weight: 600; padding: 6px 2px 2px 2px; border: none; text-align: left; }}
         QLabel#emptyHint {{ color: {MUTED}; font-size: 15px; }}
         QToolButton:checked {{ background: #2d4a78; color: #ffffff; }}
         QLabel#keyHints {{ background: {PANEL}; padding: 6px 10px; border-top: 1px solid {RAISED}; }}

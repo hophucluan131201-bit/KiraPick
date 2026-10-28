@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QCoreApplication,
+    QEvent,
     QItemSelectionModel,
     QModelIndex,
     QObject,
@@ -67,6 +68,8 @@ from app.storage.vectors import load_vector
 from app.selection.client_list import delete_collection, list_collections
 from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter, Sort
 from app.ui.client_list_dialog import ClientListDialog
+from app.ui.collapsible import CollapsibleSection
+from app.ui.people_delegate import PeopleDelegate
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
 from app.ui.inspector import Inspector
@@ -306,23 +309,31 @@ class MainWindow(QMainWindow):
             self.sort.addItem(label, mode.value)
         self.sort.currentIndexChanged.connect(lambda _i: self._on_sort_changed())
         side_layout.addWidget(self.sort)
-        t1 = QLabel("THƯ MỤC")
-        t1.setObjectName("sectionTitle")
         self.sources = QListWidget()
         self.sources.setMaximumHeight(180)
         self.sources.setMinimumHeight(60)
         self.sources.currentRowChanged.connect(self._on_source_changed)
-        t2 = QLabel("LỌC")
-        t2.setObjectName("sectionTitle")
         self.filters = QListWidget()
+        # Compact chips, two per row, never their own scrollbar (the list grows to fit).
+        self.filters.setViewMode(QListWidget.ViewMode.ListMode)
+        self.filters.setFlow(QListWidget.Flow.LeftToRight)
+        self.filters.setWrapping(True)
+        self.filters.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.filters.setUniformItemSizes(True)
+        self.filters.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.filters.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.filters.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.filters.viewport().installEventFilter(self)
         self.filters.currentRowChanged.connect(self._on_filter_changed)
         self.filters.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.filters.customContextMenuRequested.connect(self._filter_context_menu)
         self._fill_filters()
-        t3 = QLabel("CHỦ THỂ")
-        t3.setObjectName("sectionTitle")
         self.people = QListWidget()
-        self.people.setIconSize(QSize(36, 36))
+        self.people.setIconSize(QSize(56, 56))
+        self.people.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.people.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.people.setWordWrap(False)
+        self.people.setItemDelegate(PeopleDelegate(self.people))
         self.people.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.people.setToolTip("Bấm để xem ảnh của chủ thể này. Nháy đúp để đặt tên. "
                                "Tick ô vuông cạnh nhiều chủ thể rồi bấm 🔗 Gộp chủ thể để gộp.")
@@ -339,9 +350,15 @@ class MainWindow(QMainWindow):
         saved = self.settings.value("people_sort", "number", str)
         self.people_sort.setCurrentIndex(max(0, self.people_sort.findData(saved)))
         self.people_sort.currentIndexChanged.connect(self._on_people_sort_changed)
-        for w in (t1, self.sources, t2, self.filters, t3, self.people_sort, self.people):
-            side_layout.addWidget(w)
-        side_layout.addStretch(1)
+        self.sections = {
+            "folders": CollapsibleSection("THƯ MỤC", self.sources, "folders", self.settings),
+            "filters": CollapsibleSection("LỌC", self.filters, "filters", self.settings),
+            "people": CollapsibleSection("CHỦ THỂ", self.people, "people", self.settings, extra=self.people_sort),
+        }
+        side_layout.addWidget(self.sections["folders"])
+        side_layout.addWidget(self.sections["filters"])
+        side_layout.addWidget(self.sections["people"], 1)  # the people list takes the remaining height
+        self.sections["folders"].setVisible(False)  # shown when a session has more than one folder
         side.setMinimumWidth(190)
 
         self.center = QStackedWidget()
@@ -1209,6 +1226,24 @@ class MainWindow(QMainWindow):
             self.model.set_filter(self.model.current_filter, source_id=item.data(Qt.ItemDataRole.UserRole))
             self._after_filter()
 
+    def _fit_filters(self) -> None:
+        """Two chips per row; the list is exactly as tall as its rows (no scrollbar of its own)."""
+        width = max(120, self.filters.viewport().width())
+        cell = QSize((width - 4) // 2, 28)
+        self.filters.setGridSize(cell)
+        for i in range(self.filters.count()):
+            item = self.filters.item(i)
+            if item.toolTip() == "":
+                item.setToolTip(item.text())
+            item.setSizeHint(QSize(cell.width() - 4, 26))
+        rows = (self.filters.count() + 1) // 2
+        self.filters.setFixedHeight(rows * cell.height() + 2 * self.filters.frameWidth() + 4)
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt override
+        if obj is self.filters.viewport() and event.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self._fit_filters)
+        return super().eventFilter(obj, event)
+
     def _fill_filters(self, select_collection: int | None = None) -> None:
         """Fixed filters, then one entry per client list (UserRole = (Filter, collection id))."""
         self.filters.blockSignals(True)
@@ -1233,6 +1268,7 @@ class MainWindow(QMainWindow):
                     current = self.filters.count() - 1
         self.filters.setCurrentRow(current)
         self.filters.blockSignals(False)
+        self._fit_filters()
 
     def _on_filter_changed(self, row: int) -> None:
         self.people.blockSignals(True)
@@ -1315,6 +1351,7 @@ class MainWindow(QMainWindow):
                 self.sources.addItem(item)
         self.sources.setCurrentRow(0)
         self.sources.blockSignals(False)
+        self.sections["folders"].setVisible(self.sources.count() > 2)  # "all" + 2 or more folders
         self._update_counts()
 
     def _update_counts(self) -> None:
