@@ -89,3 +89,14 @@ class ClipAesthetic:
     def prompt_vectors(self) -> dict[str, np.ndarray]:
         """Prompt id -> unit text embedding (to explain what the taste model learnt)."""
         return dict(zip(self._prompt_ids, self._prompts, strict=True))
+
+
+STYLE_LABELS = {  # prompt id -> Vietnamese words for explanations
+    "motion_blur_intentional": "cố ý rung mờ", "low_key": "tối kiểu low-key", "silhouette": "bóng đen ngược sáng",
+    "soft_dreamy": "mềm mơ màng", "backlit_flare": "ngược sáng", "long_exposure": "phơi sáng lâu",
+    "film_grain": "hạt kiểu film", "close_up": "cận mặt", "full_body": "toàn thân", "smiling": "cười",
+    "eyes_closed": "nhắm mắt", "bokeh": "xoá phông", "golden_hour": "nắng vàng", "night": "ban đêm",
+    "studio": "phông studio", "greenery": "cây lá", "urban": "đường phố", "dynamic_pose": "dáng chuyển động",
+    "looking_at_camera": "nhìn thẳng máy", "water": "hồ bơi / nước", "vivid_colour": "màu rực",
+    "black_white": "đen trắng",
+}
