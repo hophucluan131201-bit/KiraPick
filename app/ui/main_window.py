@@ -361,7 +361,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(self.sections["filters"])
         side_layout.addWidget(self.sections["people"], 1)  # the people list takes the remaining height
         self.sections["folders"].setVisible(False)  # shown when a session has more than one folder
-        side.setMinimumWidth(190)
+        side.setMinimumWidth(250)  # room for 56 px avatars, names and the photo-count badge
 
         self.center = QStackedWidget()
         self.empty_hint = QLabel(
@@ -421,7 +421,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(center_box)
         splitter.addWidget(inspector_scroll)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([210, 1000, 290])
+        splitter.setSizes([260, 960, 320])
         self.setCentralWidget(splitter)
 
     def _build_statusbar(self) -> None:

@@ -60,10 +60,11 @@ def explain_html(score: Score, ranked: Ranked | None = None, taste: TasteStatus 
         value = score.parts.get(key)
         reason = escape(score.reasons.get(key, ""))
         if value is None:
-            rows.append(f"<span style='color:{theme.MUTED}'>{LABELS[key]}: {reason}</span>")
+            rows.append(f"<tr><td>{LABELS[key]}</td><td colspan='2' style='color:{theme.MUTED}'>{reason}</td></tr>")
         else:
-            rows.append(f"<tt>{_bar(value)}</tt> {LABELS[key]} {value:.0f} – {reason}")
-    body = "<br>" + "<br>".join(rows)
+            rows.append(f"<tr><td>{LABELS[key]}</td><td><tt>{_bar(value)}</tt></td><td align='right'>{value:.0f}</td></tr>"
+                        f"<tr><td></td><td colspan='2' style='color:{theme.MUTED}'>{reason}</td></tr>")
+    body = "<table cellspacing='0' cellpadding='1'>" + "".join(rows) + "</table>"
     if ranked is not None and ranked.taste is not None and taste is not None:
         body += f"<br><span style='color:{theme.MUTED}'>Hợp gu: {escape(taste.reason)}</span>"
     if ranked is not None and ranked.artistic:
@@ -101,7 +102,10 @@ class Inspector(QWidget):
                 value = QLabel("—")
                 value.setWordWrap(True)
                 value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                form.addRow(QLabel(key), value)
+                if key == "Điểm chất lượng":  # long, structured content: the whole panel width
+                    form.addRow(value)
+                else:
+                    form.addRow(QLabel(key), value)
                 self.fields[key] = value
             outer.addLayout(form)
         self.error = QLabel()
