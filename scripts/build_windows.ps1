@@ -125,7 +125,39 @@ $report = Join-Path $Root "dist\selftest.json"
 Remove-Item $report -ErrorAction SilentlyContinue
 $proc = Start-Process -FilePath (Join-Path $dist "KiraPick.exe") -ArgumentList @("--self-test", "`"$report`"") -Wait -PassThru
 if (Test-Path $report) { Get-Content $report -Encoding UTF8 | ForEach-Object { Write-Host $_ } }
-if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) { throw "Tự kiểm tra thất bại (xem dist\selftest.json)" }
+if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) {
+    $crash = Join-Path $Root "dist\selftest.crash.txt"
+    if (Test-Path $crash) { Get-Content $crash -Encoding UTF8 | Select-Object -Last 30 | ForEach-Object { Write-Host $_ } }
+    $startup = Join-Path $dist "startup-error.txt"  # Python error before the self-test could start
+    if (Test-Path $startup) { Get-Content $startup -Encoding UTF8 | Select-Object -Last 20 | ForEach-Object { Write-Host $_ } }
+    $fallback = Join-Path $env:LOCALAPPDATA "KiraPick\logs\selftest.json"  # where the app writes if dist\ fails
+    if (Test-Path $fallback) {
+        $r = Get-Content $fallback -Raw -Encoding UTF8 | ConvertFrom-Json
+        Write-Host ("error: " + $r.error)
+        Write-Host ("steps: " + ($r.steps -join " | "))
+        if ($r.traceback) { ($r.traceback -split "`n") | Select-Object -Last 12 | ForEach-Object { Write-Host $_ } }
+    }
+    if (Test-Path $report) {
+        $w = Get-Content $report -Raw -Encoding UTF8 | ConvertFrom-Json
+        Write-Host ("windowed report: ok=" + $w.ok + " error=" + $w.error + " steps=" + ($w.steps -join " | "))
+        Write-Host ("models: " + ($w.models | ConvertTo-Json -Compress) + " dir=" + $w.models_dir)
+        Get-ChildItem (Join-Path $dist "models") | Select-Object -First 8 | ForEach-Object { Write-Host ("  " + $_.Name + " " + $_.Length) }
+        if ($w.traceback) { ($w.traceback -split "`n") | Select-Object -Last 8 | ForEach-Object { Write-Host $_ } }
+    }
+    # Diagnose: the same app built as a console program shows Python's own error output.
+    $env:KIRAPICK_CONSOLE = "1"
+    Invoke-Tool "PyInstaller (console, chẩn đoán)" $bpy @("-m", "PyInstaller", "--noconfirm", "--workpath", "build\pyi-console", "--distpath", "dist-console", "packaging\kirapick.spec")
+    $env:KIRAPICK_CONSOLE = $null
+    Copy-Item (Join-Path $dist "models") (Join-Path $Root "dist-console\KiraPick\models") -Recurse -Force
+    $errFile = Join-Path $Root "dist-console\stderr.txt"
+    $outFile = Join-Path $Root "dist-console\stdout.txt"
+    $diag = Start-Process -FilePath (Join-Path $Root "dist-console\KiraPick\KiraPick.exe") -ArgumentList @("--self-test", "`"$(Join-Path $Root 'dist-console\st.json')`"") -Wait -PassThru -RedirectStandardError $errFile -RedirectStandardOutput $outFile
+    Write-Host ("console exit {0:X8}" -f $diag.ExitCode)
+    $st = Join-Path $Root "dist-console\st.json"
+    if (Test-Path $st) { $r = Get-Content $st -Raw -Encoding UTF8 | ConvertFrom-Json; Write-Host ("partial report: ok=" + $r.ok + " error=" + $r.error + " steps=" + ($r.steps -join " | ")) }
+    foreach ($f in @($outFile, $errFile)) { if (Test-Path $f) { Get-Content $f -Encoding UTF8 | Select-Object -Last 25 | ForEach-Object { Write-Host $_ } } }
+    throw ("Tự kiểm tra thất bại, mã thoát {0:X8} (xem dist\selftest.json)" -f $proc.ExitCode)
+}
 
 Step "6/6 Bộ cài và file zip"
 $version = (& $bpy -c "import sys; sys.path.insert(0, '.'); from app import __version__; print(__version__)" | Out-String).Trim()

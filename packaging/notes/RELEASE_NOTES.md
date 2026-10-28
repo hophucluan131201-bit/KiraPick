@@ -1,10 +1,10 @@
-## KiraPick 2.2.0
+## KiraPick 2.2.1
 
-**Ba bản cài** (chọn một; xem HUONG_DAN_CAI_DAT.txt):
-- **2.2.0 – bản chính thức (DirectML):** cho mọi máy Windows 10/11.
+**Hai bản cài** (chọn một; xem HUONG_DAN_CAI_DAT.txt):
+- **2.2.1 – bản chính thức (DirectML):** cho mọi máy Windows 10/11.
 - **2.2.0a – NVIDIA CUDA (thử nghiệm):** cho máy có card NVIDIA. Bộ cài lớn nên gồm `Setup.exe` và nhiều file `.bin`;
   tải tất cả vào cùng một thư mục rồi chạy `Setup.exe`.
-- **2.2.0b – OpenVINO (thử nghiệm):** cho máy chip Intel; app tự đo, chỉ dùng OpenVINO khi nhanh hơn CPU thường.
+- Bản **OpenVINO** (cho máy chip Intel) tạm hoãn: bản đóng gói chưa qua được bài tự kiểm tra, sẽ phát hành khi sửa xong.
 
 **Chấm điểm mới: hai điểm riêng**
 - **K – Kỹ thuật:** nét, mắt, mặt, sáng, bố cục, thẩm mỹ. Thêm AI mới:

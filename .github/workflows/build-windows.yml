@@ -10,6 +10,10 @@ name: Build Windows installer
 
 on:
   workflow_dispatch:
+    inputs:
+      editions:
+        description: "Editions to build (comma-separated: directml,cuda,openvino)"
+        default: "directml,cuda,openvino"
   push:
     branches: [main, beta]
 
@@ -26,11 +30,14 @@ jobs:
         env:
           MESSAGE: ${{ github.event.head_commit.message }}
           EVENT: ${{ github.event_name }}
+          WANTED: ${{ github.event.inputs.editions }}
         run: |
           python3 - <<'EOF'
           import json, os
           msg, event = os.environ.get("MESSAGE", ""), os.environ["EVENT"]
-          if event != "push" or "[release-all]" in msg:
+          if event != "push":
+              editions = [e.strip() for e in (os.environ.get("WANTED") or "directml,cuda,openvino").split(",") if e.strip()]
+          elif "[release-all]" in msg:
               editions = ["directml", "cuda", "openvino"]
           else:
               editions = [e for e, m in (("directml", "[release]"), ("cuda", "[release-cuda]"),
@@ -60,7 +67,19 @@ jobs:
           if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
       - name: Build, self-test (network blocked), package
         shell: pwsh
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive -Edition ${{ matrix.edition }}
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1 -NonInteractive -Edition ${{ matrix.edition }} *>&1 | Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            # The end of the log as an annotation: readable through the API without the log storage host.
+            $tail = (Get-Content build.log -Tail 25 | ForEach-Object { if ($_.Length -gt 160) { $_.Substring(0, 160) } else { $_ } }) -join "%0A"
+            Write-Host "::error title=build_windows.ps1 failed (${{ matrix.edition }})::$tail"
+            exit $code
+          }
+          if (Test-Path dist/selftest.json) {  # self-test summary, readable through the API
+            $r = Get-Content dist/selftest.json -Raw | ConvertFrom-Json
+            Write-Host ("::notice title=self-test (${{ matrix.edition }})::ok=" + $r.ok + " version=" + $r.version + " edition=" + $r.edition + " steps=" + ($r.steps -join " | ") + " gpu=" + ($r.gpu | ConvertTo-Json -Compress -Depth 3))
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -66,6 +66,16 @@ def _copy_samples(folder: Path, dest: Path) -> list[str]:
 def run(report_path: Path, photos: Path | None = None) -> int:
     """``photos``: optional folder of real photos; a few are copied and run through every stage."""
     report: dict = {"ok": False, "steps": [], "network_attempts": []}
+
+    def step(text: str) -> None:
+        """Record a finished step and save the report at once: a hard exit still shows how far it got."""
+        report["steps"].append(text)
+        print(text, flush=True)
+        try:
+            _write_report(report_path, report)
+        except Exception:  # noqa: BLE001 - the final write reports any problem
+            pass
+
     _block_network(report["network_attempts"])
     started = time.time()
     try:
@@ -81,7 +91,7 @@ def run(report_path: Path, photos: Path | None = None) -> int:
 
         if os.environ.get("ORT_DISABLE_TELEMETRY") != "1":
             raise RuntimeError("ONNX Runtime telemetry is not disabled")
-        report["steps"].append("ONNX Runtime telemetry disabled (ORT_DISABLE_TELEMETRY=1)")
+        step("ONNX Runtime telemetry disabled (ORT_DISABLE_TELEMETRY=1)")
         registry = ModelRegistry()
         report["models_dir"] = str(registry.models_dir)
         report["models"] = {s.spec.id: s.state.value for s in registry.all_status()}
@@ -90,12 +100,12 @@ def run(report_path: Path, photos: Path | None = None) -> int:
                    and registry.specs[i].purpose in ("identity", "identity_plus", "quality")]
         if missing:
             raise RuntimeError(f"models not ready: {missing}")
-        report["steps"].append("models verified (SHA-256)")
+        step("models verified (SHA-256)")
         report["aesthetic_model"] = report["models"].get("aesthetic", "not in manifest")
         report["identity_plus"] = registry.ready("identity_plus")  # ArcFace + YoutuReID
         info = configure()
         report["onnxruntime"] = {"version": info.ort_version, "providers": list(info.available)}
-        report["steps"].append("onnxruntime loaded")
+        step("onnxruntime loaded")
 
         # Graphics card: informative only (a PC without a usable GPU is fine, it uses the CPU).
         from app.ai.runtime import create_session
@@ -120,7 +130,7 @@ def run(report_path: Path, photos: Path | None = None) -> int:
             from app.ai.runtime import list_gpus
 
             report["gpu"]["adapters"] = list_gpus()  # DXGI order = DirectML device_id
-            report["steps"].append(f"graphics card: {probe.device}")
+            step(f"graphics card: {probe.device}")
 
         from app.storage.project import Project
         from app.workers.analyze_job import AnalyzeJob
@@ -138,12 +148,12 @@ def run(report_path: Path, photos: Path | None = None) -> int:
                 expected += len(copied)
             with Project.create(Path(tmp) / "session", "selftest") as project:
                 imported = ImportJob(project, shoot).run()
-                report["steps"].append(f"import: {imported.ingested} photos")
+                step(f"import: {imported.ingested} photos")
                 gpu = photos is not None  # with real photos, use the graphics card like the app does
                 people = AnalyzeJob(project, registry, prefer_gpu=gpu).run(mode="people")
-                report["steps"].append(f"people: {people.analysed} analysed, {people.failed} failed, device {people.device}")
+                step(f"people: {people.analysed} analysed, {people.failed} failed, device {people.device}")
                 quality = AnalyzeJob(project, registry, prefer_gpu=gpu).run(mode="quality")
-                report["steps"].append(f"quality: {quality.measured} measured, {quality.measure_failed} failed, "
+                step(f"quality: {quality.measured} measured, {quality.measure_failed} failed, "
                                        f"device {quality.device}")
                 from app.workers import quality_job
 
@@ -158,12 +168,12 @@ def run(report_path: Path, photos: Path | None = None) -> int:
                 from app.quality import select
 
                 select.select_per_person(project.conn, 3)
-                report["steps"].append("selection ran")
+                step("selection ran")
             # The window runs the AI in a child process of the exe: prove that starts and reports back.
             from app.workers.analyze_process import run_in_child
 
             child = run_in_child(Path(tmp) / "session", "people", None, False, lambda *_a: None, lambda: False)
-            report["steps"].append(f"child process: ok ({child['analysed']} new photos)")
+            step(f"child process: ok ({child['analysed']} new photos)")
         if report["network_attempts"]:
             raise RuntimeError("the app tried to use the network")
         report["ok"] = True

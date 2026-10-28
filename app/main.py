@@ -39,9 +39,16 @@ def _install_excepthook() -> None:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
     if "--self-test" in argv:  # packaged app check, no window: KiraPick.exe --self-test report.json
+        rest = argv[argv.index("--self-test") + 1:]  # [report.json] [a photo folder to try, read-only]
+        report = Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json"
+        try:  # a native crash (e.g. a DLL that does not load) still leaves a trace next to the report
+            import faulthandler
+
+            faulthandler.enable(open(report.with_name(report.stem + ".crash.txt"), "w", encoding="utf-8"))  # noqa: SIM115
+        except OSError:
+            pass
         from app.selftest import run
 
-        rest = argv[argv.index("--self-test") + 1:]  # [report.json] [a photo folder to try, read-only]
         return run(Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json",
                    Path(rest[1]) if len(rest) > 1 else None)
     app = QApplication(argv)
