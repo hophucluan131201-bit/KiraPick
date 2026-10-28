@@ -22,6 +22,7 @@ from app.ui.asset_model import turned
 from app.core.errors import ImageReadError
 from app.ingest.preview import load_full_resolution, load_image
 from app.ui import theme
+from app.ui.shutdown import Gate
 from app.ui.qt_image import pil_to_qimage
 
 PREVIEW_LONG_SIDE = 1600
@@ -83,6 +84,7 @@ class ImageViewer(QGraphicsView):
 
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(2)
+        self.gate = Gate()  # the window shares its own: closed while a session is being released
         self._signals = _Signals(self)  # destroyed by the viewer, on the GUI thread (app.ui.shutdown)
         self._signals.done.connect(self._on_loaded)
         self._token = 0
@@ -179,7 +181,8 @@ class ImageViewer(QGraphicsView):
             self._full_cache.move_to_end(self._path)
             self._show_full(pm, source)
             return
-        self._pool.start(_LoadTask(self._token, self._path, quality, self._signals))
+        if self.gate.open:
+            self._pool.start(_LoadTask(self._token, self._path, quality, self._signals))
 
     def _on_loaded(self, token: int, quality: str, image: QImage, source: str, error: str) -> None:
         if token != self._token:

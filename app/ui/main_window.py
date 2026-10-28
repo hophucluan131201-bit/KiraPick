@@ -163,6 +163,7 @@ class MainWindow(QMainWindow):
         self.taste = TasteService()
         self._decisions_since_training = 0
         self._taste_pool = QThreadPool(self)
+        self._gate = shutdown.Gate()  # closed while a session is released: no new worker starts
         self._retiring: list[QThread] = []  # stopped threads that did not finish in time (app.ui.shutdown)
         self._shutdown_ready = False  # every worker stopped: the next closeEvent releases everything
         self._shutdown_since: float | None = None
@@ -503,6 +504,7 @@ class MainWindow(QMainWindow):
 
         self.detail = DetailPanel()
         self.inspector = self.detail.inspector  # the Thông tin ảnh tab
+        self.model.gate = self.viewer.gate = self.detail.score_card.histogram.gate = self._gate
         self.detail.keep_clicked.connect(lambda: self.set_flag("keep"))
         self.detail.reject_clicked.connect(lambda: self.set_flag("reject"))
         self.detail.clear_clicked.connect(lambda: self.set_flag(None))
@@ -597,8 +599,10 @@ class MainWindow(QMainWindow):
         for dialog in self.findChildren(QDialog):
             dialog.close()
         self.viewer.show_photo(None)
-        left = self._settle(self._session_work, SWITCH_WAIT_MS)
+        self._gate.open = False
+        left = shutdown.settle(self._session_work, SWITCH_WAIT_MS)
         if left:
+            self._gate.open = True
             log.warning("session kept open: %s still running", ", ".join(left))
             self.status.setText(f"Chưa đổi được thư mục: {', '.join(left)} vẫn đang chạy. Thử lại sau vài giây.")
             self._on_current_changed(self.grid.currentIndex(), QModelIndex())  # show again what was dropped
@@ -613,19 +617,10 @@ class MainWindow(QMainWindow):
         self._paused_job = None
         self._fill_people()
         self._update_steps()
+        self._gate.open = True  # the next session may start work
         return True
 
     # ------------------------------------------------------- background work
-    @staticmethod
-    def _settle(works: Callable[[], list[shutdown.Work]], msecs: int) -> list[str]:
-        """Stop and wait; then deliver results the workers already queued (while the session is still open) and stop
-        again whatever those results started. Returns what still runs (then nothing may be released)."""
-        left = shutdown.drain(works(), msecs)
-        if left:
-            return left
-        QCoreApplication.sendPostedEvents()
-        return shutdown.drain(works(), msecs)
-
     def _session_work(self) -> list[shutdown.Work]:
         """Everything that reads the current session (database, preview and thumbnail files)."""
         works = [
@@ -692,7 +687,7 @@ class MainWindow(QMainWindow):
             self.start_import(Path(folder))
 
     def start_import(self, root: Path) -> ImportThread | None:
-        if self.import_thread is not None:
+        if self.import_thread is not None or not self._gate.open:
             return None
         self._stop_analysis()
         self._paused_job = None
@@ -759,6 +754,9 @@ class MainWindow(QMainWindow):
             self.status.setText(", ".join(parts) + ". " + self._restored_note)
 
     def _on_import_failed(self, message: str) -> None:
+        if not self._gate.open:  # releasing the session: no dialog (it would run its own event loop); logged
+            log.warning("import failed while closing: %s", message)
+            return
         QMessageBox.critical(self, "Lỗi khi nhập ảnh", message)
 
     def _on_import_thread_finished(self) -> None:
@@ -928,7 +926,8 @@ class MainWindow(QMainWindow):
                 dialog.close()
             if self.import_thread is not None:  # resumable: unfinished files continue next time
                 self.import_thread.cancel()
-        left = self._settle(self._all_work, 0 if self._shutdown_ready else CLOSE_WAIT_MS)
+        self._gate.open = False  # stays closed: the window is going away
+        left = shutdown.settle(self._all_work, 0 if self._shutdown_ready else CLOSE_WAIT_MS)
         if left:
             self._shutdown_ready = False
             event.ignore()
@@ -975,19 +974,14 @@ class MainWindow(QMainWindow):
             self._shutdown_timer.start()
 
     def _ask_quit_anyway(self, left: list[str]) -> bool:
-        answer = QMessageBox.question(
-            self, "Đang đóng KiraPick",
-            f"{', '.join(left).capitalize()} chưa dừng sau {HUNG_AFTER_S:.0f} giây.\n\n"
-            "Thoát ngay? Các lựa chọn Chọn/Loại đã được lưu; phần nhập ảnh hoặc phân tích dở dang sẽ chạy tiếp lần "
-            "sau. Ảnh gốc không bị ảnh hưởng.\n\nBấm No để chờ thêm.")
-        return answer == QMessageBox.StandardButton.Yes
+        return QMessageBox.question(self, "Đang đóng KiraPick", quit_anyway_text(left)) == QMessageBox.StandardButton.Yes
 
     def _quit_now(self, left: list[str]) -> None:
         """A worker hangs: end the process WITHOUT tearing down objects or connections it may still use."""
         log.warning("quit while still running: %s", ", ".join(left))
         self.settings.sync()
         logging.shutdown()
-        self._hard_exit(0)
+        self._hard_exit(EXIT_ABANDONED)
 
     _hard_exit = staticmethod(os._exit)  # replaced in tests
 
@@ -1033,7 +1027,8 @@ class MainWindow(QMainWindow):
         self.refresh_steps()
 
     def start_analysis(self, mode: str = "people") -> AnalyzeThread | None:
-        if self.project is None or self.import_thread is not None or self.analyze_thread is not None:
+        if (self.project is None or self.import_thread is not None or self.analyze_thread is not None
+                or not self._gate.open):
             return None
         thread = AnalyzeThread(self.project.folder, mode, self._learning_dir(), self.act_gpu.isChecked())
         self._analysis_started = time.monotonic()
@@ -1042,7 +1037,8 @@ class MainWindow(QMainWindow):
         thread.progress.connect(self._on_analyze_progress)
         thread.succeeded.connect(self._on_analyze_done)
         title = "Nhận diện chủ thể" if mode == "people" else "Phân tích ảnh"
-        thread.failed.connect(lambda msg: QMessageBox.warning(self, title, msg))
+        thread.failed.connect(lambda msg: QMessageBox.warning(self, title, msg) if self._gate.open
+                              else log.warning("analysis failed while closing: %s", msg))
         thread.finished.connect(self._on_analyze_thread_finished)
         self.analyze_thread = thread
         self._paused_job = None
@@ -1841,7 +1837,7 @@ class MainWindow(QMainWindow):
         return self._registry or ModelRegistry()
 
     def start_app_update(self, **kw) -> AppUpdater:  # noqa: ANN003 - test doubles for network/disk
-        updater = AppUpdater(self, **kw)
+        updater = AppUpdater(self, gate=self._gate, **kw)
         self._updater = updater
         updater.check()
         return updater
@@ -1897,7 +1893,8 @@ class MainWindow(QMainWindow):
             log.exception("could not read taste examples")
             return
         job = _TasteJob(examples, self._taste_signals)
-        self._taste_pool.start(job)
+        if self._gate.open:
+            self._taste_pool.start(job)
         if wait:
             self._taste_pool.waitForDone(30000)
             QCoreApplication.processEvents()
@@ -1976,7 +1973,8 @@ class MainWindow(QMainWindow):
             log.exception("could not read sharpness examples")
             return
         job = _FocusJob(examples, self._focus_signals)
-        self._taste_pool.start(job)
+        if self._gate.open:
+            self._taste_pool.start(job)
         if wait:
             self._taste_pool.waitForDone(30000)
             QCoreApplication.processEvents()
@@ -2078,6 +2076,7 @@ class MainWindow(QMainWindow):
             collection_id = lists[names.index(name)]["id"]
         dialog = ExportDialog(self.project, [r.id for r in self.selected_records()], self, collection_id=collection_id,
                               settings=self.settings)
+        dialog.gate = self._gate
         dialog.run_recorded.connect(self.refresh_steps)  # ✓ Xuất ảnh as soon as an export is recorded
         dialog.include_pairs.toggled.connect(lambda _on: self._update_counts())  # size follows "Kèm JPEG"
         dialog.show()
@@ -2105,6 +2104,22 @@ SWITCH_WAIT_MS = 10000  # switching folder: how long to wait for workers before 
 CLOSE_WAIT_MS = 3000  # closing: blocking wait; afterwards a non-blocking one (GUI timer)
 HUNG_AFTER_S = 15.0  # closing: ask whether to quit at once after this long
 ANALYSIS_STOP_MS = 30000
+EXIT_ABANDONED = 3  # "Thoát ngay" with work unfinished: not a clean exit (0), not a crash either
+
+
+def quit_anyway_text(left: list[str]) -> str:
+    """The question asked when background work does not stop; says exactly what may be left unfinished."""
+    lines = [f"{', '.join(left).capitalize()} chưa dừng sau {HUNG_AFTER_S:.0f} giây.", "",
+             "Thoát ngay?",
+             "• Các lựa chọn Chọn/Loại, sao và yêu thích đã được lưu.",
+             "• Ảnh gốc không bị ảnh hưởng."]
+    if "nhập ảnh" in left or "phân tích AI" in left:
+        lines.append("• Phần nhập ảnh / phân tích AI dở dang sẽ chạy tiếp ở lần mở sau.")
+    if "sao chép ảnh xuất" in left:
+        lines.append("• Việc xuất ảnh đang chép dở: file cuối cùng trong thư mục xuất có thể bị thiếu dữ liệu và "
+                     "danh sách ảnh đã chép (CSV) chưa được ghi. Hãy xuất lại vào một thư mục mới.")
+    lines += ["", "Bấm No để chờ thêm."]
+    return "\n".join(lines)
 
 RETRAIN_EVERY = 20  # decisions between two trainings of the taste model
 FOCUS_RETRAIN_EVERY = 5  # Q/W/R labels between two trainings of the sharpness models (small and fast)

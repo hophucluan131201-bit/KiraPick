@@ -21,6 +21,7 @@ from app.learning.taste import TasteStatus
 from app.quality.histogram import Histogram, histogram
 from app.quality.score import LABELS, WEIGHTS
 from app.ui import theme
+from app.ui.shutdown import Gate
 from app.ui.asset_model import AssetRecord
 from app.ui.score_style import COLORS, band, chip_for, display_band, display_value, shown
 
@@ -88,6 +89,7 @@ class HistogramWidget(QWidget):
         self._key: Path | None = None
         self._cache: dict[Path, Histogram] = {}
         self._pool = pool or QThreadPool(self)  # its own pool: waiting for it never waits for unrelated work
+        self.gate = Gate()  # the window shares its own: closed while a session is being released
         self._signals = _HistSignals(self)  # destroyed by this widget, on the GUI thread (app.ui.shutdown)
         self._signals.done.connect(self.deliver)
 
@@ -95,7 +97,7 @@ class HistogramWidget(QWidget):
         self.token += 1
         self._key = preview if asset_id is not None else None
         self.data = self._cache.get(self._key) if self._key is not None else None
-        if self.data is None and self._key is not None:
+        if self.data is None and self._key is not None and self.gate.open:
             self._pool.start(_HistTask(self.token, self._key, self._signals))
         self.update()
 

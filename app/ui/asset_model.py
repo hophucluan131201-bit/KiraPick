@@ -35,6 +35,7 @@ from app.quality.score import Score, photo_scores
 from app.storage import view
 from app.storage.stats import SHOWN_PHOTO_SQL
 from app.storage.project import Project
+from app.ui.shutdown import Gate
 
 THUMB_DISPLAY = 240  # long side of cached pixmaps
 _PIXMAP_CACHE_SIZE = 600
@@ -199,6 +200,7 @@ class AssetListModel(QAbstractListModel):
         self._pending: set[int] = set()
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(2)
+        self.gate = Gate()  # the window shares its own: closed while a session is being released
         self._signals = _ThumbSignals(self)  # destroyed by the model, on the GUI thread (app.ui.shutdown)
         self._signals.loaded.connect(self._on_thumb_loaded)
 
@@ -364,7 +366,7 @@ class AssetListModel(QAbstractListModel):
         if pm is not None:
             self._pixmaps.move_to_end(rec.id)
             return pm
-        if rec.thumb_file is not None and rec.id not in self._pending:
+        if rec.thumb_file is not None and rec.id not in self._pending and self.gate.open:
             self._pending.add(rec.id)
             self._pool.start(_ThumbTask(rec.id, rec.thumb_file, self._signals))
         return None

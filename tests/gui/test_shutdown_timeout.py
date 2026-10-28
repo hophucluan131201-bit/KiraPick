@@ -97,7 +97,8 @@ def test_hung_worker_asks_then_quits_without_closing_anything(qtbot, env: dict, 
     w.model._pool.start(_Hold(gate, events, "thumbnail"))
 
     w.close()
-    qtbot.waitUntil(lambda: exits == [0], timeout=5000)
+    qtbot.waitUntil(lambda: exits == [mw.EXIT_ABANDONED], timeout=5000)
+    assert mw.EXIT_ABANDONED != 0  # not reported as a clean exit
     assert asked == [["tạo ảnh nhỏ"]]
     assert events == [] and _db_open(project)  # nothing closed under the running worker before the process ends
 
@@ -177,3 +178,12 @@ def test_analysis_that_ignores_stop_is_kept_until_it_ends(qtbot, env: dict, monk
     qtbot.waitUntil(lambda: not w.isVisible(), timeout=5000)
     assert events == ["analysis done", "db closed"]
     qtbot.waitUntil(lambda: w._retiring == [], timeout=2000)  # forgotten once finished (on the GUI thread)
+
+
+def test_quit_question_says_what_may_be_unfinished() -> None:
+    """Review RV11-V3-02: a forced quit during an export must say the last file may be incomplete."""
+    plain = mw.quit_anyway_text(["tạo ảnh nhỏ"])
+    assert "đã được lưu" in plain and "Ảnh gốc không bị ảnh hưởng" in plain and "xuất" not in plain
+    export = mw.quit_anyway_text(["sao chép ảnh xuất"])
+    assert "file cuối cùng" in export and "thiếu dữ liệu" in export and "xuất lại" in export
+    assert "chạy tiếp" in mw.quit_anyway_text(["phân tích AI"])

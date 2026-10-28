@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QMessageBox, QProgressDialog, QWidget
 from app import __version__
 from app.branding import data_dir
 from app.edition import EDITION
+from app.ui.shutdown import Gate
 from app.updates.app_update import (
     HOSTS,
     Release,
@@ -56,8 +57,10 @@ class AppUpdater:
 
     def __init__(self, parent: QWidget, *, get_releases: Callable[[], list[dict]] | None = None,
                  fetch=fetch_url, folder: Path | None = None,  # noqa: ANN001
-                 start: Callable[[Path], None] = start_installer, close: Callable[[], object] | None = None) -> None:
+                 start: Callable[[Path], None] = start_installer, close: Callable[[], object] | None = None,
+                 gate: Gate | None = None) -> None:
         self.parent = parent
+        self.gate = gate or Gate()  # closed while the window releases its session: results are only logged then
         self.get_releases = get_releases or (lambda: list_releases())
         self.fetch, self.start = fetch, start
         self.folder = folder or data_dir() / "update"
@@ -80,11 +83,22 @@ class AppUpdater:
         self.worker.start()
         return self.worker
 
+    def _closing(self) -> bool:
+        """The window is releasing its session: no dialog (it would run its own event loop), no new download."""
+        if self.gate.open:
+            return False
+        log.info("app update result ignored while closing: %s", self.result)
+        return True
+
     def _failed(self, message: str) -> None:
         self.result = f"Không cập nhật được: {message}"
+        if self._closing():
+            return
         QMessageBox.warning(self.parent, "Cập nhật KiraPick", self.result + "\nBản đang dùng không thay đổi.")
 
     def _offer(self, release: Release | None) -> None:
+        if self._closing():
+            return
         if release is None:
             self.result = f"Bạn đang dùng bản mới nhất ({__version__})."
             QMessageBox.information(self.parent, "Cập nhật KiraPick", self.result)
@@ -102,6 +116,8 @@ class AppUpdater:
         worker.finished.connect(progress.close)
 
     def _install(self, setup: Path) -> None:
+        if self._closing():  # the downloaded, checked installer stays in the update folder for next time
+            return
         try:
             self.start(setup)
         except UpdateError as exc:

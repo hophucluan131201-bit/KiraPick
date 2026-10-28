@@ -42,6 +42,7 @@ from app.storage import exports
 from app.storage.project import Project
 from app.ui import theme
 from app.ui.jobs import ExportThread
+from app.ui.shutdown import Gate
 
 _PREVIEW_ROWS = 300
 INCLUDE_PAIRS_KEY = "export/include_pairs"
@@ -65,6 +66,7 @@ class ExportDialog(QDialog):
         self.plan: ExportPlan | None = None
         self.result: ExportResult | None = None
         self._thread: ExportThread | None = None
+        self.gate = Gate()  # the window shares its own: closed while the session is released (no dialogs then)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Ảnh gốc <b>không bao giờ bị thay đổi</b>: ứng dụng chỉ sao chép sang thư mục bạn chọn."))
@@ -252,6 +254,8 @@ class ExportDialog(QDialog):
     def start_copy(self) -> ExportThread:
         """Starts copying the current plan (tests call this directly, skipping the confirm box)."""
         assert self.plan is not None
+        if self._thread is not None and self._thread.isRunning():  # one copy at a time: never drop a running thread
+            return self._thread
         progress = QProgressDialog("Đang sao chép…", "Dừng", 0, len(self.plan.items), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
@@ -259,7 +263,8 @@ class ExportDialog(QDialog):
         thread.progress.connect(lambda done, total: progress.setValue(done))
         progress.canceled.connect(thread.cancel)
         thread.succeeded.connect(lambda result: self._finished(result, progress))
-        thread.failed.connect(lambda msg: (progress.close(), QMessageBox.critical(self, "Lỗi khi sao chép", msg)))
+        thread.failed.connect(lambda msg: (progress.close(), QMessageBox.critical(self, "Lỗi khi sao chép", msg)
+                                           if self.gate.open else log.warning("export failed while closing: %s", msg)))
         self._thread = thread
         thread.start()
         return thread
