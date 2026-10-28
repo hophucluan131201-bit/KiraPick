@@ -81,13 +81,49 @@ def _read_sidecar(path: Path) -> tuple[str, int, str] | None:
         return None
 
 
+def default_override_dir() -> Path | None:
+    """Models installed by the signed AI-model update (data_dir/models/active), checked first."""
+    try:
+        from app.branding import data_dir
+
+        return data_dir() / "models" / "active"
+    except Exception:  # noqa: BLE001 - no user data folder: bundled models only
+        return None
+
+
 class ModelRegistry:
-    def __init__(self, models_dir: Path | None = None, manifest: dict[str, ModelSpec] | None = None) -> None:
+    def __init__(self, models_dir: Path | None = None, manifest: dict[str, ModelSpec] | None = None, *,
+                 override_dir: Path | None | bool = True) -> None:
         self.models_dir = models_dir or default_models_dir()
+        self.override_dir = default_override_dir() if override_dir is True else (override_dir or None)
         self.specs = manifest if manifest is not None else load_manifest()
         self._verified: dict[str, tuple[int, int, bool]] = {}  # id -> (size, mtime_ns, ok)
 
+    def override_version(self, model_id: str) -> str | None:
+        """Catalogue version of a model installed by the AI-model update, if one is active and intact."""
+        status = self._override_status(model_id)
+        return status[1] if status is not None and status[0].state is ModelState.READY else None
+
+    def _override_status(self, model_id: str) -> tuple[ModelStatus, str] | None:
+        if self.override_dir is None:
+            return None
+        spec = self.specs[model_id]
+        path = self.override_dir / spec.file
+        sidecar = _read_sidecar(path)
+        if sidecar is None or not sidecar[2].startswith("catalog:") or not path.is_file():
+            return None
+        st = path.stat()
+        cached = self._verified.get("override:" + model_id)
+        if cached is None or cached[:2] != (st.st_size, st.st_mtime_ns):
+            ok = st.st_size == sidecar[1] and sha256_of(path) == sidecar[0]
+            cached = (st.st_size, st.st_mtime_ns, ok)
+            self._verified["override:" + model_id] = cached
+        return ModelStatus(spec, ModelState.READY if cached[2] else ModelState.CORRUPT, path), sidecar[2][8:]
+
     def status(self, model_id: str) -> ModelStatus:
+        override = self._override_status(model_id)
+        if override is not None and override[0].state is ModelState.READY:
+            return override[0]  # an intact update wins; a damaged one falls back to the bundled model
         spec = self.specs[model_id]
         path = self.models_dir / spec.file
         try:

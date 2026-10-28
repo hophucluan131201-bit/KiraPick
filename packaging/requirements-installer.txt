@@ -11,3 +11,4 @@ rawpy==0.27.1
 ExifRead==3.5.1
 PyYAML==6.0.3
 pyinstaller==6.20.0
+cryptography==46.0.3  # Ed25519 check of the signed AI-model update catalogue

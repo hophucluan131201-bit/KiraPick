@@ -1,0 +1,33 @@
+# Publishes the signed AI-model update catalogue (release "models-catalog").
+# Run by hand: Actions -> "Publish AI model catalogue" -> Run workflow.
+# Needs the repository secret KIRAPICK_UPDATE_SIGNING_KEY (base64 Ed25519 private key).
+name: Publish AI model catalogue
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Sign
+        env:
+          KIRAPICK_UPDATE_SIGNING_KEY: ${{ secrets.KIRAPICK_UPDATE_SIGNING_KEY }}
+        run: |
+          pip install --disable-pip-version-check -q cryptography==46.0.3 onnxruntime==1.24.4 numpy==2.5.4 pillow==13.0.0 opencv-python-headless==4.14.0.94
+          python scripts/sign_catalog.py dist/catalog
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view models-catalog >/dev/null 2>&1; then
+            gh release create models-catalog --title "KiraPick AI model catalogue" --notes "Signed list of curated AI model updates (used by ⚙ Tuỳ chọn → Cập nhật mô hình AI)." --prerelease
+          fi
+          gh release upload models-catalog dist/catalog/models-catalog.json dist/catalog/models-catalog.json.sig --clobber

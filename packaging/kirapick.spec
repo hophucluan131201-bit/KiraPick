@@ -28,6 +28,7 @@ a = Analysis(
     binaries=msvc_runtime,
     datas=[
         (str(ROOT / "configs" / "model-manifest.json"), "configs"),
+        (str(ROOT / "configs" / "update-public-key.txt"), "configs"),  # checks the signed AI-model catalogue
         (str(ROOT / "packaging" / "kirapick.png"), "assets"),
     ],
     hiddenimports=["app.selftest"],

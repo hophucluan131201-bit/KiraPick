@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from collections.abc import Callable
 import logging
 import time
@@ -70,6 +71,10 @@ from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter,
 from app.ui.client_list_dialog import ClientListDialog
 from app.ui.collapsible import CollapsibleSection
 from app.ui.compare_dialog import CompareDialog
+from app.ui import update_dialog
+from app.ui.update_dialog import ModelUpdater
+from app.ui.update_dialog import Worker as UpdateWorker
+from app.updates.catalog import pending_updates, should_auto_check
 from app.ui.people_delegate import PeopleDelegate
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
@@ -186,6 +191,9 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt override
         super().showEvent(event)
+        if not getattr(self, "_auto_check_scheduled", False):
+            self._auto_check_scheduled = True
+            QTimer.singleShot(3000, self._maybe_auto_check)  # after the window is up, never blocking it
         if getattr(self, "_maximize_on_show", False):
             self._maximize_on_show = False
             self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
@@ -275,6 +283,17 @@ class MainWindow(QMainWindow):
         self.act_taste_weight.setToolTip("Điểm xếp hạng = Kỹ thuật + Hợp gu bạn; chọn tỷ lệ của phần gu")
         self.act_taste_weight.triggered.connect(self.ask_taste_weight)
         options.addAction(self.act_taste_weight)
+        options.addSeparator()
+        self.act_update = QAction("🔄 Cập nhật mô hình AI… (cần mạng)", self)
+        self.act_update.setToolTip("Tải bản vá mô hình AI đã được KiraPick kiểm tra và ký số. "
+                                   "Chỉ chạy khi bạn bấm; không gửi ảnh hay dữ liệu nào đi.")
+        self.act_update.triggered.connect(lambda: self.start_model_update())
+        options.addAction(self.act_update)
+        self.act_auto_update = QAction("Tự kiểm tra bản AI mới khi mở app (cần mạng)", self)
+        self.act_auto_update.setCheckable(True)
+        self.act_auto_update.setChecked(self.settings.value("auto_update_check", False, bool))
+        self.act_auto_update.toggled.connect(lambda on: self.settings.setValue("auto_update_check", on))
+        options.addAction(self.act_auto_update)
         self.options_button = QToolButton(self)
         self.options_button.setText("⚙ Tuỳ chọn")
         self.options_button.setToolTip("Tự chuyển ảnh sau K/X, dùng card đồ hoạ cho AI")
@@ -1516,6 +1535,32 @@ class MainWindow(QMainWindow):
         self._decisions_since_training += len(targets)
         if self._decisions_since_training >= RETRAIN_EVERY:
             self.retrain_taste()
+
+    # ------------------------------------------------------- AI updates
+    def _registry_or_default(self) -> ModelRegistry:
+        return self._registry or ModelRegistry()
+
+    def start_model_update(self, **kw) -> ModelUpdater:  # noqa: ANN003 - test doubles for network/root
+        updater = ModelUpdater(self, self._registry_or_default(), **kw)
+        self._updater = updater
+        updater.start()
+        return updater
+
+    def _maybe_auto_check(self) -> None:
+        """Opt-in (off by default): at most once a day, fetch only the signed catalogue in the background."""
+        today = date.today().isoformat()
+        if not should_auto_check(enabled=self.act_auto_update.isChecked(),
+                                 last_check=self.settings.value("last_update_check", None), today=today):
+            return
+        self.settings.setValue("last_update_check", today)
+        registry = self._registry_or_default()
+        worker = UpdateWorker(lambda _p: pending_updates(update_dialog.download_catalog(), registry, __version__),
+                              self)
+        worker.done.connect(lambda pending: pending and self.status.setText(
+            f"Có {len(pending)} bản mô hình AI mới — vào ⚙ Tuỳ chọn → 🔄 Cập nhật mô hình AI để cài."))
+        worker.failed.connect(lambda msg: log.info("automatic update check: %s", msg))  # silent when offline
+        self._auto_worker = worker
+        worker.start()
 
     # ------------------------------------------------------------- taste
     def taste_weight(self) -> float:
