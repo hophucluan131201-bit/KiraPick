@@ -114,3 +114,15 @@ def test_dialog_records_only_finished_exports_that_copied(qtbot, setup, tmp_path
     dialog._record_run(ExportResult(copied=["a.jpg"], failed={"b.jpg": "full"}, copied_ids=[first]))
     assert tuple(p.conn.execute("SELECT photos, files FROM export_runs").fetchone()) == (1, 1)
     assert signals == [1]
+
+
+def test_dialog_refuses_a_result_whose_lists_disagree(qtbot, setup, tmp_path: Path) -> None:  # noqa: ANN001, F811
+    """Invariant: one asset id per copied file; otherwise nothing is recorded (and the copies stay)."""
+    from app.ui.export_dialog import ExportDialog
+
+    p, _, _ = setup
+    ids = sorted(_ids(p).values())
+    dialog = ExportDialog(p, ids)
+    qtbot.addWidget(dialog)
+    dialog._record_run(ExportResult(copied=["a.jpg", "b.jpg"], copied_ids=[ids[0]]))
+    assert exports.count(p.conn) == 0

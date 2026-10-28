@@ -214,6 +214,10 @@ class ExportDialog(QDialog):
         """A finished, not cancelled export that copied something counts for the "Xuất ảnh" step."""
         if result.cancelled or not result.copied:
             return
+        if len(result.copied) != len(result.copied_ids):  # one asset id per copied file, always
+            log.error("export result lists disagree (%d files, %d ids): run not recorded",
+                      len(result.copied), len(result.copied_ids))
+            return
         try:  # copied_ids lists the asset of every copied file, renames and subfolders included
             with self.project.transaction() as conn:
                 exports.record(conn, exports.photo_count(conn, result.copied_ids), len(result.copied))
