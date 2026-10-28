@@ -21,10 +21,13 @@ def test_automatic_gc_is_off_and_the_gui_timer_collects(qtbot, env: dict, monkey
     monkeypatch.setattr(gc_guard.gc, "collect",
                         lambda gen=2: calls.append((gen, threading.current_thread() is threading.main_thread()))
                         or real(gen))
-    keep = [[i] for i in range(gc_guard.THRESHOLD[0] * 2)]  # pass the generation-0 threshold
+    # Counters over the generation-0 threshold, as after many allocations. (Allocating objects here is not reliable:
+    # CPython's counter also goes DOWN for every container object freed, old ones included, so garbage released by
+    # earlier tests can keep it under the threshold — the same rule automatic collection follows.)
+    monkeypatch.setattr(gc_guard.gc, "get_count", lambda: (gc_guard.THRESHOLD[0] + 1, 0, 0))
     qtbot.waitUntil(lambda: bool(calls), timeout=3000)
     assert calls[0] == (0, True)  # run by the timer, on the GUI thread
-    assert keep and w is not None
+    assert w is not None
 
 
 def test_check_collects_the_oldest_generation_over_its_threshold(monkeypatch) -> None:
