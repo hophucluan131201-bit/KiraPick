@@ -9,7 +9,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFormLayout, QLabel, QVBoxLayout, QWidget
 
 from app.ui import theme
-from app.quality.score import Score
+from app.learning.taste import TasteStatus
+from app.quality.rank import Ranked
+from app.quality.score import LABELS, WEIGHTS, Score
 from app.ui.asset_model import AssetRecord
 
 _SOURCE_VI = {
@@ -35,22 +37,45 @@ def _exposure(exif: dict) -> str:
     return "  ".join(parts) or "—"
 
 
-def explain_html(score: Score, pick_rank: int | None = None, selection: str | None = None) -> str:
-    """Score as strengths / weaknesses / not judged (rich text for a QLabel)."""
-    def block(title: str, items: list[str], color: str) -> str:
-        if not items:
-            return ""
-        lines = "".join(f"<br>• {escape(i)}" for i in items)
-        return f"<br><span style='color:{color}'><b>{title}</b></span>{lines}"
+def _bar(value: float) -> str:
+    filled = int(round(value / 10))
+    return "█" * filled + "░" * (10 - filled)
 
-    head = f"<b>{score.total:.0f}/100</b> điểm" if score.total is not None else "<b>chưa chấm được</b>"
+
+def explain_html(score: Score, ranked: Ranked | None = None, taste: TasteStatus | None = None,
+                 pick_rank: int | None = None, selection: str | None = None) -> str:
+    """Technical score and taste score, one bar + reason per criterion, then what was not judged."""
+    tech = f"<b>Kỹ thuật {score.total:.0f}/100</b>" if score.total is not None else "<b>Kỹ thuật: chưa chấm được</b>"
+    if ranked is not None and ranked.taste is not None:
+        gu = f"<b>Hợp gu bạn {ranked.taste:.0f}/100</b>"
+    else:
+        gu = f"Hợp gu bạn: chưa có – {escape(taste.reason)}" if taste is not None else "Hợp gu bạn: chưa có"
+    head = f"{tech} · {gu}"
     if pick_rank is not None:
-        head += f" · ⭐ AI chọn (thứ {pick_rank})"
+        head += f"<br>⭐ AI chọn (thứ {pick_rank})"
     if selection:
         head += f"<br><i>{escape(selection)}</i>"
-    return (head + block("Điểm mạnh", score.strengths, theme.KEEP)
-            + block("Điểm yếu", score.weaknesses, theme.REJECT)
-            + block("Chưa đánh giá", score.not_rated, theme.MUTED))
+    rows = []
+    for key in WEIGHTS:
+        value = score.parts.get(key)
+        reason = escape(score.reasons.get(key, ""))
+        if value is None:
+            rows.append(f"<span style='color:{theme.MUTED}'>{LABELS[key]}: {reason}</span>")
+        else:
+            rows.append(f"<tt>{_bar(value)}</tt> {LABELS[key]} {value:.0f} – {reason}")
+    body = "<br>" + "<br>".join(rows)
+    if ranked is not None and ranked.taste is not None and taste is not None:
+        body += f"<br><span style='color:{theme.MUTED}'>Hợp gu: {escape(taste.reason)}</span>"
+    if ranked is not None and ranked.artistic:
+        body += "<br>🎨 ngoại lệ nghệ thuật: ảnh cố ý mềm/tối và hợp gu bạn nên không bị trừ điểm"
+    elif ranked is not None and ranked.capped:
+        body += "<br>Lỗi nặng (mắt nhắm / thiếu nét) nên điểm xếp hạng không vượt điểm kỹ thuật"
+    if score.weaknesses:
+        body += f"<br><span style='color:{theme.REJECT}'><b>⚠ Điểm yếu chính:</b> {escape(score.weaknesses[0])}</span>"
+    if score.not_rated:
+        lines = "".join(f"<br>• {escape(i)}" for i in score.not_rated)
+        body += f"<br><span style='color:{theme.MUTED}'><b>Chưa đánh giá</b></span>{lines}"
+    return head + body
 
 
 class Inspector(QWidget):
@@ -87,7 +112,7 @@ class Inspector(QWidget):
         self.show_record(None)
 
     def show_record(self, rec: AssetRecord | None, view_source: str | None = None, people: str | None = None,
-                    selection: str | None = None) -> None:
+                    selection: str | None = None, taste: TasteStatus | None = None) -> None:
         """selection: why the AI picked (or did not pick) this photo, if a selection was made."""
         f = self.fields
         if rec is None:
@@ -112,7 +137,7 @@ class Inspector(QWidget):
         if rec.score is None:
             f["Điểm chất lượng"].setText("chưa chấm — bấm 📊 Phân tích ảnh")
         else:
-            f["Điểm chất lượng"].setText(explain_html(rec.score, rec.pick_rank, selection))
+            f["Điểm chất lượng"].setText(explain_html(rec.score, rec.ranked, taste, rec.pick_rank, selection))
         source = view_source or rec.preview_source
         f["Nguồn ảnh"].setText(_SOURCE_VI.get(source or "", source or "—"))
         self.error.setText(f"Lỗi: {rec.error}" if rec.error else "")

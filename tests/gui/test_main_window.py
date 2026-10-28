@@ -360,7 +360,7 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     assert w.model.rowCount() == subjects[0]["photos"]
     assert w.inspector.fields["Chủ thể"].text().startswith(actions.subject_label(w.project.conn, first))
     explained = w.inspector.fields["Điểm chất lượng"].text()
-    assert "/100" in explained and "Điểm mạnh" in explained and "mắt" in explained
+    assert "Kỹ thuật" in explained and "/100" in explained and "Hợp gu bạn" in explained and "mắt" in explained
     assert "thẩm mỹ" in explained  # judged (hint) when the aesthetic model is present, else listed as not judged
 
     monkeypatch.setattr(mw.QInputDialog, "getText", lambda *a, **k: ("Aki", True))
@@ -460,6 +460,11 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     w.teacher.store.add_identity("merge", True, [PairEvidence(0.7, 0.9, 30.0)], "sface-2021dec", "x")
     text = w.learning_text()
     assert "Đã ghi 1 cặp ảnh “cùng chủ thể”" in text and "Cần thêm lần sửa" in text
+    assert "Hợp gu bạn" in text and "Chưa đủ dữ liệu" in text and "50% Kỹ thuật + 50% Hợp gu" in text
+    w.set_taste_weight(0.3)  # ⚙ Mức ảnh hưởng của gu: kept in the settings
+    assert w.taste_weight() == 0.3 and "70% Kỹ thuật + 30% Hợp gu" in w.learning_text()
+    w.retrain_taste(wait=True)  # runs off the Qt thread; too few decisions: still "not ready"
+    assert not w.taste.ready and "Chưa đủ dữ liệu" in w.taste.status.reason
 
     class _Box(QMessageBox):  # press "Xoá dữ liệu học…" without showing the dialog
         def exec(self) -> int:  # noqa: A003

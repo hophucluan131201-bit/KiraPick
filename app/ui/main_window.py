@@ -8,7 +8,21 @@ import logging
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelectionModel, QModelIndex, QPointF, QSettings, QSize, QStandardPaths, Qt, QTimer
+from PySide6.QtCore import (
+    QCoreApplication,
+    QItemSelectionModel,
+    QModelIndex,
+    QObject,
+    QPointF,
+    QRunnable,
+    QSettings,
+    QSize,
+    QStandardPaths,
+    Qt,
+    QThreadPool,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -45,7 +59,10 @@ from app.identity.cluster import merge_suggestions
 from app.learning.store import LearningStore
 from app.quality import select
 from app.learning.teacher import Teacher, group_key, photo_key
+from app.learning.taste import TasteStatus, train
+from app.learning.taste_service import TasteService
 from app.ai.clip_version import CLIP_VERSION
+from app.quality.rank import DEFAULT_TASTE_WEIGHT
 from app.storage.vectors import load_vector
 from app.selection.client_list import delete_collection, list_collections
 from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter, Sort
@@ -122,6 +139,9 @@ class MainWindow(QMainWindow):
         self._last_import_root: Path | None = None
         self.model = AssetListModel(self)
         self.teacher = Teacher(self._open_learning())
+        self.taste = TasteService()
+        self._decisions_since_training = 0
+        self._taste_pool = QThreadPool(self)
 
         self._build_toolbar()
         self._build_body()
@@ -247,6 +267,10 @@ class MainWindow(QMainWindow):
         options.setToolTipsVisible(True)
         options.addAction(self.act_auto_advance)
         options.addAction(self.act_gpu)
+        self.act_taste_weight = QAction("🎯 Mức ảnh hưởng của gu…", self)
+        self.act_taste_weight.setToolTip("Điểm xếp hạng = Kỹ thuật + Hợp gu bạn; chọn tỷ lệ của phần gu")
+        self.act_taste_weight.triggered.connect(self.ask_taste_weight)
+        options.addAction(self.act_taste_weight)
         self.options_button = QToolButton(self)
         self.options_button.setText("⚙ Tuỳ chọn")
         self.options_button.setToolTip("Tự chuyển ảnh sau K/X, dùng card đồ hoạ cho AI")
@@ -429,7 +453,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{photo_root.name or photo_root} — {APP_NAME} {__version__}")
         self.search.clear()
         self.model.set_search("")
+        self.taste.load_clips(project.conn)
+        self.model.set_ranker(self.taste.ranker(self.taste_weight()))
         self.model.set_project(project)
+        self.retrain_taste()
         self._fill_filters()
         self._fill_people()
         self._refresh_sidebar()
@@ -613,13 +640,29 @@ class MainWindow(QMainWindow):
             tuning.describe() if tuning.applied else tuning.reason,
             "Áp dụng ở lần bấm 🧠 Nhận diện chủ thể tiếp theo.",
             "",
-            "<b>Gu chọn ảnh</b>",
-            f"Đã ghi {store.culling_count()} lần bạn bấm Giữ/Loại (dùng cho các bản sau).",
+            "<b>Gu chọn ảnh (Hợp gu bạn)</b>",
+            f"Đã ghi {store.culling_count()} ảnh bạn đã Giữ/Loại/cho sao/❤ hoặc khách chọn.",
+            self.taste.status.reason + ("" if self.taste.ready else
+                                        " — cần ít nhất 60 lựa chọn (20 thích, 20 không thích) và đoán đúng "
+                                        "rõ hơn đoán mò thì mới hiện điểm Hợp gu."),
+            *self.taste.explain(self._prompt_vectors()),
+            f"Điểm xếp hạng = {100 - round(self.taste_weight() * 100)}% Kỹ thuật + "
+            f"{round(self.taste_weight() * 100)}% Hợp gu (đổi trong ⚙ Tuỳ chọn).",
             "",
-            "Dữ liệu học chỉ có số đo độ giống, không có ảnh, tên file hay tên chủ thể, "
-            "và chỉ nằm trên máy này.",
+            "Dữ liệu học chỉ có các con số (độ giống, điểm, “dấu vân tay” CLIP của ảnh), không có ảnh, "
+            "tên file hay tên chủ thể, và chỉ nằm trên máy này.",
         ]
         return "<br>".join(lines)
+
+    def _prompt_vectors(self) -> dict:
+        """Style prompt embeddings (to put the learnt taste into words); empty without the CLIP model files."""
+        try:
+            import numpy as np
+
+            with np.load((self._registry or ModelRegistry()).require("clip_prompts")) as data:
+                return dict(zip([str(i) for i in data["ids"]], data["vectors"], strict=True))
+        except Exception:  # noqa: BLE001 - only the explanation is lost
+            return {}
 
     def show_learning(self) -> None:
         box = QMessageBox(self)
@@ -778,6 +821,8 @@ class MainWindow(QMainWindow):
             note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
             self.status.setText(", ".join(parts) + "." + note + " Bước tiếp theo: bấm ⭐ Chọn ảnh, hoặc xếp theo điểm.")
             self.status.setToolTip(summary.get("gpu_check") or "")
+            self.taste.load_clips(self.project.conn)  # new CLIP vectors: the taste score can cover them
+            self.retrain_taste()
             return
         people = self.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
         unknown = self.project.conn.execute(
@@ -1110,7 +1155,7 @@ class MainWindow(QMainWindow):
 
     def _show_inspector(self, rec: AssetRecord | None) -> None:
         self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None,
-                                   selection=self._selection_text(rec))
+                                   selection=self._selection_text(rec), taste=self.taste.status)
 
     # ------------------------------------------------------- navigation
     def reload_preserving_view(self) -> None:
@@ -1154,7 +1199,7 @@ class MainWindow(QMainWindow):
     def _on_current_changed(self, current: QModelIndex, _prev: QModelIndex) -> None:
         rec = self.model.record(current)
         self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None,
-                                   selection=self._selection_text(rec))
+                                   selection=self._selection_text(rec), taste=self.taste.status)
         if rec is not None and self.center.currentIndex() == 2:
             self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec))
 
@@ -1394,6 +1439,55 @@ class MainWindow(QMainWindow):
             parts = dict(rec.score.parts) if rec.score is not None else {}
             self.teacher.decided(photo_key(session, rec.id), decisions.get(conn, rec.id), parts, clip,
                                  group_key(session, (rec.capture_time or "")[:10]))
+        self._decisions_since_training += len(targets)
+        if self._decisions_since_training >= RETRAIN_EVERY:
+            self.retrain_taste()
+
+    # ------------------------------------------------------------- taste
+    def taste_weight(self) -> float:
+        return max(0.0, min(1.0, float(self.settings.value("taste_weight", DEFAULT_TASTE_WEIGHT))))
+
+    def set_taste_weight(self, w: float) -> None:
+        self.settings.setValue("taste_weight", max(0.0, min(1.0, w)))
+        self.model.set_ranker(self.taste.ranker(self.taste_weight()))
+        if self.project is not None:
+            self.reload_preserving_view()
+            self._show_inspector(self.current_record())
+
+    def ask_taste_weight(self) -> None:
+        value, ok = QInputDialog.getInt(
+            self, "Mức ảnh hưởng của gu",
+            "Điểm xếp hạng = Kỹ thuật và Hợp gu bạn.\nPhần Hợp gu chiếm bao nhiêu % (0 = chỉ kỹ thuật)?",
+            round(self.taste_weight() * 100), 0, 100, 10)
+        if ok:
+            self.set_taste_weight(value / 100)
+
+    def retrain_taste(self, wait: bool = False) -> None:
+        """Train the taste model from the learning store in the background (never on the Qt thread)."""
+        store = self.teacher.store
+        self._decisions_since_training = 0
+        if store is None:
+            return
+        try:
+            examples = store.taste_examples(CLIP_VERSION)
+        except Exception:  # noqa: BLE001 - learning is optional
+            log.exception("could not read taste examples")
+            return
+        job = _TasteJob(examples)
+        job.signals.done.connect(self._on_taste_trained)
+        self._taste_pool.start(job)
+        if wait:
+            self._taste_pool.waitForDone(30000)
+            QCoreApplication.processEvents()
+
+    def _on_taste_trained(self, status: TasteStatus) -> None:
+        was_ready = self.taste.ready
+        self.taste.set_status(status)
+        log.info("taste model: %s", status.reason)
+        if self.project is not None and (was_ready or self.taste.ready):
+            self.reload_preserving_view()
+        if self.project is not None:
+            self._show_inspector(self.current_record())
 
     def _learn_client_picks(self, collection_id: int) -> None:
         """Client picks teach a little (they show the client's taste, not always the best photo)."""
@@ -1450,11 +1544,11 @@ class MainWindow(QMainWindow):
         n = dialog.count.value()
         per_person = dialog.per_person.isChecked()
         if per_person:  # every person of the folder, whatever the grid currently shows
-            picks = select.select_per_person(conn, n)
+            picks = select.select_per_person(conn, n, ranker=self.taste.ranker(self.taste_weight()))
             params = {"mode": "per_person", "n": n}
         else:
             subject = target if flt is Filter.SUBJECT else None
-            picks = select.select_in_view(conn, n, set(in_view), subject)
+            picks = select.select_in_view(conn, n, set(in_view), subject, ranker=self.taste.ranker(self.taste_weight()))
             params = {"mode": "in_view", "n": n, "subject_id": subject}
         marked = 0
         with self.project.transaction() as tx:
@@ -1505,3 +1599,25 @@ class MainWindow(QMainWindow):
             "Ctrl+F   tìm tên file,  Ctrl+L   danh sách khách chọn\n\n"
             "Trong lưới có thể chọn nhiều ảnh (Ctrl/Shift + click) rồi bấm K/X/số để áp dụng cho tất cả.",
         )
+
+
+RETRAIN_EVERY = 20  # decisions between two trainings of the taste model
+
+
+class _TasteSignals(QObject):
+    done = Signal(object)
+
+
+class _TasteJob(QRunnable):
+    def __init__(self, examples: list) -> None:
+        super().__init__()
+        self.examples = examples
+        self.signals = _TasteSignals()
+
+    def run(self) -> None:
+        try:
+            status = train(self.examples)
+        except Exception as exc:  # noqa: BLE001 - never crash the app over learning
+            log.exception("taste training failed")
+            status = TasteStatus(False, f"Không học được gu ({type(exc).__name__})")
+        self.signals.done.emit(status)

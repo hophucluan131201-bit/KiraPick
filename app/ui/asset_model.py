@@ -13,6 +13,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
+from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import (
@@ -29,6 +30,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QImage, QPixmap
 
 from app.identity.actions import UNIDENTIFIED_ASSETS
+from app.quality.rank import Ranked, rank
 from app.quality.score import Score, photo_scores
 from app.storage.project import Project
 
@@ -81,6 +83,7 @@ class AssetRecord:
     uncertain: bool = False  # in a person view: only suggested (no clear face), needs a look
     score: Score | None = None  # of the person shown (person view) or of the main person
     pick_rank: int | None = None  # chosen by "⭐ Chọn ảnh": 1 = first choice
+    ranked: Ranked | None = None  # technical score blended with the taste score (None = not scored)
 
     @property
     def name(self) -> str:
@@ -162,6 +165,7 @@ class AssetListModel(QAbstractListModel):
         self._target_id: int | None = None  # collection or subject id, depending on the filter
         self._search: list[str] = []
         self._sort = Sort.TIME
+        self._ranker: Callable[[int, Score], Ranked] | None = None
         self._pixmaps: OrderedDict[int, QPixmap] = OrderedDict()
         self._pending: set[int] = set()
         self._pool = QThreadPool(self)
@@ -191,6 +195,10 @@ class AssetListModel(QAbstractListModel):
         if source_id != -1:
             self._source_id = source_id
         self.reload()
+
+    def set_ranker(self, ranker: Callable[[int, Score], Ranked] | None) -> None:
+        """How a photo's ranking value is computed (taste model + weight); applied on reload."""
+        self._ranker = ranker
 
     def set_sort(self, sort: Sort) -> None:
         if sort is not self._sort:
@@ -260,6 +268,9 @@ class AssetListModel(QAbstractListModel):
                         pick_rank=picks.get(r["id"]),
                     )
                 )
+                rec = rows[-1]
+                if rec.score is not None:
+                    rec.ranked = self._ranker(rec.id, rec.score) if self._ranker else rank(rec.score, None, [], 0.0)
             if self._sort is not Sort.TIME:
                 def by_score(rec: AssetRecord) -> float:
                     return -(rec.score.total if rec.score is not None and rec.score.total is not None else -1.0)
