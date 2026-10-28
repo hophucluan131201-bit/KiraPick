@@ -32,6 +32,7 @@ from PySide6.QtGui import QImage, QPixmap
 from app.identity.actions import UNIDENTIFIED_ASSETS
 from app.quality.rank import Ranked, rank
 from app.quality.score import Score, photo_scores
+from app.storage.stats import SHOWN_PHOTO_SQL
 from app.storage.project import Project
 
 THUMB_DISPLAY = 240  # long side of cached pixmaps
@@ -124,11 +125,7 @@ FROM assets a
 JOIN sources s ON s.id = a.source_id
 LEFT JOIN previews p ON p.asset_id = a.id AND p.kind = 'thumb'
 LEFT JOIN decisions d ON d.asset_id = a.id AND d.subject_id IS NULL
-WHERE a.status NOT IN ('missing', 'duplicate')
-  -- a JPEG that is half of a RAW+JPEG pair is shown through its RAW
-  AND NOT (a.media_kind = 'raster' AND a.pair_group_id IS NOT NULL
-           AND EXISTS (SELECT 1 FROM assets r WHERE r.pair_group_id = a.pair_group_id AND r.media_kind = 'raw'))
-"""
+WHERE """ + SHOWN_PHOTO_SQL + "\n"
 
 _FILTER_SQL = {
     Filter.ALL: "",
