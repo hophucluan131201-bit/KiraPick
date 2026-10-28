@@ -41,16 +41,25 @@ def main(argv: list[str] | None = None) -> int:
     if "--self-test" in argv:  # packaged app check, no window: KiraPick.exe --self-test report.json
         rest = argv[argv.index("--self-test") + 1:]  # [report.json] [a photo folder to try, read-only]
         report = Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json"
+        crash = report.with_name(report.stem + ".crash.txt")
         try:  # a native crash (e.g. a DLL that does not load) still leaves a trace next to the report
             import faulthandler
 
-            faulthandler.enable(open(report.with_name(report.stem + ".crash.txt"), "w", encoding="utf-8"))  # noqa: SIM115
+            faulthandler.enable(open(crash, "w", encoding="utf-8"))  # noqa: SIM115
         except OSError:
             pass
         from app.selftest import run
 
-        return run(Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json",
-                   Path(rest[1]) if len(rest) > 1 else None)
+        code = run(report, Path(rest[1]) if len(rest) > 1 else None)
+        try:  # no crash: no empty trace file left on the user's Desktop
+            import faulthandler
+
+            faulthandler.disable()
+            if crash.exists() and crash.stat().st_size == 0:
+                crash.unlink()
+        except OSError:
+            pass
+        return code
     app = QApplication(argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(SETTINGS_IDS[0])
