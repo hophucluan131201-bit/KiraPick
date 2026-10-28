@@ -9,7 +9,7 @@ The panel only shows and asks; MainWindow does the work (decisions, learning, pe
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QSize, Qt, QThreadPool, Signal
-from PySide6.QtGui import QIcon, QMouseEvent, QPixmap
+from PySide6.QtGui import QColor, QIcon, QMouseEvent, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QSizePolicy,
     QTabWidget, QVBoxLayout, QWidget,
@@ -24,12 +24,34 @@ from app.ui.score_card import ScoreCard
 from app.ui.score_style import COLORS
 
 TABS = ("Phân tích AI", "Thông tin ảnh", "Ảnh tương tự", "Chủ thể")
+TABS_SHORT = ("AI", "Thông tin", "Tương tự", "Chủ thể")  # narrow panel: full titles in the tooltips
+TABS_ICONS = ("✨ AI", "ℹ", "⧉", "👤")  # narrowest panel
+BURST_ROW = 72  # one fixed row height in "Ảnh tương tự", with or without the thumbnail yet
+TOP_MAX_W = 300  # SHORT (horizontal) layout: preview and buttons column
+PREVIEW_MIN_H = 80
+QWIDGETSIZE_MAX = 16777215
+_PLACEHOLDER: QIcon | None = None
+
+
+def _placeholder() -> QIcon:
+    """Grey square shown in a burst row until its thumbnail arrives."""
+    global _PLACEHOLDER
+    if _PLACEHOLDER is None:
+        pm = QPixmap(64, 64)
+        pm.fill(QColor(theme.RAISED))
+        _PLACEHOLDER = QIcon(pm)
+    return _PLACEHOLDER
 BURST_HEADER = ("Ảnh chụp liền nhau (±3 giây, cùng chủ thể) — chỉ theo giờ chụp, "
                 "không so sánh dáng hay nội dung ảnh")
 
 
 class _Preview(QLabel):
     clicked = Signal()
+    resized = Signal()
+
+    def resizeEvent(self, event: object) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)  # type: ignore[arg-type]
+        self.resized.emit()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt override
         if event.button() == Qt.MouseButton.LeftButton:
@@ -66,12 +88,14 @@ class DetailPanel(QWidget):
         top_layout.setContentsMargins(0, 0, 0, 0)
         self.title = QLabel("—")
         self.title.setStyleSheet("font-weight: bold;")
+        self.title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)  # never takes the preview's room
         self.preview = _Preview()
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setMinimumHeight(120)
+        self.preview.setFixedHeight(PREVIEW_MIN_H)  # sized from the panel in _size_preview
         self.preview.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.preview.setToolTip("Bấm để xem lớn (Space)")
         self.preview.clicked.connect(self.open_loupe)
+        self.preview.resized.connect(self._fit_preview)
         self._pixmap: QPixmap | None = None
         stars = QHBoxLayout()
         self.star_buttons: list[QPushButton] = []
@@ -121,6 +145,7 @@ class DetailPanel(QWidget):
         self.burst_header.setStyleSheet(f"color: {theme.MUTED};")
         self.burst = QListWidget()
         self.burst.setIconSize(QSize(64, 64))
+        self.burst.setUniformItemSizes(True)  # one row height, thumbnail or not
         self.burst.itemClicked.connect(lambda item: self.neighbour_clicked.emit(int(item.data(0x0100))))
         burst_layout.addWidget(self.burst_header)
         burst_layout.addWidget(self.burst, 1)
@@ -174,13 +199,23 @@ class DetailPanel(QWidget):
             item = QListWidgetItem(f"{other.name}  ·  {badge}" + (f"  ·  {chip}" if chip else ""))
             item.setData(0x0100, other.id)
             pm = (neighbour_pixmaps or {}).get(other.id)
-            if pm is not None:
-                item.setIcon(QIcon(pm))
+            item.setIcon(QIcon(pm) if pm is not None else _placeholder())  # the thumbnail replaces it on arrival
+            item.setSizeHint(QSize(0, BURST_ROW))
             self.burst.addItem(item)
         if rec is not None and not neighbours:
             empty = QListWidgetItem("Không có ảnh nào chụp liền trước/sau (±3 giây)")
             empty.setFlags(Qt.ItemFlag.NoItemFlags)
             self.burst.addItem(empty)
+
+    def update_thumbnail(self, asset_id: int, pixmap: QPixmap) -> None:
+        """A thumbnail finished loading: the preview (if it is the photo shown) and its burst row use it."""
+        if asset_id == self._shown_id:
+            self._pixmap = pixmap
+            self._fit_preview()
+        for i in range(self.burst.count()):
+            item = self.burst.item(i)
+            if item.data(0x0100) == asset_id:
+                item.setIcon(QIcon(pixmap))
 
     def open_exif(self) -> None:
         self.tabs.setCurrentIndex(TABS.index("Thông tin ảnh"))
@@ -189,6 +224,33 @@ class DetailPanel(QWidget):
     def set_horizontal(self, on: bool) -> None:
         """SHORT layouts: preview beside the tabs instead of above them (no widget is moved to another parent)."""
         self._box.setDirection(QBoxLayout.Direction.LeftToRight if on else QBoxLayout.Direction.TopToBottom)
+        self.top.setMaximumWidth(TOP_MAX_W if on else QWIDGETSIZE_MAX)  # the tabs keep most of the width
+        self._horizontal = on
+        self._size_preview()
+
+    def _size_preview(self) -> None:
+        """An explicit preview height, so the block above the tabs always gets the room it needs (nothing in it
+        overlaps) and the preview never takes the tabs' room: ≤ 35 % of the panel height, ~3:2 of the width."""
+        spacing = max(0, self.top.layout().spacing())
+        rest = (self.title.sizeHint().height() + self.star_buttons[0].sizeHint().height()
+                + self.keep_button.sizeHint().height() + 3 * spacing)  # title, stars and buttons
+        if getattr(self, "_horizontal", False):
+            h = self.height() - rest - 12
+        else:
+            h = min(int(self.width() * 0.66), int(self.height() * 0.35))
+        self.preview.setFixedHeight(max(PREVIEW_MIN_H, h))
+    def _fit_tabs(self) -> None:
+        """Tab titles never need scroll arrows: short titles (full ones in tooltips) when the panel is narrow."""
+        bar = self.tabs.tabBar()
+        for i, name in enumerate(TABS):
+            bar.setTabText(i, name)
+            bar.setTabToolTip(i, "")
+        for titles in (TABS_SHORT, TABS_ICONS):
+            if bar.sizeHint().width() <= self.tabs.width():
+                return
+            for i, (name, short) in enumerate(zip(TABS, titles, strict=True)):
+                bar.setTabText(i, short)
+                bar.setTabToolTip(i, name)
 
     # ------------------------------------------------------------- helpers
     def _fit_preview(self) -> None:
@@ -202,4 +264,6 @@ class DetailPanel(QWidget):
 
     def resizeEvent(self, event: object) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)  # type: ignore[arg-type]
+        self._fit_tabs()
+        self._size_preview()
         self._fit_preview()

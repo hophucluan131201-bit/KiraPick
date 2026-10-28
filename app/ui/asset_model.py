@@ -167,15 +167,15 @@ class _ThumbSignals(QObject):
 
 
 class _ThumbTask(QRunnable):
-    def __init__(self, asset_id: int, path: Path, signals: _ThumbSignals) -> None:
+    def __init__(self, asset_id: int, path: Path, signals: _ThumbSignals, target: int = THUMB_DISPLAY) -> None:
         super().__init__()
-        self.asset_id, self.path, self.signals = asset_id, path, signals
+        self.asset_id, self.path, self.signals, self.target = asset_id, path, signals, target
 
     def run(self) -> None:
         image = QImage(str(self.path))
         if not image.isNull():
             image = image.scaled(
-                THUMB_DISPLAY, THUMB_DISPLAY, Qt.AspectRatioMode.KeepAspectRatio,
+                self.target, self.target, Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
         self.signals.loaded.emit(self.asset_id, image)
@@ -198,6 +198,7 @@ class AssetListModel(QAbstractListModel):
         self._ranker: Callable[[int, Score], Ranked] | None = None
         self._pixmaps: OrderedDict[int, QPixmap] = OrderedDict()
         self._pending: set[int] = set()
+        self._dpr = 1.0  # device pixel ratio of the screen the grid is on: thumbnails are decoded for it
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(2)
         self.gate = Gate()  # the window shares its own: closed while a session is being released
@@ -368,7 +369,7 @@ class AssetListModel(QAbstractListModel):
             return pm
         if rec.thumb_file is not None and rec.id not in self._pending and self.gate.open:
             self._pending.add(rec.id)
-            self._pool.start(_ThumbTask(rec.id, rec.thumb_file, self._signals))
+            self._pool.start(_ThumbTask(rec.id, rec.thumb_file, self._signals, round(THUMB_DISPLAY * self._dpr)))
         return None
 
     def _on_thumb_loaded(self, asset_id: int, image: QImage) -> None:
@@ -401,6 +402,21 @@ class AssetListModel(QAbstractListModel):
     def wait_for_thumbnails(self, msecs: int = 5000) -> bool:
         """Block at most msecs until thumbnail decodes finish; True when none runs any more."""
         return self._pool.waitForDone(msecs)
+
+    def set_device_pixel_ratio(self, ratio: float) -> None:
+        """Another screen or scale: decode thumbnails again at that many physical pixels per logical pixel."""
+        ratio = max(1.0, float(ratio))
+        if ratio == self._dpr:
+            return
+        self._dpr = ratio
+        self._pixmaps.clear()
+        self._pending.clear()
+        if self._rows:
+            self.dataChanged.emit(self.index(0), self.index(len(self._rows) - 1), [Qt.ItemDataRole.DecorationRole])
+
+    @property
+    def device_pixel_ratio(self) -> float:
+        return self._dpr
 
     def stop_pending(self) -> None:
         """Drop decodes not started yet (they are asked again when a thumbnail is next painted)."""

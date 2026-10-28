@@ -30,11 +30,12 @@ class _Task(QRunnable):
         self.fn()
 
 
-def _chain(w: mw.MainWindow, events: list[str], *, through_gate: bool) -> threading.Event:
+def _chain(w: mw.MainWindow, events: list[str], *, through_gate: bool, pool=None) -> threading.Event:  # noqa: ANN001
     """Worker A (viewer pool, held) → callback A starts worker B → callback B reads the session database.
 
-    through_gate=False starts B straight on a tracked pool, as a path the gate does not cover would; True starts it
-    through the window's normal API (the histogram request), which the gate must refuse."""
+    through_gate=False starts B straight on a tracked pool (default: the learning pool, which closing waits for), as
+    a path the gate does not cover would; True starts it through the window's normal API (the histogram request),
+    which the gate must refuse."""
     project = w.project
     relay = _Relay(w)
     gate = threading.Event()
@@ -51,7 +52,7 @@ def _chain(w: mw.MainWindow, events: list[str], *, through_gate: bool) -> thread
             hist.request(1, Path(__file__))  # would start a histogram task if the gate were open
             events.append("B refused" if hist._pool.activeThreadCount() == before and not w._gate.open else "B started")
         else:
-            w._taste_pool.start(_Task(worker_b))
+            (pool or w._taste_pool).start(_Task(worker_b))
 
     def callback_b() -> None:
         try:
@@ -93,7 +94,9 @@ def test_folder_switch_handles_callback_chain_first(qtbot, env: dict, tmp_path: 
     _import(qtbot, w, env["photos"])
     events: list[str] = []
     project = _watch_db(w, events, monkeypatch)
-    gate = _chain(w, events, through_gate=False)
+    # B on a pool the folder switch waits for (session work). The learning pool is not session work: its jobs use
+    # copied examples and their results read the window's CURRENT session when they arrive.
+    gate = _chain(w, events, through_gate=False, pool=w.model._pool)
     threading.Timer(0.2, gate.set).start()
 
     thread = w.start_import(other)

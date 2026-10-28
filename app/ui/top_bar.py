@@ -58,7 +58,8 @@ class TopBar(QWidget):
         action.changed.connect(lambda key=key: self._sync(key))
         self._sync(key)
 
-    def set_states(self, states: dict[str, StepState], busy: bool) -> None:
+    def set_states(self, states: dict[str, StepState]) -> None:
+        """✓ / ◐ marks; whether a step can run (e.g. not while a job runs) comes from its bound QAction."""
         self._states = dict(states)
         self.next_step = next((k for k in STEPS if not states[k].done), None)
         for key in STEPS:

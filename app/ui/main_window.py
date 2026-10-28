@@ -81,10 +81,11 @@ from app.ui.update_dialog import AppUpdater
 from app.updates.app_update import should_auto_check
 from app.ui.people_delegate import PeopleDelegate
 from app.ui.export_dialog import ExportDialog
-from app.ui.grid import make_filmstrip, make_grid
+from app.ui.grid import card_texts, make_filmstrip, make_grid
 from app.ui.detail_panel import DetailPanel
 from app.ui.top_bar import CELL_DEFAULT, TopBar
 from app.ui.bottom_bar import BottomBar
+from app.ui.layout_controller import LayoutController
 from app.ui import gc_guard, shutdown
 from app.ui.export_dialog import INCLUDE_PAIRS_KEY
 from app.storage.stats import Counts, counts
@@ -186,9 +187,15 @@ class MainWindow(QMainWindow):
         self._build_body()
         self._build_statusbar()
         self._build_shortcuts()
+        self.layout_controller = LayoutController(
+            self, body=self.body, sidebar=self.sidebar, side_slot=self.side_slot, rail=self.rail,
+            drawer_button=self.drawer_button, splitter=self.splitter, grid_area=self.grid_area, grid=self.grid,
+            detail=self.detail, detail_slot=self.detail_slot, strip=self.strip, top_bar=self.top_bar,
+            bottom_bar=self.bottom_bar, settings=self.settings, model=self.model)
         self._update_steps()
 
         self._restore_geometry()
+        self.layout_controller.evaluate()
 
         self._reload_timer = QTimer(self)
         self._reload_timer.setInterval(_RELOAD_DURING_IMPORT_MS)
@@ -219,18 +226,12 @@ class MainWindow(QMainWindow):
             self.resize(min(1500, area.width()), min(900, area.height()))
         self._maximize_on_show = True
 
-    def fit_panels(self) -> None:
-        """Side panels take what they need (narrower on a half screen); the photos get the rest."""
-        width = max(self.width(), 800)
-        left = max(210, min(280, int(width * 0.2)))
-        right = max(240, min(340, int(width * 0.24)))
-        self.splitter.setSizes([left, max(200, width - left - right), right])
-
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt override
         super().showEvent(event)
-        if not getattr(self, "_panels_fitted", False):
-            self._panels_fitted = True
-            self.fit_panels()
+        if not getattr(self, "_screen_watched", False) and self.windowHandle() is not None:
+            self._screen_watched = True
+            self.windowHandle().screenChanged.connect(self.layout_controller.on_screen_changed)
+            self.layout_controller.on_screen_changed(self.screen())
         if not getattr(self, "_auto_check_scheduled", False):
             self._auto_check_scheduled = True
             QTimer.singleShot(3000, self._maybe_auto_check)  # after the window is up, never blocking it
@@ -353,9 +354,19 @@ class MainWindow(QMainWindow):
         self.setMenuWidget(self.top_bar)
 
     def _build_body(self) -> None:
-        splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        # Body: [icon rail][splitter: sidebar slot | grid area | detail slot]. The sidebar and the detail panel are
+        # children of the body for good; LayoutController docks them over their slot or floats them (no reparenting).
+        body = QWidget()
+        body.setObjectName("body")
+        body_layout = QHBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
 
-        side = QWidget()
+        side = QWidget(body)
+        side.setObjectName("sidebar")
+        side.setAutoFillBackground(True)
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(6, 6, 6, 6)
         self.sort = QComboBox()
@@ -441,6 +452,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(self.sections["people"], 1)  # the people list takes the remaining height
         self.sections["folders"].setVisible(False)  # shown when a session has more than one folder
         side.setMinimumWidth(210)  # 56 px avatars, a short name and the count badge; fits a half-screen window
+        self.sidebar = side
 
         self.center = QStackedWidget()
         self.empty_hint = QLabel(
@@ -481,6 +493,7 @@ class MainWindow(QMainWindow):
         self.key_hints.setObjectName("keyHints")
         self.key_hints.setWordWrap(True)
         self.key_hints.setTextFormat(Qt.TextFormat.RichText)
+        self._hints_room = True
         self.key_hints.setVisible(self.act_help.isChecked())
         self.key_hints.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)  # never squeezed away
         center_box = QWidget()
@@ -496,13 +509,34 @@ class MainWindow(QMainWindow):
             b.setAutoRaise(True)
             view_row.addWidget(b)
         view_row.addStretch(1)
+        # Shown when the sidebar is not docked (NARROW / SHORT / TINY): opens it as a drawer over the photos.
+        self.drawer_button = QToolButton()
+        self.drawer_button.setText("☰ Bộ lọc")
+        self.drawer_button.setToolTip("Thư mục, bộ lọc và chủ thể")
+        self.drawer_button.setAutoRaise(True)
+        self.drawer_button.clicked.connect(lambda: self.layout_controller.open_drawer())
+        self.detail_button = QToolButton()
+        self.detail_button.setText("▤ Chi tiết")
+        self.detail_button.setToolTip("Hiện / ẩn bảng chi tiết của ảnh")
+        self.detail_button.setAutoRaise(True)
+        self.detail_button.clicked.connect(lambda: self.layout_controller.toggle_detail())
+        view_row.insertWidget(0, self.drawer_button)
+        view_row.addWidget(self.detail_button)
         center_layout.addLayout(view_row)
+        # SHORT Grid Focus: one line about the current photo instead of the detail panel.
+        self.strip = QLabel()
+        self.strip.setObjectName("photoStrip")
+        self.strip.setTextFormat(Qt.TextFormat.PlainText)
+        self.strip.setContentsMargins(8, 0, 8, 0)
+        self.strip.setVisible(False)
+        center_layout.addWidget(self.strip)
         center_layout.addWidget(self.center, 1)
         center_layout.addWidget(self.key_hints)
         self.center.currentChanged.connect(self._on_view_changed)
         self._on_view_changed(self.center.currentIndex())
 
-        self.detail = DetailPanel()
+        self.detail = DetailPanel(body)
+        self.detail.setAutoFillBackground(True)
         self.inspector = self.detail.inspector  # the Thông tin ảnh tab
         self.model.gate = self.viewer.gate = self.detail.score_card.histogram.gate = self._gate
         self.detail.keep_clicked.connect(lambda: self.set_flag("keep"))
@@ -513,15 +547,39 @@ class MainWindow(QMainWindow):
         self.detail.neighbour_clicked.connect(self.go_to_asset)
         self.detail.open_loupe.connect(lambda: self.show_loupe(True))
         self.detail.people_menu_requested.connect(lambda pos: self._people_menu_for_current(pos))
-        splitter.addWidget(side)
+        self.model.thumbnail_ready.connect(self._on_thumbnail_ready)
+        side_slot, detail_slot = QWidget(), QWidget()
+        side_slot.setMinimumWidth(side.minimumWidth())
+        detail_slot.setMinimumWidth(self.detail.minimumWidth())
+        detail_slot.setMinimumHeight(160)
+        self.side_slot, self.detail_slot, self.grid_area = side_slot, detail_slot, center_box
+        splitter.addWidget(side_slot)
         splitter.addWidget(center_box)
-        splitter.addWidget(self.detail)
+        splitter.addWidget(detail_slot)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
         self.splitter = splitter
-        self.setCentralWidget(splitter)
-        self.fit_panels()
+        # NARROW: an icon rail instead of the sidebar; each icon opens the drawer at its section.
+        rail = QWidget()
+        rail.setObjectName("rail")
+        rail_layout = QVBoxLayout(rail)
+        rail_layout.setContentsMargins(2, 6, 2, 6)
+        rail_layout.setSpacing(4)
+        for icon, tip, section in (("📁", "Thư mục", "folders"), ("▦", "Bộ lọc", "filters"),
+                                   ("👤", "Chủ thể", "people")):
+            b = QToolButton()
+            b.setText(icon)
+            b.setToolTip(tip)
+            b.setAutoRaise(True)
+            b.clicked.connect(lambda _c=False, s=section: self.layout_controller.open_drawer(s))
+            rail_layout.addWidget(b)
+        rail_layout.addStretch(1)
+        self.rail = rail
+        body_layout.addWidget(rail)
+        body_layout.addWidget(splitter, 1)
+        self.setCentralWidget(body)
+        self.body = body
 
     def _build_statusbar(self) -> None:
         sb = self.statusBar()
@@ -560,7 +618,7 @@ class MainWindow(QMainWindow):
         sc("Left", lambda: self.step(-1))
         sc("Space", self.toggle_loupe)
         sc("Return", self.toggle_loupe)
-        sc("Escape", lambda: self.show_loupe(False))
+        sc("Escape", lambda: self.layout_controller.close_floating() or self.show_loupe(False))
         sc("Z", self.toggle_zoom)
         sc("+", lambda: self.zoom_step(1))
         sc("=", lambda: self.zoom_step(1))
@@ -644,6 +702,20 @@ class MainWindow(QMainWindow):
             if t is not None:  # a network call cannot be cancelled; it ends with its own time limit
                 works.append(shutdown.Work("kiểm tra cập nhật", t.wait, lambda: None))
         return works
+
+    def _on_thumbnail_ready(self, asset_id: int) -> None:
+        """The detail preview, its burst rows and the SHORT strip use a thumbnail as soon as it is decoded."""
+        row = self.model.index_of(asset_id)
+        rec = self.model.record(row) if row is not None and row.isValid() else None
+        pm = self.model.pixmap(rec) if rec is not None else None
+        if pm is not None:
+            self.detail.update_thumbnail(asset_id, pm)
+
+    def open_sidebar_section(self, section: str) -> None:
+        """Drawer opened from the icon rail: that section unfolded (folders only when the session has several)."""
+        target = self.sections.get(section)
+        if target is not None and target.isVisibleTo(self.sidebar):
+            target.set_collapsed(False)
 
     def _remembered_summary(self) -> str:
         assert self.project is not None
@@ -1006,10 +1078,9 @@ class MainWindow(QMainWindow):
     def refresh_steps(self) -> None:
         """✓ / ◐ of the five workflow steps in the top bar (app.storage.workflow); cheap COUNT queries."""
         if self.project is None:
-            self.top_bar.set_states({k: StepState(False, None) for k in STEPS}, busy=False)
+            self.top_bar.set_states({k: StepState(False, None) for k in STEPS})
             return
-        busy = self.import_thread is not None or self.analyze_thread is not None
-        self.top_bar.set_states(steps(self.project.conn, importing=self._import_progress), busy=busy)
+        self.top_bar.set_states(steps(self.project.conn, importing=self._import_progress))
 
     def _update_steps(self) -> None:
         """Enable each step only when the previous one is done and nothing is running."""
@@ -1478,6 +1549,7 @@ class MainWindow(QMainWindow):
             rec, taste=self.taste.status, people=self._people_text(rec.id) if rec else None, neighbours=neighbours,
             pixmap=self.model.pixmap(rec) if rec else None, selection=self._selection_text(rec),
             neighbour_pixmaps={n.id: pm for n in neighbours if (pm := self.model.pixmap(n)) is not None})
+        self.strip.setText(strip_text(rec))
 
     def go_to_asset(self, asset_id: int) -> None:
         """Make this photo the current one (Ảnh tương tự)."""
@@ -1690,7 +1762,12 @@ class MainWindow(QMainWindow):
 
     def _toggle_key_hints(self, on: bool) -> None:
         self.settings.setValue("show_key_hints", on)
-        self.key_hints.setVisible(on)
+        self.key_hints.setVisible(on and self._hints_room)
+
+    def set_key_hints_room(self, room: bool) -> None:
+        """SHORT / TINY layouts have no height to spare: the key cheat sheet hides (the ⚙ choice is kept)."""
+        self._hints_room = room
+        self.key_hints.setVisible(self.act_help.isChecked() and room)
 
     # ------------------------------------------------------------ loupe
     def toggle_loupe(self) -> None:
@@ -2098,6 +2175,19 @@ class MainWindow(QMainWindow):
             "Ctrl+F   tìm tên file,  Ctrl+L   danh sách khách chọn\n\n"
             "Trong lưới có thể chọn nhiều ảnh (Ctrl/Shift + click) rồi bấm K/X/số để áp dụng cho tất cả.",
         )
+
+
+def strip_text(rec: AssetRecord | None) -> str:
+    """SHORT Grid Focus: the current photo in one line (the detail panel is hidden there)."""
+    if rec is None:
+        return ""
+    badge, chip = card_texts(rec)
+    parts = [rec.name] + ([badge] if badge and badge != "—" else []) + ([chip] if chip else [])
+    if rec.rating:
+        parts.append("★" * rec.rating)
+    if rec.favorite:
+        parts.append("♥")
+    return "  ·  ".join(p for p in parts if p) + "     —  ▤ Chi tiết: xem phân tích và thông tin ảnh"
 
 
 SWITCH_WAIT_MS = 10000  # switching folder: how long to wait for workers before refusing

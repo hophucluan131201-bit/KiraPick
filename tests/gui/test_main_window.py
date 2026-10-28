@@ -31,7 +31,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     return {"photos": photos, "ini": str(tmp_path / "settings.ini")}
 
 
-def _window(qtbot, env: dict) -> mw.MainWindow:
+def _window(qtbot, env: dict, size: tuple[int, int] | None = (1600, 1000)) -> mw.MainWindow:
     from app.ui.theme import apply_dark_theme
     from PySide6.QtWidgets import QApplication
 
@@ -39,7 +39,11 @@ def _window(qtbot, env: dict) -> mw.MainWindow:
     settings = QSettings(env["ini"], QSettings.Format.IniFormat)
     w = mw.MainWindow(settings=settings)
     qtbot.addWidget(w)
+    if size is not None:
+        w._maximize_on_show = False  # maximized would mean the 800×800 offscreen screen
+        w.resize(*size)  # a desktop window (WIDE layout); the offscreen screen itself is small
     w.show()
+    w.layout_controller.evaluate()
     return w
 
 
@@ -253,7 +257,7 @@ def test_export_dialog_previews_then_copies(qtbot, env: dict, tmp_path: Path) ->
 
 
 def test_window_fits_the_screen_and_remembers_its_size(qtbot, env: dict) -> None:
-    w = _window(qtbot, env)
+    w = _window(qtbot, env, size=None)
     # Must shrink to a 1920x1080 laptop at 150% scaling minus the taskbar (~1280x690 logical).
     hint = w.minimumSizeHint()
     assert hint.width() <= 1280 and hint.height() <= 690
@@ -268,7 +272,7 @@ def test_window_fits_the_screen_and_remembers_its_size(qtbot, env: dict) -> None
     w.resize(700, 500)  # smaller than the offscreen screen
     size = (w.width(), w.height())
     w.close()
-    w2 = _window(qtbot, env)
+    w2 = _window(qtbot, env, size=None)
     assert (w2.width(), w2.height()) == size
 
 
