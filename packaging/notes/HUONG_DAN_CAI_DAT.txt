@@ -1,8 +1,20 @@
-﻿HƯỚNG DẪN CÀI ĐẶT KIRAPICK (phiên bản 2.0)
+﻿HƯỚNG DẪN CÀI ĐẶT KIRAPICK (phiên bản 2.2)
 =========================================================
 
 KHÔNG cần cài Git, Python hay bất cứ thứ gì khác. Mọi thứ đã có sẵn trong bộ cài.
-Máy cần: Windows 10 hoặc 11 (64-bit), khoảng 1 GB ổ cứng trống. Có card đồ hoạ thì AI chạy nhanh hơn, không có vẫn chạy được.
+Máy cần: Windows 10 hoặc 11 (64-bit), khoảng 2 GB ổ cứng trống (bản CUDA: khoảng 5 GB).
+Có card đồ hoạ thì AI chạy nhanh hơn, không có vẫn chạy được.
+
+CHỌN BẢN NÀO?
+  - KiraPick 2.2.0 (bản chính thức, DirectML): cho mọi máy. Dùng card đồ hoạ bất kỳ
+    (NVIDIA, AMD, Intel) nếu nhanh hơn CPU; mô hình nào card không chạy được thì tự dùng CPU.
+  - KiraPick 2.2.0a – NVIDIA CUDA (thử nghiệm): cho máy có card NVIDIA (GTX 10xx trở lên,
+    driver NVIDIA mới). Bộ cài rất lớn nên KHÔNG có file .zip: tải TẤT CẢ các file
+    KiraPick-Setup-2.2.0a.exe và KiraPick-Setup-2.2.0a-*.bin vào CÙNG MỘT thư mục rồi chạy file .exe
+    (bỏ qua Bước 1 bên dưới).
+  - KiraPick 2.2.0b – OpenVINO (thử nghiệm): cho máy chip Intel không có card rời; có thể
+    nhanh hơn CPU thường (app tự đo, chậm hơn thì dùng CPU thường).
+  Cài bản này sẽ thay bản kia (cùng một ứng dụng); dữ liệu buổi chụp và dữ liệu học vẫn giữ nguyên.
 
 -----------------------------------------------------------------
 BƯỚC 1 - GIẢI NÉN

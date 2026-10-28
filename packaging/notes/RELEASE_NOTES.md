@@ -1,3 +1,50 @@
+## KiraPick 2.2.0
+
+**Ba bản cài** (chọn một; xem HUONG_DAN_CAI_DAT.txt):
+- **2.2.0 – bản chính thức (DirectML):** cho mọi máy Windows 10/11.
+- **2.2.0a – NVIDIA CUDA (thử nghiệm):** cho máy có card NVIDIA. Bộ cài lớn nên gồm `Setup.exe` và nhiều file `.bin`;
+  tải tất cả vào cùng một thư mục rồi chạy `Setup.exe`.
+- **2.2.0b – OpenVINO (thử nghiệm):** cho máy chip Intel; app tự đo, chỉ dùng OpenVINO khi nhanh hơn CPU thường.
+
+**Chấm điểm mới: hai điểm riêng**
+- **K – Kỹ thuật:** nét, mắt, mặt, sáng, bố cục, thẩm mỹ. Thêm AI mới:
+  - **CLIP ViT-L/14 + bộ chấm thẩm mỹ LAION** (điểm thẩm mỹ là trung bình TOPIQ và LAION);
+  - **TOPIQ chấm chất lượng ảnh** (nhiễu, mờ, nén; 20 % phần nét);
+  - **TOPIQ chấm khuôn mặt** (một nửa phần mặt).
+- **G – Hợp gu bạn:** app tự học từ các lần bạn Giữ/Loại/cho sao/❤.
+  - Danh sách khách chọn chỉ được tính nhẹ.
+  - Chỉ hiện khi đã có ≥ 60 lựa chọn (≥ 20 thích, ≥ 20 không thích) **và** app đoán đúng rõ hơn đoán mò
+    (tự kiểm tra, tách theo ngày chụp). Chưa đủ thì ghi rõ "Chưa đủ dữ liệu: 34/60".
+  - 🎓 **AI đã học** cho biết bạn hay giữ / hay loại kiểu ảnh nào. Nút **So sánh ảnh…** hỏi "thích tấm nào hơn"
+    trên các cặp ảnh giống nhau để học nhanh hơn.
+- **⭐ Chọn ảnh** xếp theo K + G (mặc định 50/50, đổi trong ⚙ Tuỳ chọn).
+  - Ảnh lỗi nặng (nhắm mắt, mất nét) không vượt điểm kỹ thuật.
+  - Riêng ảnh cố ý mờ/tối kiểu nghệ thuật mà rất hợp gu bạn thì được giữ điểm ("ngoại lệ nghệ thuật").
+
+**Giao diện**
+- Bảng bên phải: thanh điểm + lý do cho từng tiêu chí, điểm yếu chính, những gì chưa chấm được và vì sao.
+- Lưới ảnh hiện "K 78 · G 85" (⚠ khi có lỗi nặng); xếp được theo K, G hoặc K + G.
+- Khung bên trái:
+  - các mục Thư mục / Lọc / Chủ thể thu gọn được;
+  - mục Thư mục tự ẩn khi chỉ có một thư mục;
+  - bộ lọc thành các nút nhỏ 2 cột;
+  - danh sách chủ thể không còn thanh cuộn ngang, ảnh đại diện to hơn, số ảnh hiện thành nhãn.
+
+**Cập nhật mô hình AI (cần mạng, chỉ khi bạn muốn)**
+- ⚙ Tuỳ chọn → 🔄 Cập nhật mô hình AI: tải bản vá mô hình đã được KiraPick kiểm tra và ký số.
+  - Tải xong kiểm tra mã SHA-256; giữ bản cũ để quay lại.
+  - Không gửi ảnh hay dữ liệu nào của bạn.
+  - Tự kiểm tra khi mở app: tắt sẵn, bật được trong ⚙.
+- Ngoài phần này, app vẫn chạy hoàn toàn offline.
+
+**Lưu ý**
+- Bấm 📊 Phân tích ảnh lại cho các buổi chụp cũ để có điểm mới.
+- Lần đầu chạy chậm hơn (thêm CLIP: khoảng 0,7 giây/ảnh trên CPU).
+- Giấy phép: CLIP của OpenAI (tài liệu ghi việc đưa vào sử dụng thực tế "nằm ngoài phạm vi") và các mô hình
+  TOPIQ (phi thương mại) được dùng với sự đồng ý của chủ dự án cho ứng dụng phi thương mại này. Xem phần miễn trừ.
+
+---
+
 ## KiraPick 2.1.0b6 – bản thử nghiệm (beta)
 
 > **Bản beta, chưa phải bản chính thức.** Bản chính thức mới nhất vẫn là 2.0.6.

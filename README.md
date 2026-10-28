@@ -43,9 +43,13 @@ DirectML; không có thì chạy bằng CPU.
    chuột phải vào ảnh để bỏ ảnh khỏi một chủ thể, gán cho chủ thể khác, hoặc **➕ Tạo chủ thể mới** nếu đó là
    người chưa có trong danh sách. Ô phía trên danh sách đổi cách xếp (theo số, thời gian chụp, nhiều ảnh nhất,
    tên); nhấp phải vào danh sách → **🔢 Đánh số lại** để có số 1, 2, 3… liền nhau.
-3. **📊 Phân tích ảnh** — chấm điểm từng người trong từng ảnh. Bảng bên phải liệt kê
-   **Điểm mạnh**, **Điểm yếu** và **Chưa đánh giá**.
-4. **⭐ Chọn ảnh** — nhập số ảnh muốn chọn cho mỗi người. Ảnh AI chọn có nhãn **AI** và xếp lên đầu.
+3. **📊 Phân tích ảnh** — chấm điểm từng người trong từng ảnh. Mỗi ảnh có hai điểm: **K – Kỹ thuật**
+   (nét, mắt, mặt, sáng, bố cục, thẩm mỹ TOPIQ + LAION) và **G – Hợp gu bạn** (app tự học từ các lần bạn
+   Giữ/Loại/cho sao/❤; chỉ hiện khi đã học đủ ≥ 60 lựa chọn và đoán đúng rõ hơn đoán mò). Bảng bên phải có
+   thanh điểm và lý do cho từng tiêu chí; lưới ảnh hiện “K 78 · G 85” và xếp được theo K, G hoặc K + G.
+   🎓 **AI đã học → So sánh ảnh…**: chọn tấm thích hơn trong từng cặp ảnh giống nhau để app học gu nhanh hơn.
+   ⚙ **Tuỳ chọn**: tỷ lệ K/G, **🔄 Cập nhật mô hình AI** (cần mạng, chỉ khi bạn bấm).
+4. **⭐ Chọn ảnh** — nhập số ảnh muốn chọn cho mỗi người (xếp theo K + G). Ảnh AI chọn có nhãn **AI** và xếp lên đầu.
    Duyệt lại bằng **K** (giữ) / **X** (loại) / **U** (bỏ đánh dấu), rồi **⤴ Xuất ảnh → Ảnh đã Giữ**.
 
 Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng phím tắt nhỏ luôn hiện dưới khu vực ảnh
@@ -133,9 +137,13 @@ DirectML; otherwise on the CPU.
    photos to remove them from a subject, assign them to another, or **➕ Tạo chủ thể mới** (new subject) for
    someone not in the list yet. The box above the list changes its order (number, capture time, most photos,
    name); right-click the list → **🔢 Đánh số lại** renumbers subjects 1, 2, 3… in shooting order.
-3. **📊 Phân tích ảnh** (Analyse) — scores every person in every photo. The right panel lists
-   **strengths**, **weaknesses** and what was **not judged**.
-4. **⭐ Chọn ảnh** (Pick) — enter how many photos per person. AI picks get an **AI** badge and go
+3. **📊 Phân tích ảnh** (Analyse) — scores every person in every photo. Two scores: **K – technical**
+   (focus, eyes, face, light, framing, TOPIQ + LAION aesthetics) and **G – fits your taste** (learnt from
+   your keeps/rejects/stars/❤; shown only after ≥ 60 decisions and when it predicts clearly better than
+   chance). The right panel has a bar and a reason per criterion; the grid shows “K 78 · G 85” and sorts by
+   K, G or K + G. 🎓 → **So sánh ảnh…** asks which of two similar photos you prefer, to learn faster.
+   ⚙ Options: the K/G ratio and **🔄 AI-model update** (needs the Internet, only when you click it).
+4. **⭐ Chọn ảnh** (Pick) — enter how many photos per person (ranked by K + G). AI picks get an **AI** badge and go
    first. Review with **K** (keep) / **X** (reject) / **U** (clear), then **⤴ Xuất ảnh → Ảnh đã Giữ**
    (export kept photos).
 
@@ -220,13 +228,19 @@ distribution.
 - KiraPick dùng một số mô hình AI **chỉ được phép dùng phi thương mại / nghiên cứu**:
   khuôn mặt **ArcFace** của InsightFace (“chỉ dành cho nghiên cứu phi thương mại”) và chấm thẩm mỹ
   **TOPIQ** (PolyForm Noncommercial). Mô hình dáng người **YoutuReID** có giấy phép Apache-2.0 nhưng được
-  huấn luyện trên các bộ dữ liệu nghiên cứu (Market-1501, DukeMTMC-reID, MSMT17). Bản quyền các mô hình này
+  huấn luyện trên các bộ dữ liệu nghiên cứu (Market-1501, DukeMTMC-reID, MSMT17). Từ 2.2 có thêm
+  **TOPIQ** chấm kỹ thuật và chấm khuôn mặt (PolyForm Noncommercial; dữ liệu nghiên cứu KonIQ-10k, CGFIQA-40k)
+  và **CLIP ViT-L/14 của OpenAI** (mã nguồn MIT; tài liệu của OpenAI ghi mọi việc đưa vào sử dụng thực tế
+  “nằm ngoài phạm vi” và không dùng để nhận dạng khuôn mặt) cùng bộ chấm thẩm mỹ **LAION** (Apache-2.0):
+  KiraPick chỉ dùng CLIP để chấm thẩm mỹ và học gu của bạn, trên máy của bạn. Bản quyền các mô hình này
   thuộc tác giả của chúng; KiraPick chỉ dùng lại, không sở hữu.
 - **Ai tải hoặc dùng các bản có những mô hình này phải tự tuân theo giấy phép của chúng** và không được dùng
   KiraPick (hay mô hình bên trong) để kiếm tiền, nhận diện người cho dịch vụ, giám sát hay theo dõi ai.
   Muốn dùng thương mại thì phải gỡ các mô hình này và xin phép tác giả của chúng.
 - Nhận diện người chỉ để **gom ảnh của chính bạn chụp** theo từng người trên máy của bạn. App chạy offline:
-  ảnh, vector khuôn mặt và dữ liệu học không rời khỏi máy. Hãy tôn trọng quyền riêng tư của người được chụp.
+  ảnh, vector khuôn mặt và dữ liệu học không rời khỏi máy. Ngoại lệ duy nhất là **Cập nhật mô hình AI** (chỉ khi
+  bạn bấm, hoặc khi bạn bật tự kiểm tra): chỉ tải danh sách mô hình đã ký số và file mô hình từ GitHub của
+  KiraPick, không gửi gì của bạn đi. Hãy tôn trọng quyền riêng tư của người được chụp.
 - Kết quả AI (gom người, điểm, chọn ảnh) có thể sai; hãy luôn tự kiểm tra trước khi giao ảnh. Phần mềm được
   cung cấp “nguyên trạng” (as is), không có bảo đảm; tác giả không chịu trách nhiệm cho thiệt hại phát sinh.
 - Nếu bạn là tác giả của một mô hình và không muốn nó được dùng ở đây, hãy mở *Issue* trên GitHub; mô hình sẽ
@@ -238,12 +252,18 @@ distribution.
 - KiraPick uses AI models whose weights are licensed for **non-commercial / research use only**: InsightFace
   **ArcFace** (“available for non-commercial research purposes only”) and **TOPIQ** aesthetics (PolyForm
   Noncommercial). The **YoutuReID** whole-body model is Apache-2.0 but was trained on research datasets
-  (Market-1501, DukeMTMC-reID, MSMT17). These models belong to their authors; KiraPick only reuses them.
+  (Market-1501, DukeMTMC-reID, MSMT17). Since 2.2: **TOPIQ** technical and face quality (PolyForm
+  Noncommercial; research datasets KonIQ-10k, CGFIQA-40k) and **OpenAI CLIP ViT-L/14** (code MIT; OpenAI's
+  model card calls any deployed use out of scope and excludes face recognition) with the **LAION** aesthetic
+  predictor (Apache-2.0); KiraPick uses CLIP only for aesthetics and your personal taste, on your computer.
+  These models belong to their authors; KiraPick only reuses them.
 - **Anyone who downloads or runs a build containing these models must comply with their licenses** and must
   not use KiraPick (or the models inside it) to make money, to identify people as a service, or for
   surveillance or tracking. Commercial use requires removing these models and the authors' permission.
 - Person recognition only **groups your own photos** by person on your own computer. The app runs offline:
-  photos, face vectors and learning data never leave the machine. Respect the privacy of the people you photograph.
+  photos, face vectors and learning data never leave the machine. The only exception is the **AI-model
+  update** (when you click it, or if you switch on the daily check): it downloads only KiraPick's signed
+  model list and model files from GitHub and sends nothing of yours. Respect the privacy of the people you photograph.
 - AI results (grouping, scores, picks) can be wrong; always check before delivering photos. The software is
   provided “as is”, without warranty of any kind; the authors are not liable for any damage.
 - If you are the author of a model and do not want it used here, open a GitHub *Issue* and it will be removed.

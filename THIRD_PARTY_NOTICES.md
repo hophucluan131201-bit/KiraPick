@@ -12,6 +12,11 @@ Software
 - rawpy - MIT; LibRaw - LGPL-2.1 or CDDL-1.0
 - ExifRead - BSD-3-Clause
 - PyYAML - MIT
+- cryptography (Ed25519 check of the signed AI-model catalogue) - Apache-2.0 OR BSD-3-Clause
+- CUDA edition only: ONNX Runtime GPU build - MIT; NVIDIA CUDA runtime, cuBLAS, cuFFT, cuRAND, NVRTC and
+  cuDNN DLLs from NVIDIA's pip wheels - NVIDIA software license agreements (runtime libraries
+  redistributable with applications)
+- OpenVINO edition only: ONNX Runtime OpenVINO Execution Provider and Intel OpenVINO 2025.4 - Apache-2.0
 - PyInstaller bootloader - GPL-2.0 with the PyInstaller bootloader exception
 - Microsoft Visual C++ runtime DLLs (msvcp140*, vcruntime140_1, concrt140, vcomp140) - redistributed
   app-locally under the Microsoft Visual C++ Redistributable license terms
@@ -25,6 +30,12 @@ AI model weights (bundled, verified by SHA-256; see docs/model-licenses.md in th
 - TOPIQ image aesthetics (CFANet, ResNet50, AVA) from IQA-PyTorch - PolyForm Noncommercial 1.0.0,
   Copyright (c) 2022 Chaofeng Chen; C. Chen et al., "TOPIQ: A Top-down Approach from Semantics to
   Distortions for Image Quality Assessment", IEEE TIP 2024. Non-commercial use only.
+- TOPIQ technical quality (CFANet NR, KonIQ-10k) and TOPIQ face quality (CGFIQA-40k) from
+  IQA-PyTorch - PolyForm Noncommercial 1.0.0, Copyright (c) 2022 Chaofeng Chen. Non-commercial use only.
+- OpenAI CLIP ViT-L/14 image encoder - code MIT (Copyright (c) 2021 OpenAI); OpenAI's model card calls
+  any deployed use out of scope and excludes face recognition; used for aesthetics and personal taste only.
+  Radford et al., "Learning Transferable Visual Models From Natural Language Supervision", ICML 2021.
+- LAION improved aesthetic predictor (sac+logos+ava1-l14-linearMSE) - Apache-2.0, C. Schuhmann / LAION
 - ArcFace face recognition (ResNet50, WebFace600K; w600k_r50.onnx from InsightFace buffalo_l,
   release v0.7) - InsightFace pretrained models are "available for non-commercial research
   purposes only". Deng et al., "ArcFace: Additive Angular Margin Loss for Deep Face Recognition",

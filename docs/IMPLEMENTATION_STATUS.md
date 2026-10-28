@@ -314,6 +314,23 @@ The Test subset (old labels) measures 1.000 / 0.725 now. Remaining splits are mo
 stragglers (profile, motion blur, hands over face) that the owner can merge with the tick boxes +
 "🔗 Gộp người".
 
+## Release 2.2.0 (2026-10-28): taste learning, new scoring AIs, signed updates, three editions
+
+Spec `docs/superpowers/specs/2026-10-28-kirapick-2.2-design.md`, plan `docs/superpowers/plans/2026-10-28-kirapick-2.2.md`.
+
+| Item | Status | Evidence |
+|---|---|---|
+| CLIP ViT-L/14 + LAION aesthetic + style prompts | **tested** | ONNX vs PyTorch: embedding cosine 1.000000, LAION abs diff < 1e-4; fp16 cosine 1.000000; preprocessing identical to open_clip on 8 owner NEFs; unit tests with stand-in models |
+| TOPIQ technical (KonIQ) and face (CGFIQA) | **tested** | ONNX vs PyTorch abs diff < 1e-4 (4 shapes / 512²); fp16 errors 0.03 % / 0.13 % of range |
+| Quality stage v5 (CLIP vector, LAION, tags, IQA) | **tested** | 8/8 owner NEFs measured on CPU in 26 s (container); unit tests for failures, no-person photos, missing models |
+| Scoring v4 (blends, reasons) + ranking (taste blend, hard-defect cap, artistic exception) | **tested** | `tests/unit/test_quality.py`, `test_rank.py` |
+| Taste model (weighted logistic regression, day-grouped CV, gate 60/20/20, AUC ≥ 0.65) | **tested on synthetic data only** | `test_taste.py`; no real owner decisions yet, so no accuracy claim |
+| Learning store v6, Keep/Reject/stars/❤ and client picks recorded | **tested** | `test_learning_taste_store.py`, GUI test |
+| Right panel, grid K·G badges and sorting, left panel, 🎓 So sánh ảnh | **tested offscreen** | GUI tests; screenshot on owner NEFs; real Windows GUI not run here |
+| Signed AI-model update (Ed25519, SHA-256, atomic, rollback, opt-in check) | **tested** | `test_updates.py`, `test_update_flow.py`. The catalogue is empty until a model is curated. The signing secret must be set by the owner |
+| Editions (DirectML / CUDA “a” / OpenVINO “b”) | **implemented** | Unit tests for providers/versions. The Windows builds are verified only by the CI build and self-test; GPU speed is to be measured on the owner's PC |
+| LAION mapping 4.8–6.2 | **provisional** | Based on only 8 owner photos; re-check on a full shoot |
+
 ## Releases 2.0.5–2.0.6: DirectML in the installer (owner's report, 2026-10-27)
 
 Installer 2.0.4 on the owner's laptop (DirectML): "Nhận diện chủ thể" lagged / "Not responding", much
