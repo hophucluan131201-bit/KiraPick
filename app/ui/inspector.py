@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QFormLayout, QLabel, QVBoxLayout, QWidget
 from app.ui import theme
 from app.learning.taste import TasteStatus
 from app.quality.rank import Ranked
+from app.learning.focus import KEYS, LABELS as FOCUS_LABELS, NAMES as FOCUS_NAMES
 from app.quality.score import LABELS, WEIGHTS, Score
 from app.ui.asset_model import AssetRecord
 
@@ -94,7 +95,7 @@ class Inspector(QWidget):
         for title, keys in (
             ("ẢNH", ["Tên file", "Thư mục", "Cặp RAW+JPEG", "Chụp lúc", "Kích thước"]),
             ("MÁY ẢNH", ["Máy", "Ống kính", "Thông số"]),
-            ("CHỌN LỌC", ["Đánh dấu", "Sao", "Yêu thích"]),
+            ("CHỌN LỌC", ["Đánh dấu", "Sao", "Yêu thích", "Bạn chấm nét"]),
             ("PHÂN TÍCH AI", ["Chủ thể", "Điểm chất lượng"]),  # label kept short; content is a list
             ("HIỂN THỊ", ["Nguồn ảnh"]),
         ):
@@ -142,6 +143,8 @@ class Inspector(QWidget):
         f["Đánh dấu"].setText(flag)
         f["Sao"].setText("★" * rec.rating if rec.rating else "chưa chấm")
         f["Yêu thích"].setText("♥ có" if rec.favorite else "không")
+        f["Bạn chấm nét"].setText(f"{FOCUS_NAMES[FOCUS_LABELS[rec.focus]]} ({KEYS[rec.focus]})" if rec.focus
+                                  else "chưa — Q nét căng · W hơi soft · R lệch nét")
         f["Chủ thể"].setText(people or "chưa nhận diện — bấm 🧠 Nhận diện chủ thể")
         if rec.score is None:
             f["Điểm chất lượng"].setText("chưa chấm — bấm 📊 Phân tích ảnh")

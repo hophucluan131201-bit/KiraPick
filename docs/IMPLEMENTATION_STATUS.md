@@ -314,6 +314,17 @@ The Test subset (old labels) measures 1.000 / 0.725 now. Remaining splits are mo
 stragglers (profile, motion blur, hands over face) that the owner can merge with the tick boxes +
 "🔗 Gộp người".
 
+## Unreleased on beta (after 2.2.1): app update, learned sharpness
+
+| Item | Status | Evidence |
+|---|---|---|
+| App update (⚙ → Cập nhật KiraPick): GitHub release list, edition's installer, SHA-256 digest, opt-in daily check; signed model catalogue removed | **tested** (no real download from this container) | `test_app_update.py` (incl. network-import guard), `test_update_flow.py` |
+| Q / W / R sharpness labels (project DB v6 `decisions.focus`, learning store v7 `focus_feedback`) | **tested offscreen** | `test_focus_learning.py`, `tests/gui/test_focus_labels.py` |
+| Per camera + lens focus model (two logistic fits, group-fold CV, gate 8/8 and ≥ 75 %) | **tested on synthetic data only** | no owner labels yet: no accuracy claim |
+| Session-relative fallback (p90 of the same camera's measure lifted to 0.70, factor 1–2, ≥ 10 photos) | **implemented, provisional** | unit tests; the owner's NEFs are needed to check that eye sharpness separates sharp / soft / missed on Z5 + 24-70 f/2.8G |
+
+E stays "zoom to the eyes", so the third label is R (not E as first proposed).
+
 ## Release 2.2.0 (2026-10-28): taste learning, new scoring AIs, signed updates, three editions
 
 Spec `docs/superpowers/specs/2026-10-28-kirapick-2.2-design.md`, plan `docs/superpowers/plans/2026-10-28-kirapick-2.2.md`.

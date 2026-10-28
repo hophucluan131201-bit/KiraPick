@@ -255,6 +255,10 @@ CREATE TABLE asset_vectors (
     PRIMARY KEY (asset_id, kind)
 );
 """),
+    (6, """
+-- Learned sharpness (2.3): the user's Q/W/R label of the photo; user data like flag and stars.
+ALTER TABLE decisions ADD COLUMN focus TEXT CHECK (focus IN ('sharp', 'soft', 'missed'));
+"""),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

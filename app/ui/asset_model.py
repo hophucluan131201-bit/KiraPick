@@ -104,6 +104,7 @@ class AssetRecord:
     flag: str | None = None
     rating: int = 0
     favorite: bool = False
+    focus: str | None = None  # the user's Q / W / R sharpness label
     uncertain: bool = False  # in a person view: only suggested (no clear face), needs a look
     score: Score | None = None  # of the person shown (person view) or of the main person
     pick_rank: int | None = None  # chosen by "⭐ Chọn ảnh": 1 = first choice
@@ -118,7 +119,7 @@ _QUERY = """
 SELECT a.id, a.source_id, a.relative_path, a.extension, a.status, a.error, a.capture_time, a.width, a.height,
        a.make, a.model, a.lens, a.exif_json, a.pair_group_id, s.root_path,
        p.file_name AS thumb, p.source AS preview_source,
-       d.flag, COALESCE(d.rating, 0) AS rating, COALESCE(d.favorite, 0) AS favorite
+       d.flag, COALESCE(d.rating, 0) AS rating, COALESCE(d.favorite, 0) AS favorite, d.focus
 FROM assets a
 JOIN sources s ON s.id = a.source_id
 LEFT JOIN previews p ON p.asset_id = a.id AND p.kind = 'thumb'
@@ -286,7 +287,7 @@ class AssetListModel(QAbstractListModel):
                         exif=json.loads(r["exif_json"]) if r["exif_json"] else {},
                         paired_with=pairs.get(r["pair_group_id"], {}).get(r["id"], []),
                         preview_source=r["preview_source"],
-                        flag=r["flag"], rating=int(r["rating"]), favorite=bool(r["favorite"]),
+                        flag=r["flag"], rating=int(r["rating"]), favorite=bool(r["favorite"]), focus=r["focus"],
                         uncertain=r["id"] in uncertain,
                         score=scores[r["id"]][1] if r["id"] in scores else None,
                         pick_rank=picks.get(r["id"]),
@@ -314,10 +315,11 @@ class AssetListModel(QAbstractListModel):
         if row is None or self._project is None:
             return
         d = self._project.conn.execute(
-            "SELECT flag, rating, favorite FROM decisions WHERE asset_id = ? AND subject_id IS NULL", (asset_id,)
+            "SELECT flag, rating, favorite, focus FROM decisions WHERE asset_id = ? AND subject_id IS NULL", (asset_id,)
         ).fetchone()
         rec = self._rows[row]
-        rec.flag, rec.rating, rec.favorite = (d["flag"], d["rating"], bool(d["favorite"])) if d else (None, 0, False)
+        rec.flag, rec.rating, rec.favorite, rec.focus = (
+            (d["flag"], d["rating"], bool(d["favorite"]), d["focus"]) if d else (None, 0, False, None))
         idx = self.index(row)
         self.dataChanged.emit(idx, idx)
 

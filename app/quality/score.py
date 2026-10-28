@@ -15,6 +15,9 @@ stretched 4.2 -> 0 .. 5.2 -> 100.
 2.2: the aesthetic part is the mean of TOPIQ and LAION (CLIP ViT-L/14 head, 1..10; on 8 of the owner's
 NEFs LAION spanned 4.97-6.02, so 4.8 -> 0 .. 6.2 -> 100 — only 8 photos: re-check on a full shoot). TOPIQ technical quality (KonIQ, 0..1)
 takes 20 % of the focus part, TOPIQ face quality (CGFIQA, 0..1) half of the face part.
+2.3: the edge measure depends on camera + lens, so the focus part can be overridden (app.learning.focus):
+by what the user taught with Q / W / R for that camera, or else relative to the sharpest photos of the
+same camera in the project.
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ import json
 import sqlite3
 from dataclasses import dataclass, field
 
-PROFILE_VERSION = "cosplay-tech-v4"
+PROFILE_VERSION = "cosplay-tech-v5"
 WEIGHTS = {"focus": 30, "eyes": 20, "face": 20, "exposure": 15, "framing": 15, "aesthetic": 10}
 LABELS = {"focus": "độ nét", "eyes": "mắt mở", "face": "mặt", "exposure": "sáng", "framing": "bố cục",
           "aesthetic": "thẩm mỹ"}
@@ -57,21 +60,37 @@ class Score:
         return f"{self.total:.0f}/100 ({parts})"
 
 
+@dataclass(frozen=True, slots=True)
+class FocusOverride:
+    """Focus judged for this camera + lens instead of on the fixed scale."""
+    part: float | None  # 0..100 replacing the focus part (tech quality already included), None = keep it
+    reason: str  # how it was judged, shown in the explanation
+    missed: bool = False  # judged "lệch nét / rung"
+    factor: float = 1.0  # session-relative: the measure is multiplied by this before the fixed scale
+
+
 def _ramp(x: float, lo: float, hi: float) -> float:
     """0 at lo, 100 at hi, clamped (lo > hi for 'lower is better')."""
     return max(0.0, min(100.0, (x - lo) / (hi - lo) * 100.0))
 
 
-def score(v: dict) -> Score:
+def score(v: dict, focus: FocusOverride | None = None) -> Score:
     parts: dict[str, float | None] = dict.fromkeys(WEIGHTS)
     warnings: list[str] = []
     sharp = next((v.get(k) for k in ("eye_sharp", "face_sharp", "body_sharp") if v.get(k) is not None), None)
-    if sharp is not None:
+    blur_warning = "lệch nét / rung" if v.get("eye_sharp") is not None else "người không nét"
+    if sharp is not None and focus is not None and focus.part is not None:  # learned for this camera
+        parts["focus"] = focus.part
+        if focus.missed:
+            warnings.append(blur_warning)
+    elif sharp is not None:
+        sharp *= focus.factor if focus is not None else 1.0
         parts["focus"] = _ramp(sharp, 0.15, 0.75)
         if sharp < 0.25:
-            warnings.append("lệch nét / rung" if v.get("eye_sharp") is not None else "người không nét")
-    if sharp is not None and v.get("tech_iqa") is not None:
-        parts["focus"] = (1 - TECH_IN_FOCUS) * parts["focus"] + TECH_IN_FOCUS * _ramp(v["tech_iqa"], IQA_LOW, IQA_HIGH)
+            warnings.append(blur_warning)
+        if v.get("tech_iqa") is not None:
+            parts["focus"] = ((1 - TECH_IN_FOCUS) * parts["focus"]
+                              + TECH_IN_FOCUS * _ramp(v["tech_iqa"], IQA_LOW, IQA_HIGH))
     beauty = []
     detail = []
     if v.get("aesthetic_mos") is not None:
@@ -127,7 +146,10 @@ def score(v: dict) -> Score:
             frame -= 30  # subject is tiny in the frame
         parts["framing"] = max(0.0, frame)
     strengths, weaknesses, not_rated = _explain(v, parts, warnings)
-    extra = {"reasons": _reasons(v, parts, " · ".join(detail)), "aesthetic_detail": " · ".join(detail),
+    reasons = _reasons(v, parts, " · ".join(detail))
+    if focus is not None and sharp is not None:
+        reasons["focus"] += f"; {focus.reason}"
+    extra = {"reasons": reasons, "aesthetic_detail": " · ".join(detail),
              "tags": [t[0] for t in v.get("style_tags") or []]}
     used = {k: w for k, w in WEIGHTS.items() if parts[k] is not None}
     if not used:
@@ -250,8 +272,14 @@ def _explain(v: dict, parts: dict[str, float | None], warnings: list[str]) -> tu
 
 
 def occurrence_scores(conn: sqlite3.Connection) -> dict[int, Score]:
-    return {r[0]: score(json.loads(r[1])) for r in conn.execute(
-        "SELECT occurrence_id, values_json FROM measurements WHERE extractor = 'quality' AND occurrence_id IS NOT NULL")}
+    from app.learning.focus import focus_overrides  # the learned part lives with the learning code
+
+    rows = conn.execute(
+        """SELECT m.occurrence_id, m.values_json, a.make, a.model, a.lens FROM measurements m
+           JOIN assets a ON a.id = m.asset_id WHERE m.extractor = 'quality' AND m.occurrence_id IS NOT NULL""").fetchall()
+    values = {r[0]: json.loads(r[1]) for r in rows}
+    overrides = focus_overrides({r[0]: (r[2], r[3], r[4]) for r in rows}, values)
+    return {occ: score(v, overrides.get(occ)) for occ, v in values.items()}
 
 
 def photo_scores(conn: sqlite3.Connection, subject_id: int | None = None) -> dict[int, tuple[int, Score]]:

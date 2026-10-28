@@ -21,6 +21,7 @@ import numpy as np
 from app.ai.identity_plus import ARCFACE_VERSION, BODY_VERSION
 from app.identity.cluster import Occ, load_occurrences
 from app.identity.features import OUTFIT_VERSION
+from app.learning.focus import LABELS
 from app.learning.store import LearningStore, PairEvidence
 from app.ai.clip_version import CLIP_VERSION
 from app.quality.score import PROFILE_VERSION
@@ -174,3 +175,16 @@ class Teacher:
                                         clips.get(asset_id), CLIP_VERSION, PROFILE_VERSION)
             except Exception:  # noqa: BLE001
                 log.exception("could not save a pair answer")
+
+    def focus_labeled(self, key: str, camera: str, group: str, label: str | None,
+                      features: dict[str, float | None]) -> None:
+        """The user pressed Q / W / R (or cleared it): store, replace or drop the photo's sharpness example."""
+        if self.store is None:
+            return
+        try:
+            if label is None:
+                self.store.remove_focus(key)
+            else:
+                self.store.upsert_focus(key, camera, group, LABELS[label], features)
+        except Exception:  # noqa: BLE001 - learning is optional
+            log.exception("could not save a sharpness example")

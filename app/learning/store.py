@@ -5,12 +5,14 @@ is never purged with them and is never part of an installer, so every person who
 installs the app starts from the defaults and teaches it their own way.
 
 Privacy: only similarity numbers, time gaps, score parts, the user's answer and (v6) the
-photo's CLIP embedding (768 numbers, needed to learn taste) are stored — no images, file names,
+photo's CLIP embedding (768 numbers, needed to learn taste) and (v7) the camera + lens model
+names with the sharpness measurements of labelled photos are stored — no images, file names,
 paths, people names or capture dates. Photos and shoot days appear only as one-way hashes.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from dataclasses import dataclass
@@ -20,12 +22,27 @@ from pathlib import Path
 import numpy as np
 
 from app import __version__
+from app.learning.focus import FocusExample
 from app.learning.taste import TasteExample
 
 log = logging.getLogger(__name__)
 
 DB_NAME = "learning.db"
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
+# v7: learned sharpness: one row per photo, the user's Q/W/R label with the sharpness measurements
+# and the camera + lens it applies to (model names only).
+_SCHEMA_V7 = """
+CREATE TABLE focus_feedback (
+    id              INTEGER PRIMARY KEY,
+    photo_key       TEXT NOT NULL UNIQUE,
+    created_on      TEXT NOT NULL,          -- day only
+    app_version     TEXT NOT NULL,
+    camera          TEXT NOT NULL,          -- "make model + lens"
+    grp             TEXT NOT NULL,          -- hashed shoot day
+    label           INTEGER NOT NULL CHECK (label IN (0, 1, 2)),
+    features        TEXT NOT NULL           -- JSON of the sharpness measurements
+);
+"""
 # v6: taste learning: one row per photo (photo_key, upserted), label/weight from Keep/Reject/stars/❤,
 # client picks and pair answers; the photo's CLIP embedding; a hashed shoot-day group for validation.
 _SCHEMA_V6 = """
@@ -128,6 +145,8 @@ class LearningStore:
                     self.conn.executescript(_SCHEMA_V5)
                 if version < 6:
                     self.conn.executescript(_SCHEMA_V6)
+                if version < 7:
+                    self.conn.executescript(_SCHEMA_V7)
                 self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def add_identity(self, kind: str, same: bool, pairs: list[PairEvidence], face_version: str,
@@ -219,6 +238,26 @@ class LearningStore:
             out.append(TasteExample(int(label), 1.0 if weight is None else float(weight), str(group), clip, parts))
         return out
 
+    def upsert_focus(self, photo_key: str, camera: str, group: str, label: int,
+                     features: dict[str, float | None]) -> None:
+        values = {k: (None if v is None else round(float(v), 5)) for k, v in features.items()}
+        with self.conn:
+            self.conn.execute(
+                """INSERT INTO focus_feedback (photo_key, created_on, app_version, camera, grp, label, features)
+                   VALUES (?,?,?,?,?,?,?) ON CONFLICT (photo_key) DO UPDATE SET
+                   created_on = excluded.created_on, app_version = excluded.app_version, camera = excluded.camera,
+                   grp = excluded.grp, label = excluded.label, features = excluded.features""",
+                (photo_key, date.today().isoformat(), __version__, camera, group, int(label), json.dumps(values)))
+
+    def remove_focus(self, photo_key: str) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM focus_feedback WHERE photo_key = ?", (photo_key,))
+
+    def focus_examples(self, limit: int = 20000) -> list[FocusExample]:
+        rows = self.conn.execute(
+            "SELECT label, grp, camera, features FROM focus_feedback ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [FocusExample(int(label), grp, camera, json.loads(feats)) for label, grp, camera, feats in rows]
+
     def culling_count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM culling_feedback").fetchone()[0]
 
@@ -234,6 +273,7 @@ class LearningStore:
         with self.conn:
             self.conn.execute("DELETE FROM identity_feedback")
             self.conn.execute("DELETE FROM culling_feedback")
+            self.conn.execute("DELETE FROM focus_feedback")
         self.conn.execute("VACUUM")
 
     def close(self) -> None:

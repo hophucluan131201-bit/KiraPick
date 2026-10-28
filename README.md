@@ -66,6 +66,7 @@ Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng
 | Ctrl/Shift + click | chọn nhiều ảnh |
 | 1–5, 0 | chấm sao, xoá sao |
 | F | yêu thích |
+| Q / W / R | chấm nét: nét căng / hơi soft / lệch nét – rung (bấm lại để bỏ); app học độ nét riêng cho từng máy + ống kính |
 | Ctrl+I / Ctrl+E | nhập thư mục / xuất ảnh |
 | Ctrl+F | tìm tên file (nhiều số cách nhau bằng dấu cách: `9645 9650`) |
 | Ctrl+L | danh sách khách chọn: dán tin nhắn của khách, vd `9645, 9657-9660, DSC_9665.jpg` |

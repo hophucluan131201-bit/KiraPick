@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 from datetime import date
 from collections.abc import Callable
 import logging
@@ -61,6 +62,7 @@ from app.identity.cluster import merge_suggestions
 from app.learning.store import LearningStore
 from app.quality import select
 from app.learning.teacher import Teacher, group_key, photo_key
+from app.learning import focus as focus_learning
 from app.learning.taste import TasteStatus, train
 from app.learning.taste_service import TasteService
 from app.ai.clip_version import CLIP_VERSION
@@ -104,13 +106,15 @@ def sessions_dir() -> Path:
 
 _KEYS_GRID = [
     ("Space / Enter", "xem ảnh lớn"), ("← → ↑ ↓", "di chuyển"), ("K", "giữ"), ("X", "loại"), ("U", "bỏ đánh dấu"),
-    ("1–5 / 0", "sao / xoá sao"), ("F", "yêu thích"), ("Ctrl/Shift + click", "chọn nhiều ảnh"),
+    ("1–5 / 0", "sao / xoá sao"), ("F", "yêu thích"),
+    ("Q / W / R", "chấm nét"), ("Ctrl/Shift + click", "chọn nhiều ảnh"),
     ("Ctrl+A", "chọn tất cả"), ("Ctrl+F", "tìm tên file"), ("Ctrl+E", "xuất ảnh"), ("F1", "tất cả phím tắt"),
 ]
 _KEYS_LOUPE = [
     ("Esc", "về lưới ảnh"), ("← →", "ảnh trước / sau"), ("Z", "100% ↔ vừa khung"), ("E", "phóng tới mắt"),
     ("+ / − / cuộn chuột", "phóng to / nhỏ"), ("nháy đúp", "100% tại chỗ đó"), ("kéo chuột", "di chuyển ảnh"),
     ("K", "giữ"), ("X", "loại"), ("U", "bỏ đánh dấu"), ("1–5", "sao"), ("F", "yêu thích"),
+    ("Q / W / R", "nét căng / hơi soft / lệch nét"),
 ]
 
 
@@ -150,6 +154,8 @@ class MainWindow(QMainWindow):
         self.taste = TasteService()
         self._decisions_since_training = 0
         self._taste_pool = QThreadPool(self)
+        self._focus_labels_since_training = 0
+        self.focus_status: dict[str, focus_learning.FocusStatus] = {}
 
         self._build_toolbar()
         self._build_body()
@@ -492,6 +498,9 @@ class MainWindow(QMainWindow):
         sc("=", lambda: self.zoom_step(1))
         sc("-", lambda: self.zoom_step(-1))
         sc("E", self.zoom_to_eyes)
+        sc("Q", lambda: self.set_focus_label("sharp"))
+        sc("W", lambda: self.set_focus_label("soft"))
+        sc("R", lambda: self.set_focus_label("missed"))
         sc("F1", self.show_shortcuts)
 
     # ---------------------------------------------------------- sessions
@@ -699,6 +708,9 @@ class MainWindow(QMainWindow):
             f"Điểm xếp hạng = {100 - round(self.taste_weight() * 100)}% Kỹ thuật + "
             f"{round(self.taste_weight() * 100)}% Hợp gu (đổi trong ⚙ Tuỳ chọn).",
             "",
+            "<b>Độ nét theo máy + ống kính</b>",
+            *self.focus_text(),
+            "",
             "Dữ liệu học chỉ có các con số (độ giống, điểm, “dấu vân tay” CLIP của ảnh), không có ảnh, "
             "tên file hay tên chủ thể, và chỉ nằm trên máy này.",
         ]
@@ -732,6 +744,14 @@ class MainWindow(QMainWindow):
                                lambda i: self.model.pixmap(recs[i]) if i in recs else None, answer)
         dialog.show()
         return dialog
+
+    def focus_text(self) -> list[str]:
+        if not self.focus_status:
+            return ["Chưa có ảnh nào được chấm nét. Bấm Q (nét căng), W (hơi soft), R (lệch nét / rung) khi rà ảnh; "
+                    f"mỗi máy + ống kính cần ít nhất {focus_learning.MIN_EACH} tấm nét căng và "
+                    f"{focus_learning.MIN_EACH} tấm hơi soft / lệch nét. Trong lúc đó độ nét được so với các tấm "
+                    "nét nhất của cùng máy trong buổi chụp."]
+        return [f"{escape(camera)}: {escape(st.reason)}" for camera, st in sorted(self.focus_status.items())]
 
     def _prompt_vectors(self) -> dict:
         """Style prompt embeddings (to put the learnt taste into words); empty without the CLIP model files."""
@@ -1597,6 +1617,7 @@ class MainWindow(QMainWindow):
         self._decisions_since_training = 0
         if store is None:
             return
+        self.retrain_focus(wait)
         clip = self._registry_or_default().status("clip_l14_image")
         if clip.state is not ModelState.READY:
             self._on_taste_trained(TasteStatus(False, "Chưa có mô hình CLIP nên chưa học được gu "
@@ -1640,6 +1661,69 @@ class MainWindow(QMainWindow):
 
     def set_flag(self, flag: str | None) -> None:
         self._apply(lambda conn, rec: decisions.set_flag(conn, rec.id, flag), advance=flag is not None)
+
+    def set_focus_label(self, label: str) -> None:
+        """Q / W / R: the user's sharpness label (pressing the same key again clears it); teaches the focus model."""
+        if self.project is None:
+            return
+        targets = self._targets()
+        if not targets:
+            return
+        new = None if all(r.focus == label for r in targets) else label
+        session = self._session_key()
+        unmeasured = 0
+        with self.project.transaction() as conn:
+            for rec in targets:
+                decisions.set_focus(conn, rec.id, new)
+        conn = self.project.conn
+        for rec in targets:
+            measured = focus_learning.photo_focus(conn, rec.id)
+            key = photo_key(session, rec.id, "focus:")
+            if measured is None:
+                unmeasured += 1
+                self.teacher.focus_labeled(key, "", "", None, {})
+                continue
+            camera, features = measured
+            self.teacher.focus_labeled(key, camera, group_key(session, (rec.capture_time or "")[:10]), new, features)
+        for rec in targets:
+            self.model.refresh_record(rec.id)
+        self._show_inspector(self.current_record())
+        if new is not None and unmeasured:
+            self.status.setText(f"{unmeasured} ảnh chưa được 📊 Phân tích nên chưa dùng để học độ nét "
+                                "(nhãn vẫn được lưu).")
+        self._focus_labels_since_training += len(targets)
+        if self._focus_labels_since_training >= FOCUS_RETRAIN_EVERY:
+            self.retrain_focus()
+        if new is not None and len(targets) == 1 and self.act_auto_advance.isChecked():
+            self.step(1)
+
+    def retrain_focus(self, wait: bool = False) -> None:
+        """Train the per-camera sharpness models in the background (never on the Qt thread)."""
+        store = self.teacher.store
+        self._focus_labels_since_training = 0
+        if store is None:
+            return
+        try:
+            examples = store.focus_examples()
+        except Exception:  # noqa: BLE001 - learning is optional
+            log.exception("could not read sharpness examples")
+            return
+        job = _FocusJob(examples)
+        job.signals.done.connect(self._on_focus_trained)
+        self._taste_pool.start(job)
+        if wait:
+            self._taste_pool.waitForDone(30000)
+            QCoreApplication.processEvents()
+
+    def _on_focus_trained(self, statuses: dict) -> None:
+        ready = lambda d: {c: (st.ready, st.model.accuracy if st.model else None) for c, st in d.items()}  # noqa: E731
+        changed = ready(statuses) != ready(self.focus_status) or any(st.ready for st in statuses.values())
+        self.focus_status = statuses
+        focus_learning.use_models(statuses)
+        log.info("focus models: %d cameras, %d ready", len(statuses), sum(st.ready for st in statuses.values()))
+        if self.project is not None and changed:
+            self.reload_preserving_view()
+            self._show_inspector(self.current_record())
 
     def set_rating(self, rating: int) -> None:
         self._apply(lambda conn, rec: decisions.set_rating(conn, rec.id, rating))
@@ -1729,6 +1813,7 @@ class MainWindow(QMainWindow):
             "K   Giữ      X   Loại      U   bỏ đánh dấu\n"
             "1 – 5   chấm sao,  0   xoá sao\n"
             "F   Yêu thích\n"
+            "Q   nét căng,  W   hơi soft,  R   lệch nét / rung (bấm lại để bỏ) — app học độ nét theo máy + ống kính\n"
             "Ctrl+I   nhập thư mục ảnh,  Ctrl+E   xuất ảnh\n"
             "Ctrl+F   tìm tên file,  Ctrl+L   danh sách khách chọn\n\n"
             "Trong lưới có thể chọn nhiều ảnh (Ctrl/Shift + click) rồi bấm K/X/số để áp dụng cho tất cả.",
@@ -1736,6 +1821,26 @@ class MainWindow(QMainWindow):
 
 
 RETRAIN_EVERY = 20  # decisions between two trainings of the taste model
+FOCUS_RETRAIN_EVERY = 5  # Q/W/R labels between two trainings of the sharpness models (small and fast)
+
+
+class _FocusSignals(QObject):
+    done = Signal(object)
+
+
+class _FocusJob(QRunnable):
+    def __init__(self, examples: list) -> None:
+        super().__init__()
+        self.examples = examples
+        self.signals = _FocusSignals()
+
+    def run(self) -> None:
+        try:
+            statuses = focus_learning.train_focus(self.examples)
+        except Exception:  # noqa: BLE001 - never crash the app over learning
+            log.exception("sharpness training failed")
+            statuses = {}
+        self.signals.done.emit(statuses)
 
 
 class _TasteSignals(QObject):
