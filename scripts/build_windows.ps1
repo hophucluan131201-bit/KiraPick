@@ -128,6 +128,13 @@ if (Test-Path $report) { Get-Content $report -Encoding UTF8 | ForEach-Object { W
 if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) {
     $crash = Join-Path $Root "dist\selftest.crash.txt"
     if (Test-Path $crash) { Get-Content $crash -Encoding UTF8 | Select-Object -Last 30 | ForEach-Object { Write-Host $_ } }
+    $fallback = Join-Path $env:LOCALAPPDATA "KiraPick\logs\selftest.json"  # where the app writes if dist\ fails
+    if (Test-Path $fallback) {
+        $r = Get-Content $fallback -Raw -Encoding UTF8 | ConvertFrom-Json
+        Write-Host ("error: " + $r.error)
+        Write-Host ("steps: " + ($r.steps -join " | "))
+        if ($r.traceback) { ($r.traceback -split "`n") | Select-Object -Last 12 | ForEach-Object { Write-Host $_ } }
+    }
     throw ("Tự kiểm tra thất bại, mã thoát {0:X8} (xem dist\selftest.json)" -f $proc.ExitCode)
 }
 
