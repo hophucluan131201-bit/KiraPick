@@ -101,3 +101,32 @@ def test_jpeg_whose_raw_went_missing_is_shown_and_counted(conn: sqlite3.Connecti
     assert shown == [jpg]
     c = counts(conn, include_pairs=True)
     assert (c.total, c.keep, c.keep_bytes) == (1, 1, 10 * MB)
+
+
+def test_counts_contract_errors_overlap_decisions(conn: sqlite3.Connection) -> None:
+    """Keep/Reject count every decision the user made on a shown photo, whatever its read status;
+    Errors is a warning count that may overlap them. Undecided = readable and no decision.
+    So: total == keep + reject + undecided + (errors without a decision)."""
+    ok = _add(conn, "ok.jpg", MB)
+    broken_kept = _add(conn, "kept_then_unreadable.jpg", 7 * MB, status="error")
+    broken_rejected = _add(conn, "rejected_then_unreadable.jpg", MB, status="error")
+    _add(conn, "unreadable.jpg", MB, status="error")
+    decisions.set_flag(conn, ok, "keep")
+    decisions.set_flag(conn, broken_kept, "keep")
+    decisions.set_flag(conn, broken_rejected, "reject")
+    c = counts(conn, include_pairs=True)
+    assert (c.total, c.keep, c.reject, c.undecided, c.errors) == (4, 2, 1, 0, 3)
+    assert c.total == c.keep + c.reject + c.undecided + 1  # one error without a decision
+    assert c.keep_bytes == MB  # an unreadable file is not exported, so not in the size
+
+
+def test_group_of_three_and_several_kept_members_are_not_counted_twice(conn: sqlite3.Connection) -> None:
+    g = _pair(conn)
+    raw = _add(conn, "F.NEF", 30 * MB, "raw", g)
+    jpg = _add(conn, "F.JPG", 10 * MB, "raster", g)
+    _add(conn, "F.HEIC", 5 * MB, "raster", g)
+    decisions.set_flag(conn, raw, "keep")
+    decisions.set_flag(conn, jpg, "keep")  # a decision on the hidden JPEG too (e.g. from before pairing)
+    assert counts(conn, include_pairs=True).keep_bytes == 45 * MB
+    assert counts(conn, include_pairs=False).keep_bytes == 40 * MB  # the export copies both kept files
+    assert counts(conn, include_pairs=True).keep == 1  # one photo in the grid

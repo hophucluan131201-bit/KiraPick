@@ -230,6 +230,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - Consumes: Task 3 `counts`.
 - Produces: `BottomBar.set_counts(c: Counts, include_pairs: bool, marked: int)`; text "Đã chọn N ảnh (x,y GB)" + " (gồm JPEG kèm)" when include_pairs; "Đang đánh dấu M ảnh" when marked ≥ 2; `set_compact(on: bool)` → "✓N ✗M ·K" and a "⋯" menu holding ★, Xoay xem, Xem EXIF; signals `keep, reject, clear, rating(int), rotate, exif, export, export_client`; `message(text: str)`; `progress(done: int, total: int, pausable: bool)` / `progress_done()`; attribute `status: QLabel` (tests read `w.status.text()` today — keep `MainWindow.status` pointing at it).
 
+- Size refresh (Task 3 review CR3-05): the bar recomputes `counts` when a decision changes, when a session opens, after import/analysis, and when `export/include_pairs` changes (`ExportDialog.include_pairs.toggled` → `MainWindow.refresh_counts`); repeated triggers within 100 ms are coalesced (counts take ~23 ms at 10,000 photos). Test: `test_size_follows_include_pairs_toggle`.
 - [ ] **Step 1: Failing tests**: `test_counts_and_size_text` (2 kept RAW+JPEG → "Đã chọn 2 ảnh (… GB) (gồm JPEG kèm)"); `test_marking_text_only_for_two_or_more`; `test_compact_keeps_keep_reject_export_visible`; `test_buttons_act_like_keys` (bottom Chọn on current photo == pressing P).
 - [ ] **Steps 2–4** FAIL → implement → PASS.
 - [ ] **Step 5: Commit** `"UI part 1: bottom bar with counts, size and actions"`

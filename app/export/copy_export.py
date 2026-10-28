@@ -18,6 +18,7 @@ import csv
 import json
 import os
 import shutil
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -85,16 +86,24 @@ def select_assets(
     collection_id: int | None = None,
 ) -> list[int]:
     """Photo-level selection (RAW of a pair stands for the pair)."""
+    return select_ids(project.conn, selection, min_rating=min_rating, ids=ids, collection_id=collection_id)
+
+
+def select_ids(
+    conn: sqlite3.Connection, selection: Selection, *, min_rating: int = 1, ids: list[int] | None = None,
+    collection_id: int | None = None,
+) -> list[int]:
+    """``select_assets`` on a connection (the bottom bar's size estimate uses the same selection)."""
     base = """SELECT a.id FROM assets a LEFT JOIN decisions d ON d.asset_id = a.id AND d.subject_id IS NULL
               WHERE a.status = 'ok'"""
     if selection is Selection.KEEP:
-        rows = project.conn.execute(base + " AND d.flag = 'keep'")
+        rows = conn.execute(base + " AND d.flag = 'keep'")
     elif selection is Selection.FAVORITE:
-        rows = project.conn.execute(base + " AND d.favorite = 1")
+        rows = conn.execute(base + " AND d.favorite = 1")
     elif selection is Selection.RATED:
-        rows = project.conn.execute(base + " AND COALESCE(d.rating, 0) >= ?", (min_rating,))
+        rows = conn.execute(base + " AND COALESCE(d.rating, 0) >= ?", (min_rating,))
     elif selection is Selection.COLLECTION:
-        rows = project.conn.execute(
+        rows = conn.execute(
             base + " AND a.id IN (SELECT asset_id FROM collection_items WHERE collection_id = ?) ORDER BY a.id",
             (collection_id,),
         )
@@ -176,21 +185,9 @@ def plan_export(
     conn = project.conn
     plan = ExportPlan(dest, [])
     taken: set[str] = set()
-    seen: set[int] = set()
-    for asset_id in asset_ids:
-        if asset_id in seen:
-            continue
-        row = conn.execute("SELECT pair_group_id FROM assets WHERE id = ?", (asset_id,)).fetchone()
-        if row is None:
-            continue
-        group_ids = [asset_id]
-        if include_pairs and row["pair_group_id"] is not None:
-            group_ids += [r[0] for r in conn.execute(
-                "SELECT id FROM assets WHERE pair_group_id = ? AND id != ? AND status = 'ok' ORDER BY id",
-                (row["pair_group_id"], asset_id))]
+    for asset_id, group_ids in export_groups(conn, asset_ids, include_pairs=include_pairs):
         members = []
         for gid in group_ids:
-            seen.add(gid)
             r = conn.execute(
                 """SELECT a.id, a.relative_path, a.capture_time, a.make, a.model, s.root_path, d.flag,
                           COALESCE(d.rating, 0) AS rating, COALESCE(d.favorite, 0) AS favorite
@@ -226,6 +223,42 @@ def plan_export(
                 r["capture_time"], camera,
             ))
     return plan
+
+
+def export_groups(conn: sqlite3.Connection, asset_ids: list[int], *,
+                  include_pairs: bool) -> list[tuple[int, list[int]]]:
+    """The files an export copies, per photo: (photo id, [its id, then the other ok files of its pair group]).
+
+    The single source of truth for "which files": plan_export copies exactly these (minus files gone from
+    disk) and the bottom bar's size estimate sums their sizes. A file is listed once even when several
+    files of one group are selected."""
+    out: list[tuple[int, list[int]]] = []
+    seen: set[int] = set()
+    for asset_id in asset_ids:
+        if asset_id in seen:
+            continue
+        row = conn.execute("SELECT pair_group_id FROM assets WHERE id = ?", (asset_id,)).fetchone()
+        if row is None:
+            continue
+        group_ids = [asset_id]
+        if include_pairs and row[0] is not None:
+            group_ids += [r[0] for r in conn.execute(
+                "SELECT id FROM assets WHERE pair_group_id = ? AND id != ? AND status = 'ok' ORDER BY id",
+                (row[0], asset_id))]
+        seen.update(group_ids)
+        out.append((asset_id, group_ids))
+    return out
+
+
+def estimated_bytes(conn: sqlite3.Connection, asset_ids: list[int], *, include_pairs: bool) -> int:
+    """Bytes an export of these photos would copy, from the sizes recorded at import (no disk access)."""
+    files = [f for _, group in export_groups(conn, asset_ids, include_pairs=include_pairs) for f in group]
+    total = 0
+    for start in range(0, len(files), 500):
+        chunk = files[start:start + 500]
+        total += conn.execute(f"SELECT COALESCE(SUM(size), 0) FROM assets WHERE id IN ({','.join('?' * len(chunk))})",
+                              chunk).fetchone()[0]
+    return int(total)
 
 
 def _copy_exclusive(src: Path, dest_root: Path, rel: str) -> str:
