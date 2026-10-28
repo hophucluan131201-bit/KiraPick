@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 
 PROFILE_VERSION = "cosplay-tech-v4"
 WEIGHTS = {"focus": 30, "eyes": 20, "face": 20, "exposure": 15, "framing": 15, "aesthetic": 10}
-LABELS = {"focus": "nét", "eyes": "mắt", "face": "mặt", "exposure": "sáng", "framing": "bố cục",
+LABELS = {"focus": "độ nét", "eyes": "mắt mở", "face": "mặt", "exposure": "sáng", "framing": "bố cục",
           "aesthetic": "thẩm mỹ"}
 NOT_MEASURED: tuple[str, ...] = ()
 AESTHETIC_LOW, AESTHETIC_HIGH = 4.2, 5.2  # TOPIQ mean score (1..10) mapped to 0..100

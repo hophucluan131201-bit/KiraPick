@@ -31,3 +31,13 @@ def test_artistic_exception_and_main_weakness_are_shown() -> None:
     s = score(GOOD | {"blink": 0.9, "style_tags": [["low_key", 0.05]]})
     html = explain_html(s, rank(s, 80.0, s.tags, 0.5), TasteStatus(True, "ok"))
     assert "ngoại lệ nghệ thuật" in html and "Điểm yếu chính" in html
+
+
+def test_eye_criterion_cannot_be_read_as_eye_sharpness() -> None:
+    """Owner, 2.2.0a: "mắt 100" next to "thiếu nét" read as "the eyes are 100 % sharp". The eyes row is
+    open/closed; sharpness (measured at the eyes) is its own row."""
+    from app.quality.score import LABELS
+
+    assert LABELS["eyes"] == "mắt mở" and LABELS["focus"] == "độ nét"
+    html = explain_html(score(GOOD | {"blink": 0.05}), None, None)
+    assert "độ nét" in html and "mắt mở" in html
