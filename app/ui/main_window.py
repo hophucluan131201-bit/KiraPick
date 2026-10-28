@@ -72,9 +72,8 @@ from app.ui.client_list_dialog import ClientListDialog
 from app.ui.collapsible import CollapsibleSection
 from app.ui.compare_dialog import CompareDialog
 from app.ui import update_dialog
-from app.ui.update_dialog import ModelUpdater
-from app.ui.update_dialog import Worker as UpdateWorker
-from app.updates.catalog import pending_updates, should_auto_check
+from app.ui.update_dialog import AppUpdater
+from app.updates.app_update import should_auto_check
 from app.ui.people_delegate import PeopleDelegate
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
@@ -294,12 +293,12 @@ class MainWindow(QMainWindow):
         self.act_taste_weight.triggered.connect(self.ask_taste_weight)
         options.addAction(self.act_taste_weight)
         options.addSeparator()
-        self.act_update = QAction("🔄 Cập nhật mô hình AI… (cần mạng)", self)
-        self.act_update.setToolTip("Tải bản vá mô hình AI đã được KiraPick kiểm tra và ký số. "
+        self.act_update = QAction("🔄 Cập nhật KiraPick… (cần mạng)", self)
+        self.act_update.setToolTip("Tải bản KiraPick mới nhất từ GitHub (kiểm tra mã SHA-256) rồi mở bộ cài. "
                                    "Chỉ chạy khi bạn bấm; không gửi ảnh hay dữ liệu nào đi.")
-        self.act_update.triggered.connect(lambda: self.start_model_update())
+        self.act_update.triggered.connect(lambda: self.start_app_update())
         options.addAction(self.act_update)
-        self.act_auto_update = QAction("Tự kiểm tra bản AI mới khi mở app (cần mạng)", self)
+        self.act_auto_update = QAction("Tự kiểm tra bản KiraPick mới khi mở app (cần mạng)", self)
         self.act_auto_update.setCheckable(True)
         self.act_auto_update.setChecked(self.settings.value("auto_update_check", False, bool))
         self.act_auto_update.toggled.connect(lambda on: self.settings.setValue("auto_update_check", on))
@@ -1553,24 +1552,22 @@ class MainWindow(QMainWindow):
     def _registry_or_default(self) -> ModelRegistry:
         return self._registry or ModelRegistry()
 
-    def start_model_update(self, **kw) -> ModelUpdater:  # noqa: ANN003 - test doubles for network/root
-        updater = ModelUpdater(self, self._registry_or_default(), **kw)
+    def start_app_update(self, **kw) -> AppUpdater:  # noqa: ANN003 - test doubles for network/disk
+        updater = AppUpdater(self, **kw)
         self._updater = updater
-        updater.start()
+        updater.check()
         return updater
 
     def _maybe_auto_check(self) -> None:
-        """Opt-in (off by default): at most once a day, fetch only the signed catalogue in the background."""
+        """Opt-in (off by default): at most once a day, read only the release list in the background."""
         today = date.today().isoformat()
         if not should_auto_check(enabled=self.act_auto_update.isChecked(),
                                  last_check=self.settings.value("last_update_check", None), today=today):
             return
         self.settings.setValue("last_update_check", today)
-        registry = self._registry_or_default()
-        worker = UpdateWorker(lambda _p: pending_updates(update_dialog.download_catalog(), registry, __version__),
-                              self)
-        worker.done.connect(lambda pending: pending and self.status.setText(
-            f"Có {len(pending)} bản mô hình AI mới — vào ⚙ Tuỳ chọn → 🔄 Cập nhật mô hình AI để cài."))
+        worker = update_dialog.auto_check_worker(self)
+        worker.done.connect(lambda release: release and self.status.setText(
+            f"Có KiraPick {release.version} — vào ⚙ Tuỳ chọn → 🔄 Cập nhật KiraPick để cài."))
         worker.failed.connect(lambda msg: log.info("automatic update check: %s", msg))  # silent when offline
         self._auto_worker = worker
         worker.start()

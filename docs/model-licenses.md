@@ -38,10 +38,7 @@ the licence sense: the weights are the same models in another number format.
 Runtime components: ONNX Runtime (MIT), NVIDIA CUDA 13 / cuDNN 9 redistributables via pip
 (NVIDIA license; installed into the venv, not system-wide), OpenCV (Apache-2.0), PySide6 (LGPLv3).
 
-## AI-model updates (2.2)
+## Updates
 
-Updated weights are never fetched silently. ⚙ Tuỳ chọn → “Cập nhật mô hình AI” (or the opt-in daily check,
-off by default) downloads `models-catalog.json` from KiraPick's GitHub release `models-catalog`, verifies
-its Ed25519 signature with `configs/update-public-key.txt`, and installs only listed files whose SHA-256
-matches. Every catalogue entry names its licence; only models whose licence was reviewed as above may be
-listed. The catalogue starts empty.
+Models change only with a new KiraPick installer (⚙ Tuỳ chọn → “Cập nhật KiraPick” downloads it from the
+GitHub releases, SHA-256 checked); every bundled model is listed above with its licence.

@@ -52,7 +52,6 @@ Software
 - rawpy - MIT; LibRaw - LGPL-2.1 or CDDL-1.0
 - ExifRead - BSD-3-Clause
 - PyYAML - MIT
-- cryptography (Ed25519 check of the signed AI-model catalogue) - Apache-2.0 OR BSD-3-Clause
 - CUDA edition only: ONNX Runtime GPU build - MIT; NVIDIA CUDA runtime, cuBLAS, cuFFT, cuRAND, NVRTC and
   cuDNN DLLs from NVIDIA's pip wheels - NVIDIA software license agreements (runtime libraries
   redistributable with applications)

@@ -1,4 +1,4 @@
-"""⚙ Tuỳ chọn → Cập nhật mô hình AI…: the only place KiraPick goes online, and only when asked.
+"""⚙ Tuỳ chọn → Cập nhật KiraPick: the only place KiraPick goes online, and only when asked.
 
 All network work runs in a QThread; the window never waits on it.
 """
@@ -13,14 +13,23 @@ from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import QMessageBox, QProgressDialog, QWidget
 
 from app import __version__
-from app.ai.models import ModelRegistry
-from app.updates.catalog import HOSTS, CatalogError, Entry, download_catalog, pending_updates
-from app.updates.installer import UpdateError, fetch_url, install, rollback, updates_root
+from app.branding import data_dir
+from app.edition import EDITION
+from app.updates.app_update import (
+    HOSTS,
+    Release,
+    UpdateError,
+    download,
+    fetch_url,
+    list_releases,
+    newest_release,
+    start_installer,
+)
 
 log = logging.getLogger(__name__)
 
-PRIVACY = ("KiraPick sẽ kết nối tới GitHub của KiraPick ({hosts}) để tải danh sách mô hình AI đã được "
-           "kiểm tra và ký số. Không gửi ảnh, điểm, tên hay bất kỳ dữ liệu nào của bạn.")
+PRIVACY = ("KiraPick sẽ kết nối tới GitHub ({hosts}) để xem có bản mới không, và nếu bạn đồng ý thì tải bộ cài "
+           "về (được kiểm tra mã SHA-256). Không gửi ảnh, điểm, tên hay bất kỳ dữ liệu nào của bạn.")
 
 
 class Worker(QThread):
@@ -35,87 +44,74 @@ class Worker(QThread):
     def run(self) -> None:
         try:
             self.done.emit(self.fn(lambda a, b: self.step.emit(a, b)))
-        except (CatalogError, UpdateError) as exc:
+        except UpdateError as exc:
             self.failed.emit(str(exc))
         except Exception as exc:  # noqa: BLE001 - never crash the app over an update
-            log.exception("model update failed")
+            log.exception("app update failed")
             self.failed.emit(f"lỗi không mong đợi ({type(exc).__name__})")
 
 
-class ModelUpdater:
-    """Check → confirm → download/verify/activate, with rollback. ``get_catalog``/``fetch`` are swappable for tests."""
+class AppUpdater:
+    """Check → confirm → download + SHA-256 → start the installer and close. Network/IO swappable for tests."""
 
-    def __init__(self, parent: QWidget, registry: ModelRegistry, *, get_catalog: Callable[[], dict] = download_catalog,
-                 fetch=fetch_url, root: Path | None = None) -> None:  # noqa: ANN001
-        self.parent, self.registry = parent, registry
-        self.get_catalog, self.fetch, self.root = get_catalog, fetch, root or updates_root()
+    def __init__(self, parent: QWidget, *, get_releases: Callable[[], list[dict]] | None = None,
+                 fetch=fetch_url, folder: Path | None = None,  # noqa: ANN001
+                 start: Callable[[Path], None] = start_installer, close: Callable[[], object] | None = None) -> None:
+        self.parent = parent
+        self.get_releases = get_releases or (lambda: list_releases())
+        self.fetch, self.start = fetch, start
+        self.folder = folder or data_dir() / "update"
+        self.close = close or parent.close
         self.worker: Worker | None = None
         self.result: str | None = None  # last outcome, for the status bar and tests
 
-    def start(self, *, ask: bool = True) -> None:
+    def check(self, *, ask: bool = True) -> None:
         if ask:
-            sure = QMessageBox.question(self.parent, "Cập nhật mô hình AI",
-                                        PRIVACY.format(hosts=", ".join(HOSTS)) + "\n\nKết nối để kiểm tra?")
+            sure = QMessageBox.question(self.parent, "Cập nhật KiraPick",
+                                        PRIVACY.format(hosts=", ".join(HOSTS)) + "\n\nKiểm tra bản mới?")
             if sure != QMessageBox.StandardButton.Yes:
                 return
-        self._run(lambda _p: pending_updates(self.get_catalog(), self.registry, __version__), self._offer)
+        self._run(lambda _p: newest_release(self.get_releases(), EDITION, __version__), self._offer)
 
-    def _run(self, fn, on_done) -> None:  # noqa: ANN001
+    def _run(self, fn, on_done) -> Worker:  # noqa: ANN001
         self.worker = Worker(fn, self.parent)
         self.worker.done.connect(on_done)
         self.worker.failed.connect(self._failed)
         self.worker.start()
+        return self.worker
 
     def _failed(self, message: str) -> None:
         self.result = f"Không cập nhật được: {message}"
-        QMessageBox.warning(self.parent, "Cập nhật mô hình AI", self.result + "\nCác mô hình đang dùng không đổi.")
+        QMessageBox.warning(self.parent, "Cập nhật KiraPick", self.result + "\nBản đang dùng không thay đổi.")
 
-    def _offer(self, pending: list[Entry]) -> None:
-        if not pending:
-            self.result = "Mô hình AI đã là bản mới nhất."
-            box = QMessageBox(QMessageBox.Icon.Information, "Cập nhật mô hình AI", self.result, parent=self.parent)
-            back = box.addButton("Quay lại bản trước…", QMessageBox.ButtonRole.ActionRole)
-            box.addButton(QMessageBox.StandardButton.Ok)
-            back.setEnabled(any((self.root / "active").glob("*.sha256")))
-            box.exec()
-            if box.clickedButton() is back:
-                self.roll_back_all()
+    def _offer(self, release: Release | None) -> None:
+        if release is None:
+            self.result = f"Bạn đang dùng bản mới nhất ({__version__})."
+            QMessageBox.information(self.parent, "Cập nhật KiraPick", self.result)
             return
-        lines = [f"• {e.id} → bản {e.version} ({e.size / 1e6:.0f} MB, giấy phép {e.license})"
-                 + (f": {e.notes}" if e.notes else "") for e in pending]
-        reanalyse = [e.id for e in pending if not e.embedding_compatible]
-        text = "Có bản mới:\n" + "\n".join(lines)
-        if reanalyse:
-            text += "\n\nSau khi cập nhật cần bấm 📊 Phân tích ảnh lại cho các buổi chụp cũ."
-        if QMessageBox.question(self.parent, "Cập nhật mô hình AI", text + "\n\nTải và cài?") \
-                != QMessageBox.StandardButton.Yes:
+        text = (f"Có bản mới: {release.version} (bạn đang dùng {__version__}).\n"
+                f"Dung lượng tải về: {release.size / 1e9:.1f} GB.\n\n"
+                "Tải về, kiểm tra rồi mở bộ cài? KiraPick sẽ tự đóng; dữ liệu buổi chụp và phần đã học được giữ nguyên.")
+        if QMessageBox.question(self.parent, "Cập nhật KiraPick", text) != QMessageBox.StandardButton.Yes:
             return
-        progress = QProgressDialog("Đang tải mô hình AI…", "", 0, 100, self.parent)
+        progress = QProgressDialog(f"Đang tải KiraPick {release.version}…", "", 0, 100, self.parent)
         progress.setCancelButton(None)
         progress.show()
+        worker = self._run(lambda step: download(release, self.fetch, step, self.folder), self._install)
+        worker.step.connect(lambda a, b: progress.setValue(int(a * 100 / b)) if b else None)
+        worker.finished.connect(progress.close)
 
-        def work(step: Callable[[int, int], None]) -> list[str]:
-            done = []
-            for e in pending:
-                install(e, self.fetch, step, self.root)
-                done.append(f"{e.id} {e.version}")
-            return done
+    def _install(self, setup: Path) -> None:
+        try:
+            self.start(setup)
+        except UpdateError as exc:
+            self._failed(str(exc))
+            return
+        self.result = f"Đang mở bộ cài {setup.name}; KiraPick sẽ đóng để cài bản mới."
+        QMessageBox.information(self.parent, "Cập nhật KiraPick", self.result)
+        self.close()
 
-        def finished(done: list[str]) -> None:
-            progress.close()
-            self.result = "Đã cập nhật: " + ", ".join(done) + ". Mở lại buổi chụp để dùng bản mới."
-            QMessageBox.information(self.parent, "Cập nhật mô hình AI", self.result)
 
-        self._run(work, finished)
-        if self.worker is not None:
-            self.worker.step.connect(lambda a, b: progress.setValue(int(a * 100 / b)) if b else None)
-            self.worker.failed.connect(lambda _m: progress.close())
-
-    def roll_back_all(self) -> None:
-        for sidecar in (self.root / "active").glob("*.sha256"):
-            file = sidecar.name[: -len(".sha256")]
-            spec = next((s for s in self.registry.specs.values() if s.file == file), None)
-            if spec is not None:
-                rollback(spec.id, file, self.root)
-        self.result = "Đã quay lại bản mô hình trước."
-        QMessageBox.information(self.parent, "Cập nhật mô hình AI", self.result)
+def auto_check_worker(parent: QWidget) -> Worker:
+    """Opt-in daily check: only reads the release list, never downloads."""
+    return Worker(lambda _p: newest_release(list_releases(), EDITION, __version__), parent)
