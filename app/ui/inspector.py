@@ -55,16 +55,16 @@ def explain_html(score: Score, ranked: Ranked | None = None, taste: TasteStatus 
         head += f"<br>⭐ AI chọn (thứ {pick_rank})"
     if selection:
         head += f"<br><i>{escape(selection)}</i>"
-    rows = []
+    rows = []  # plain wrapped lines (no table): readable in a narrow, half-screen window
     for key in WEIGHTS:
         value = score.parts.get(key)
         reason = escape(score.reasons.get(key, ""))
         if value is None:
-            rows.append(f"<tr><td>{LABELS[key]}</td><td colspan='2' style='color:{theme.MUTED}'>{reason}</td></tr>")
+            rows.append(f"<b>{LABELS[key]}</b> <span style='color:{theme.MUTED}'>{reason}</span>")
         else:
-            rows.append(f"<tr><td>{LABELS[key]}</td><td><tt>{_bar(value)}</tt></td><td align='right'>{value:.0f}</td></tr>"
-                        f"<tr><td></td><td colspan='2' style='color:{theme.MUTED}'>{reason}</td></tr>")
-    body = "<table cellspacing='0' cellpadding='1'>" + "".join(rows) + "</table>"
+            rows.append(f"<b>{LABELS[key]} {value:.0f}</b> <tt>{_bar(value)}</tt>"
+                        f"<br><span style='color:{theme.MUTED}'>{reason}</span>")
+    body = "<br>" + "<br>".join(rows)
     if ranked is not None and ranked.taste is not None and taste is not None:
         body += f"<br><span style='color:{theme.MUTED}'>Hợp gu: {escape(taste.reason)}</span>"
     if ranked is not None and ranked.artistic:
@@ -79,10 +79,15 @@ def explain_html(score: Score, ranked: Ranked | None = None, taste: TasteStatus 
     return head + body
 
 
+def breakable_path(path: str) -> str:
+    """Let a long folder path wrap after each separator (a QLabel cannot break inside a word)."""
+    return path.replace("\\", "\\\u200b").replace("/", "/\u200b")
+
+
 class Inspector(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumWidth(260)
+        self.setMinimumWidth(220)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(10, 6, 10, 6)
         self.fields: dict[str, QLabel] = {}
@@ -125,7 +130,7 @@ class Inspector(QWidget):
             self.error.clear()
             return
         f["Tên file"].setText(rec.name)
-        f["Thư mục"].setText(str(rec.path.parent))
+        f["Thư mục"].setText(breakable_path(str(rec.path.parent)))
         f["Cặp RAW+JPEG"].setText(", ".join(rec.paired_with) or "—")
         when = rec.capture_time
         f["Chụp lúc"].setText(datetime.fromisoformat(when).strftime("%d/%m/%Y %H:%M:%S") if when else "không có")

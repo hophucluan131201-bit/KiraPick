@@ -41,3 +41,24 @@ def test_eye_criterion_cannot_be_read_as_eye_sharpness() -> None:
     assert LABELS["eyes"] == "mắt mở" and LABELS["focus"] == "độ nét"
     html = explain_html(score(GOOD | {"blink": 0.05}), None, None)
     assert "độ nét" in html and "mắt mở" in html
+
+
+def test_score_block_wraps_in_a_narrow_panel() -> None:
+    """Owner, half-screen window: the score table was cut off at the right. Lines must wrap instead."""
+    html = explain_html(score(GOOD), None, None)
+    assert "<table" not in html and "█" in html
+
+
+def test_long_paths_can_wrap() -> None:
+    from app.ui.inspector import breakable_path
+
+    shown = breakable_path("C:\\Users\\hophu\\Downloads\\Khách chọn")
+    assert "\u200b" in shown and shown.replace("\u200b", "") == "C:\\Users\\hophu\\Downloads\\Khách chọn"
+
+
+def test_people_badge_keeps_the_suggestion_count() -> None:
+    from app.ui.people_delegate import split_label
+
+    assert split_label("Chủ thể 6  ·  7 ảnh  ·  2?") == ("Chủ thể 6", "7 ảnh · 2?")
+    assert split_label("Chủ thể 1  ·  5 ảnh") == ("Chủ thể 1", "5 ảnh")
+    assert split_label("❔ Chưa xác định") == ("❔ Chưa xác định", "")

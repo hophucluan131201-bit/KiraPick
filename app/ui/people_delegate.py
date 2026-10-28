@@ -12,14 +12,15 @@ SEPARATOR = "  ·  "
 
 
 def split_label(text: str) -> tuple[str, str]:
-    """"Chủ thể 1  ·  5 ảnh" -> ("Chủ thể 1", "5 ảnh")."""
-    name, sep, count = text.rpartition(SEPARATOR)
-    return (name, count) if sep else (text, "")
+    """"Chủ thể 1  ·  5 ảnh  ·  2?" -> ("Chủ thể 1", "5 ảnh · 2?")."""
+    name, sep, rest = text.partition(SEPARATOR)
+    return (name, rest.replace(SEPARATOR, " · ")) if sep else (text, "")
 
 
 class PeopleDelegate(QStyledItemDelegate):
     def paint(self, p: QPainter, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> None:
         name, count = split_label(str(index.data(Qt.ItemDataRole.DisplayRole) or ""))
+        count = count.replace(" ảnh", "").replace(" gợi ý", "")  # the badge is just the number: names get the room
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         badge_w = 0

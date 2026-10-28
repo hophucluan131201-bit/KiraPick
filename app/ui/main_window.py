@@ -189,8 +189,18 @@ class MainWindow(QMainWindow):
             self.resize(min(1500, area.width()), min(900, area.height()))
         self._maximize_on_show = True
 
+    def fit_panels(self) -> None:
+        """Side panels take what they need (narrower on a half screen); the photos get the rest."""
+        width = max(self.width(), 800)
+        left = max(210, min(280, int(width * 0.2)))
+        right = max(240, min(340, int(width * 0.24)))
+        self.splitter.setSizes([left, max(200, width - left - right), right])
+
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt override
         super().showEvent(event)
+        if not getattr(self, "_panels_fitted", False):
+            self._panels_fitted = True
+            self.fit_panels()
         if not getattr(self, "_auto_check_scheduled", False):
             self._auto_check_scheduled = True
             QTimer.singleShot(3000, self._maybe_auto_check)  # after the window is up, never blocking it
@@ -380,7 +390,7 @@ class MainWindow(QMainWindow):
         side_layout.addWidget(self.sections["filters"])
         side_layout.addWidget(self.sections["people"], 1)  # the people list takes the remaining height
         self.sections["folders"].setVisible(False)  # shown when a session has more than one folder
-        side.setMinimumWidth(250)  # room for 56 px avatars, names and the photo-count badge
+        side.setMinimumWidth(210)  # 56 px avatars, a short name and the count badge; fits a half-screen window
 
         self.center = QStackedWidget()
         self.empty_hint = QLabel(
@@ -439,9 +449,12 @@ class MainWindow(QMainWindow):
         splitter.addWidget(side)
         splitter.addWidget(center_box)
         splitter.addWidget(inspector_scroll)
+        splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([260, 960, 320])
+        splitter.setStretchFactor(2, 0)
+        self.splitter = splitter
         self.setCentralWidget(splitter)
+        self.fit_panels()
 
     def _build_statusbar(self) -> None:
         sb = self.statusBar()

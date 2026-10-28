@@ -43,3 +43,12 @@ def test_filters_are_compact_chips_without_their_own_scrollbar(qtbot, env: dict)
     w = _window(qtbot, env)
     assert w.filters.isWrapping() and w.filters.flow() == w.filters.Flow.LeftToRight
     assert w.filters.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+
+
+def test_half_screen_window_keeps_the_photos_widest(qtbot, env: dict) -> None:  # noqa: F811
+    """Owner, split screen (~950 px): the side panels must not squeeze the photos into one thin column."""
+    w = _window(qtbot, env)
+    w.resize(960, 900)
+    w.fit_panels()
+    left, center, right = w.splitter.sizes()
+    assert center >= left and center >= right and center >= 380, (left, center, right)
