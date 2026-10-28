@@ -27,3 +27,10 @@ def rotate(conn: sqlite3.Connection, asset_id: int) -> int:
 
 def rotations(conn: sqlite3.Connection) -> dict[int, int]:
     return {int(a): int(t) for a, t in conn.execute("SELECT asset_id, quarter_turns FROM view_rotation")}
+
+
+def rotate_point(x: float, y: float, turns: int) -> tuple[float, float]:
+    """A point given as 0..1 of the photo file, where it lands on screen after ``turns`` quarter turns clockwise."""
+    for _ in range(turns % 4):
+        x, y = 1.0 - y, x
+    return x, y

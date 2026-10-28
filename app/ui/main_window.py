@@ -53,7 +53,8 @@ from PySide6.QtWidgets import (
 
 from app import __version__
 from app.branding import APP_NAME, SETTINGS_IDS, data_dir
-from app.storage import decisions
+from app.storage import decisions, view
+from app.storage.view import rotate_point
 from app.storage.project import Project
 from app.storage.sessions import delete_session, open_session, purge_old_sessions
 from app.ai.models import ModelRegistry, ModelState
@@ -1309,7 +1310,7 @@ class MainWindow(QMainWindow):
         self.inspector.show_record(rec, people=self._people_text(rec.id) if rec else None,
                                    selection=self._selection_text(rec), taste=self.taste.status)
         if rec is not None and self.center.currentIndex() == 2:
-            self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec))
+            self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec), rec.rotation)
 
     def _on_source_changed(self, row: int) -> None:
         item = self.sources.item(row)
@@ -1491,7 +1492,7 @@ class MainWindow(QMainWindow):
             if rec is None:
                 return
             self.center.setCurrentIndex(2)
-            self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec))
+            self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec), rec.rotation)
             self.filmstrip.scrollTo(self.grid.currentIndex())
         elif self.center.currentIndex() == 2:
             self.center.setCurrentIndex(1)
@@ -1524,7 +1525,8 @@ class MainWindow(QMainWindow):
         x, y, w, h = json.loads(row[0])
         face_px = h * max(rec.width or 0, rec.height or 0)  # upper estimate of the face height in photo pixels
         level = 2.0 if 0 < face_px < 900 else 1.0  # small faces: 200%, big close-ups: 100% is enough
-        self.viewer.set_zoom(level, QPointF(x + w / 2, y + h * 0.42))
+        cx, cy = rotate_point(x + w / 2, y + h * 0.42, rec.rotation)  # face boxes are in file coordinates
+        self.viewer.set_zoom(level, QPointF(cx, cy))
 
     # --------------------------------------------------------- culling
     def _targets(self) -> list[AssetRecord]:
@@ -1534,6 +1536,22 @@ class MainWindow(QMainWindow):
         if len(selected) > 1:
             return selected
         return [current] if current else selected
+
+    def rotate_view(self) -> None:
+        """Xoay xem: turn the marked photos (or the current one) 90° clockwise on screen. Display only — the file,
+        the AI measurements and exported copies never change."""
+        if self.project is None:
+            return
+        targets = self._targets()
+        if not targets:
+            return
+        with self.project.transaction() as conn:
+            turns = {rec.id: view.rotate(conn, rec.id) for rec in targets}
+        for asset_id, t in turns.items():
+            self.model.set_rotation(asset_id, t)
+        current = self.current_record()
+        if current is not None and current.id in turns and self.center.currentIndex() == 2:
+            self.viewer.show_photo(current.path, self.model.pixmap(current), _long_side(current), current.rotation)
 
     def on_tick(self, asset_id: int, shift: bool) -> None:
         """Tick box: Chọn ↔ not chosen for that card only (never the current photo or the marking).

@@ -18,6 +18,7 @@ from PySide6.QtCore import QObject, QPointF, QRectF, QRunnable, Qt, QThreadPool,
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QToolButton, QWidget
 
+from app.ui.asset_model import turned
 from app.core.errors import ImageReadError
 from app.ingest.preview import load_full_resolution, load_image
 from app.ui import theme
@@ -85,6 +86,8 @@ class ImageViewer(QGraphicsView):
         self._signals = _Signals()
         self._signals.done.connect(self._on_loaded)
         self._token = 0
+        self._rotation = 0  # Xoay xem of the photo shown (quarter turns clockwise)
+        self._focus: QPointF | None = None  # point asked for by set_zoom (0..1), kept until the full image is shown
         self._path: Path | None = None
         self._quality = Quality.PREVIEW
         self._shown_full = False
@@ -101,8 +104,12 @@ class ImageViewer(QGraphicsView):
         return self.zoom is not None
 
     def show_photo(self, path: Path | None, placeholder: QPixmap | None = None,
-                   full_long_side: int | None = None) -> None:
+                   full_long_side: int | None = None, rotation: int = 0) -> None:
+        """``placeholder`` is already turned (the grid's thumbnail); loaded images are turned by ``rotation``
+        quarter turns clockwise here (Xoay xem: display only)."""
         self._token += 1
+        self._rotation = rotation % 4
+        self._focus = None  # a new photo: no requested point yet
         self._path = path
         self._message = ""
         self._shown_full = False
@@ -135,6 +142,7 @@ class ImageViewer(QGraphicsView):
     def set_zoom(self, level: float | None, focus: QPointF | None = None) -> None:
         """level relative to full resolution (None = fit); focus = point to centre, 0..1 of the photo."""
         self.zoom = None if level is None else max(0.05, min(MAX_ZOOM, level))
+        self._focus = focus if self.zoom is not None else None
         if self.zoom is None:
             self._fit()
             self._emit_zoom()
@@ -180,7 +188,7 @@ class ImageViewer(QGraphicsView):
                 self.status_changed.emit(f"Không đọc được ảnh: {error}")
                 self.viewport().update()
             return
-        pm = QPixmap.fromImage(image)
+        pm = QPixmap.fromImage(image)  # as in the file; turned when shown
         if quality == Quality.FULL.value:
             assert self._path is not None
             self._full_cache[self._path] = (pm, source)
@@ -189,14 +197,14 @@ class ImageViewer(QGraphicsView):
             self._show_full(pm, source)
         elif not self._shown_full:
             self.source_label = source
-            self._set_pixmap(pm, keep_view=False)
+            self._set_pixmap(turned(pm, self._rotation), keep_view=False)
             self.status_changed.emit(f"Xem trước {pm.width()}×{pm.height()} ({_source_vi(source)})")
 
     def _show_full(self, pm: QPixmap, source: str) -> None:
         self._shown_full = True
         self._full_long = max(pm.width(), pm.height())
         self.source_label = source
-        self._set_pixmap(pm, keep_view=True)
+        self._set_pixmap(turned(pm, self._rotation), keep_view=True)
         self._emit_zoom()
 
     def _emit_zoom(self) -> None:
@@ -215,6 +223,10 @@ class ImageViewer(QGraphicsView):
         center = self.mapToScene(self.viewport().rect().center())
         old = self._item.pixmap()
         rel = QPointF(center.x() / old.width(), center.y() / old.height()) if keep_view and not old.isNull() else None
+        if self._focus is not None:  # a point was asked for (e.g. E: the eyes) while a smaller image was shown
+            rel = self._focus
+            if self._shown_full:
+                self._focus = None  # reached on the real pixels; from now on the user pans freely
         self._item.setPixmap(pm)
         self.scene().setSceneRect(QRectF(pm.rect()))
         if self.zoom is not None:

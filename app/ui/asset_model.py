@@ -27,7 +27,7 @@ from PySide6.QtCore import (
     QThreadPool,
     Signal,
 )
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap, QTransform
 
 from app.identity.actions import UNIDENTIFIED_ASSETS
 from app.quality.rank import Ranked, rank
@@ -154,6 +154,11 @@ def _camera(make: str | None, model: str | None) -> str | None:
     if make and not model.lower().startswith(make.split()[0].lower()):
         return f"{make.split()[0].title()} {model}"
     return model
+
+
+def turned(pm: QPixmap, turns: int) -> QPixmap:
+    """The pixmap turned ``turns`` quarter turns clockwise (display only)."""
+    return pm.transformed(QTransform().rotate(90 * (turns % 4))) if turns % 4 and not pm.isNull() else pm
 
 
 class _ThumbSignals(QObject):
@@ -368,14 +373,28 @@ class AssetListModel(QAbstractListModel):
         self._pending.discard(asset_id)
         if image.isNull():
             return
-        self._pixmaps[asset_id] = QPixmap.fromImage(image)
+        row = self._row_of.get(asset_id)
+        turns = self._rows[row].rotation if row is not None else 0
+        self._pixmaps[asset_id] = turned(QPixmap.fromImage(image), turns)
         while len(self._pixmaps) > _PIXMAP_CACHE_SIZE:
             self._pixmaps.popitem(last=False)
-        row = self._row_of.get(asset_id)
         if row is not None:
             idx = self.index(row)
             self.dataChanged.emit(idx, idx, [Qt.ItemDataRole.DecorationRole])
         self.thumbnail_ready.emit(asset_id)
+
+    def set_rotation(self, asset_id: int, turns: int) -> None:
+        """Xoay xem changed: turn the cached thumbnail by the difference and repaint that card."""
+        row = self._row_of.get(asset_id)
+        if row is None:
+            return
+        rec = self._rows[row]
+        delta, rec.rotation = (turns - rec.rotation) % 4, turns
+        pm = self._pixmaps.get(asset_id)
+        if pm is not None and delta:
+            self._pixmaps[asset_id] = turned(pm, delta)
+        idx = self.index(row)
+        self.dataChanged.emit(idx, idx)
 
     def wait_for_thumbnails(self, msecs: int = 5000) -> bool:
         """Test helper: block until queued thumbnail decodes finish."""
