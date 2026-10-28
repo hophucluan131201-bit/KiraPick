@@ -190,3 +190,16 @@ def test_include_pairs_survives_reopening_and_matches_the_bar(qtbot, env: dict) 
     assert "gồm JPEG kèm" not in w.bottom_bar.kept.text()
     w._update_counts()  # a fresh refresh reads the same setting
     assert "gồm JPEG kèm" not in w.bottom_bar.kept.text()
+    w.close()
+
+    from app.export.copy_export import Selection, estimated_bytes, select_ids
+    from app.ui.bottom_bar import size_text
+
+    w2 = _window(qtbot, env)  # same settings file, new window
+    _import(qtbot, w2, env["photos"])  # reopens the same session
+    conn = w2.project.conn
+    size = estimated_bytes(conn, select_ids(conn, Selection.KEEP), include_pairs=False)
+    assert w2.bottom_bar.kept.text() == f"Đã chọn 1 ảnh ({size_text(size)})"
+    dialog2 = w2.open_export_dialog()
+    qtbot.addWidget(dialog2)
+    assert not dialog2.include_pairs.isChecked()
