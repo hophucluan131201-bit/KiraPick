@@ -140,6 +140,8 @@ if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) {
     if (Test-Path $report) {
         $w = Get-Content $report -Raw -Encoding UTF8 | ConvertFrom-Json
         Write-Host ("windowed report: ok=" + $w.ok + " error=" + $w.error + " steps=" + ($w.steps -join " | "))
+        Write-Host ("models: " + ($w.models | ConvertTo-Json -Compress) + " dir=" + $w.models_dir)
+        Get-ChildItem (Join-Path $dist "models") | Select-Object -First 8 | ForEach-Object { Write-Host ("  " + $_.Name + " " + $_.Length) }
         if ($w.traceback) { ($w.traceback -split "`n") | Select-Object -Last 8 | ForEach-Object { Write-Host $_ } }
     }
     # Diagnose: the same app built as a console program shows Python's own error output.
