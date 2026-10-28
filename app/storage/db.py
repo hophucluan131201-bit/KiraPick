@@ -244,6 +244,17 @@ CREATE TABLE picks (
     PRIMARY KEY (run_id, asset_id)
 );
 """),
+    (5, """
+-- Per-photo embeddings (2.2): 'clip' = CLIP ViT-L/14 image embedding (float16), used by the
+-- aesthetic hint and personal taste; recomputable, never user data.
+CREATE TABLE asset_vectors (
+    asset_id       INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    kind           TEXT NOT NULL,
+    model_version  TEXT NOT NULL,
+    vector         BLOB NOT NULL,       -- float16 little-endian
+    PRIMARY KEY (asset_id, kind)
+);
+"""),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]
