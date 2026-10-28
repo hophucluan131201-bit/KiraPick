@@ -263,6 +263,7 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - Test: `tests/gui/test_keys_and_thumbs.py`
 
 - Task 7 review notes: RV7-01 the marking tint is painted under the picture (card background only; the photo itself is never tinted) — test `test_marking_tint_never_covers_the_photo` (pixel under the picture unchanged when marked); RV7-02 tests `test_tick_and_shift_tick_with_keep_filter` and `test_shift_tick_follows_sorted_order` (anchor, current photo and marking stay right); RV7-03 filmstrip cards without a chip carry the chip text in their tooltip (`test_filmstrip_tooltip_has_status`).
+- Task 8 review notes: RV8-01 `test_fast_rotations_while_loading_keep_the_latest` (several Xoay xem presses while the preview/full image loads: the last rotation wins, no stale callback); RV8-02 `test_user_pan_after_eye_zoom_is_not_overridden` (a pan/zoom by the user while the full image loads clears the pending E point); RV8-03 `test_four_turns_back_to_zero` (UI at 0°, no view_rotation row); RV8-04 document and test what a rotation does to a zoomed loupe (`test_rotation_while_zoomed_keeps_the_same_spot`).
 - [ ] **Step 1: Failing tests**: `test_p_keeps_like_k`; `test_keys_in_search_box_do_not_cull` (focus search, type "pX1\t" → text "pX1", no decision changed, layout unchanged); `test_hd_thumbnail_for_large_cells` (cell 300 at DPR 2 → cached pixmap long side ≥ 600 after `wait_for_thumbnails`; source untouched).
 - [ ] **Steps 2–4** FAIL → implement → PASS.
 - [ ] **Step 5: Commit** `"UI part 1: HD thumbnails, P and Tab keys, help"`
