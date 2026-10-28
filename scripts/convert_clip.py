@@ -30,7 +30,7 @@ HEAD_NAME = "sac+logos+ava1-l14-linearMSE.pth"
 HEAD_MD5 = "b1047fd767a00134b8fd6529bf19521a"
 HEAD_SHA256 = "21dd590f3ccdc646f0d53120778b296013b096a035a2718c9cb0d511bff0f1e0"
 CLIP_ONNX, HEAD_ONNX, PROMPTS_NPZ = "clip_l14_image.onnx", "laion_aesthetic.onnx", "clip_prompts_v1.npz"
-PROMPT_MARGIN = 0.02  # tag when sim(positive) - sim(neutral) >= this (≈ 88 % at CLIP's logit scale 100)
+PROMPT_MARGIN = 0.03  # tag when sim(positive) - sim(neutral) >= this (owner sample: 0.02 tagged "motion blur" on sharp photos)
 
 # id, positive prompt, neutral counterpart. Artistic ids must match app.ai.clip_aesthetic.ARTISTIC_TAGS.
 PROMPTS = (
@@ -104,7 +104,7 @@ def main() -> int:
     import torch
     from open_clip.openai import load_openai_model
 
-    model = load_openai_model(str(clip_pt), device="cpu", jit=False).eval()
+    model = load_openai_model(str(clip_pt), precision="fp32", device="cpu").eval()
     tokenizer = open_clip.get_tokenizer("ViT-L-14")
 
     class Image(torch.nn.Module):

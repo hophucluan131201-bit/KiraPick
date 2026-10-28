@@ -75,15 +75,22 @@ Get-ChildItem "models\weights\*.onnx" -ErrorAction SilentlyContinue | ForEach-Ob
 }
 Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", "identity,identity_plus,quality,gpu", "--dest", $models)
 
-# Aesthetic hint (TOPIQ): converted from the PyTorch checkpoint in a separate, build-only venv.
-if (-not (Test-Path (Join-Path $models "topiq_iaa_res50.onnx.sha256"))) {
+# Converted from PyTorch checkpoints in a separate, build-only venv: TOPIQ (aesthetic, technical,
+# face quality) and CLIP ViT-L/14 + LAION aesthetic + style prompts.
+$converted = @("topiq_iaa_res50.onnx", "topiq_nr_koniq_res50.onnx", "topiq_nr_face_res50.onnx",
+               "clip_l14_image.onnx", "laion_aesthetic.onnx", "clip_prompts_v1.npz")
+$missing = @($converted | Where-Object { -not (Test-Path (Join-Path $models "$_.sha256")) })
+if ($missing) {
     if (-not (Test-Path ".venv-convert\Scripts\python.exe")) {
         Invoke-Tool "Tạo .venv-convert" $pyExe ($pyArgs + @("-m", "venv", ".venv-convert"))
     }
     $cpy = Join-Path $Root ".venv-convert\Scripts\python.exe"
     Invoke-Tool "Cài công cụ chuyển đổi" $cpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "packaging\requirements-convert.txt")
     Invoke-Tool "Cài pyiqa" $cpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "--no-deps", "pyiqa==0.1.14.1")
-    Invoke-Tool "Chuyển mô hình thẩm mỹ" $cpy @("scripts\convert_topiq.py", "--out", $models)
+    Invoke-Tool "Chuyển các mô hình TOPIQ" $cpy @("scripts\convert_topiq.py", "--out", $models, "--variant", "all")
+    Invoke-Tool "Chuyển CLIP + LAION" $cpy @("scripts\convert_clip.py", "--out", $models)
+    Get-ChildItem $models -Filter "*.pth" | Remove-Item  # checkpoints are not shipped
+    Get-ChildItem $models -Filter "*.pt" | Remove-Item
 }
 
 # Large models: weights stored as float16 (half the size; checked against the originals).
@@ -96,7 +103,8 @@ if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
 Invoke-Tool "PyInstaller" $bpy @("-m", "PyInstaller", "--noconfirm", "--clean", "--workpath", "build\pyi", "--distpath", "dist", "packaging\kirapick.spec")
 New-Item -ItemType Directory -Force -Path (Join-Path $dist "models") | Out-Null
 Copy-Item (Join-Path $models "*.onnx") (Join-Path $dist "models")
-Copy-Item (Join-Path $models "*.onnx.sha256") (Join-Path $dist "models")
+Copy-Item (Join-Path $models "*.npz") (Join-Path $dist "models")
+Copy-Item (Join-Path $models "*.sha256") (Join-Path $dist "models")
 
 Step "5/6 Tự kiểm tra bản đóng gói (chặn mạng)"
 $report = Join-Path $Root "dist\selftest.json"

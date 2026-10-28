@@ -12,8 +12,8 @@ every face >= 0.5 had closed or downcast eyes. Closed eyes are not scored 0: the
 Aesthetics (beta): TOPIQ trained on AVA contest ratings (general photography, not cosplay), only a
 small hint: weight 10. On the owner's shoot the 1..10 score spanned 4.3-5.1 (p5-p95), so it is
 stretched 4.2 -> 0 .. 5.2 -> 100.
-2.2: the aesthetic part is the mean of TOPIQ and LAION (CLIP ViT-L/14 head, 1..10; starting range
-4.5 -> 0 .. 6.5 -> 100, to be checked on the owner's shoots). TOPIQ technical quality (KonIQ, 0..1)
+2.2: the aesthetic part is the mean of TOPIQ and LAION (CLIP ViT-L/14 head, 1..10; on 8 of the owner's
+NEFs LAION spanned 4.97-6.02, so 4.8 -> 0 .. 6.2 -> 100 — only 8 photos: re-check on a full shoot). TOPIQ technical quality (KonIQ, 0..1)
 takes 20 % of the focus part, TOPIQ face quality (CGFIQA, 0..1) half of the face part.
 """
 
@@ -29,7 +29,7 @@ LABELS = {"focus": "nét", "eyes": "mắt", "face": "mặt", "exposure": "sáng"
           "aesthetic": "thẩm mỹ"}
 NOT_MEASURED: tuple[str, ...] = ()
 AESTHETIC_LOW, AESTHETIC_HIGH = 4.2, 5.2  # TOPIQ mean score (1..10) mapped to 0..100
-LAION_LOW, LAION_HIGH = 4.5, 6.5  # LAION aesthetic (1..10) mapped to 0..100
+LAION_LOW, LAION_HIGH = 4.8, 6.2  # LAION (1..10) -> 0..100; 8 owner NEFs spanned 4.97-6.02
 IQA_LOW, IQA_HIGH = 0.3, 0.8  # TOPIQ technical / face quality (0..1) mapped to 0..100
 TECH_IN_FOCUS = 0.2  # share of the focus part taken by the technical-quality model
 FACE_IQA_IN_FACE = 0.5

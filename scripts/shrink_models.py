@@ -33,7 +33,11 @@ TARGETS = {
     "face_embedder": "embedding",
     "aesthetic": "values",
     "person_detector_m": "values",
+    "clip_l14_image": "embedding",
+    "tech_iqa": "values",
+    "face_iqa": "values",
 }
+SIZE_FREE = ("aesthetic", "tech_iqa")  # inputs of any size: checked on two photo shapes
 SUFFIX = "fp16w"
 
 
@@ -119,7 +123,7 @@ def main() -> int:
         source_sha = _sha256(path)
         shrunk = path.with_name(path.stem + ".fp16w.tmp.onnx")
         onnx.save(shrink(onnx.load(str(path))), str(shrunk))
-        shapes = [{"input": (1, 3, 384, 384)}, {"input": (1, 3, 384, 576)}] if model_id == "aesthetic" else None
+        shapes = [{"input": (1, 3, 384, 384)}, {"input": (1, 3, 384, 576)}] if model_id in SIZE_FREE else None
         if shapes:
             name = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"]).get_inputs()[0].name
             shapes = [{name: s["input"]} for s in shapes]

@@ -35,8 +35,8 @@ ARTISTIC_TAGS = frozenset({"motion_blur_intentional", "low_key", "silhouette", "
 def preprocess(bgr: np.ndarray) -> np.ndarray:
     rgb = Image.fromarray(np.ascontiguousarray(bgr[:, :, ::-1]))
     w, h = rgb.size
-    k = SIZE / min(w, h)
-    nw, nh = max(SIZE, round(w * k)), max(SIZE, round(h * k))
+    # torchvision Resize(224): shorter side 224, longer side int(224 * long / short) (truncated)
+    nw, nh = (SIZE, int(SIZE * h / w)) if w <= h else (int(SIZE * w / h), SIZE)
     rgb = rgb.resize((nw, nh), Image.Resampling.BICUBIC)
     left, top = int(round((nw - SIZE) / 2.0)), int(round((nh - SIZE) / 2.0))
     crop = np.asarray(rgb.crop((left, top, left + SIZE, top + SIZE)), np.float32) / 255.0
