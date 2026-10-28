@@ -137,10 +137,16 @@ if ($proc.ExitCode -ne 0 -or -not (Test-Path $report)) {
         Write-Host ("steps: " + ($r.steps -join " | "))
         if ($r.traceback) { ($r.traceback -split "`n") | Select-Object -Last 12 | ForEach-Object { Write-Host $_ } }
     }
+    if (Test-Path $report) {
+        $w = Get-Content $report -Raw -Encoding UTF8 | ConvertFrom-Json
+        Write-Host ("windowed report: ok=" + $w.ok + " error=" + $w.error + " steps=" + ($w.steps -join " | "))
+        if ($w.traceback) { ($w.traceback -split "`n") | Select-Object -Last 8 | ForEach-Object { Write-Host $_ } }
+    }
     # Diagnose: the same app built as a console program shows Python's own error output.
     $env:KIRAPICK_CONSOLE = "1"
     Invoke-Tool "PyInstaller (console, chẩn đoán)" $bpy @("-m", "PyInstaller", "--noconfirm", "--workpath", "build\pyi-console", "--distpath", "dist-console", "packaging\kirapick.spec")
     $env:KIRAPICK_CONSOLE = $null
+    Copy-Item (Join-Path $dist "models") (Join-Path $Root "dist-console\KiraPick\models") -Recurse -Force
     $errFile = Join-Path $Root "dist-console\stderr.txt"
     $outFile = Join-Path $Root "dist-console\stdout.txt"
     $diag = Start-Process -FilePath (Join-Path $Root "dist-console\KiraPick\KiraPick.exe") -ArgumentList @("--self-test", "`"$(Join-Path $Root 'dist-console\st.json')`"") -Wait -PassThru -RedirectStandardError $errFile -RedirectStandardOutput $outFile
