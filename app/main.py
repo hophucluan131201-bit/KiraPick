@@ -36,6 +36,12 @@ def _install_excepthook() -> None:
     sys.excepthook = hook
 
 
+def _folder_arg(text: str) -> Path | None:
+    """A folder typed in PowerShell: drop stray spaces and the quote that "D:\\Ảnh\\" leaves behind."""
+    cleaned = text.strip().strip('"').strip()
+    return Path(cleaned) if cleaned else None
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
     if "--self-test" in argv:  # packaged app check, no window: KiraPick.exe --self-test report.json
@@ -50,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
             pass
         from app.selftest import run
 
-        code = run(report, Path(rest[1]) if len(rest) > 1 else None)
+        code = run(report, _folder_arg(rest[1]) if len(rest) > 1 else None)
         try:  # no crash: no empty trace file left on the user's Desktop
             import faulthandler
 

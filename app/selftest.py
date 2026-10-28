@@ -54,6 +54,8 @@ def _copy_samples(folder: Path, dest: Path) -> list[str]:
     from app.ingest.formats import format_for
 
     names = []
+    if not folder.is_dir():
+        raise FileNotFoundError(f"không thấy thư mục ảnh “{folder}” — kiểm tra lại đường dẫn (thẻ nhớ đã cắm chưa?)")
     for f in sorted(folder.iterdir()):
         if f.is_file() and not f.is_symlink() and format_for(f) is not None:
             shutil.copy2(f, dest / f.name)

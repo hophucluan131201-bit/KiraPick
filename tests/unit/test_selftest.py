@@ -40,3 +40,12 @@ def test_report_in_a_missing_folder_is_not_lost(tmp_path: Path, monkeypatch: pyt
     assert written == tmp_path / "logs" / "r.json" and json.loads(written.read_text(encoding="utf-8"))["ok"]
     assert not target.parent.exists()  # no stray "Desktop" folder is created
     assert selftest._write_report(tmp_path / "r2.json", {"ok": False}) == tmp_path / "r2.json"
+
+
+def test_photo_folder_argument_is_cleaned() -> None:
+    """Owner, 2.2.0a: 'G:\\DCIM\\125NCZ_5 ' (a trailing space / quote from PowerShell) was not found."""
+    from app.main import _folder_arg
+
+    assert str(_folder_arg('G:\\DCIM\\125NCZ_5 ')) == str(Path('G:\\DCIM\\125NCZ_5'))
+    assert str(_folder_arg('G:\\DCIM\\125NCZ_5"')) == str(Path('G:\\DCIM\\125NCZ_5'))
+    assert _folder_arg("  ") is None
