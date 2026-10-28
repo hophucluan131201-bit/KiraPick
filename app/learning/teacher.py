@@ -168,7 +168,8 @@ class Teacher:
             return
         for asset_id, label in ((winner, 1), (loser, -1)):
             try:
-                self.store.upsert_taste(photo_key(session, asset_id, "pair:") + f":{winner}-{loser}", "pair", label,
+                pair = f"{session}|pair|{min(winner, loser)}-{max(winner, loser)}"  # answering again replaces
+                self.store.upsert_taste(photo_key(pair, asset_id, "pair:"), "pair", label,
                                         PAIR_WEIGHT, 0, groups.get(asset_id, ""), parts.get(asset_id, {}),
                                         clips.get(asset_id), CLIP_VERSION, PROFILE_VERSION)
             except Exception:  # noqa: BLE001

@@ -69,6 +69,7 @@ from app.selection.client_list import delete_collection, list_collections
 from app.ui.asset_model import ROLE_RECORD, AssetListModel, AssetRecord, Filter, Sort
 from app.ui.client_list_dialog import ClientListDialog
 from app.ui.collapsible import CollapsibleSection
+from app.ui.compare_dialog import CompareDialog
 from app.ui.people_delegate import PeopleDelegate
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import make_filmstrip, make_grid
@@ -672,6 +673,35 @@ class MainWindow(QMainWindow):
         ]
         return "<br>".join(lines)
 
+    def open_compare(self) -> CompareDialog | None:
+        """🎓 Thích tấm nào hơn?: pairs of similar photos of one subject (needs 📊 with the CLIP model)."""
+        if self.project is None or self.teacher.store is None:
+            return None
+        conn = self.project.conn
+        subjects = {r[0]: r[1] for r in conn.execute(
+            "SELECT asset_id, subject_id FROM occurrences WHERE subject_id IS NOT NULL AND is_main = 1")}
+        recs = {r.id: r for r in self.model.records()}
+        if not recs or not self.taste.clips:
+            QMessageBox.information(self, "So sánh ảnh", "Cần bấm 📊 Phân tích ảnh (có mô hình CLIP) trước, "
+                                                         "và mở danh sách có ảnh.")
+            return None
+        ranked = {i: r.ranked.value for i, r in recs.items() if r.ranked is not None and r.ranked.value is not None}
+        session = self._session_key()
+
+        def answer(winner: int, loser: int) -> None:
+            parts = {i: dict(recs[i].score.parts) if recs.get(i) and recs[i].score else {} for i in (winner, loser)}
+            groups = {i: group_key(session, (recs[i].capture_time or "")[:10]) if recs.get(i) else ""
+                      for i in (winner, loser)}
+            self.teacher.preferred(session, winner, loser, self.taste.clips, parts, groups)
+            self._decisions_since_training += 1
+            if self._decisions_since_training >= RETRAIN_EVERY:
+                self.retrain_taste()
+
+        dialog = CompareDialog(self, {k: v for k, v in subjects.items() if k in recs}, self.taste.clips, ranked,
+                               lambda i: self.model.pixmap(recs[i]) if i in recs else None, answer)
+        dialog.show()
+        return dialog
+
     def _prompt_vectors(self) -> dict:
         """Style prompt embeddings (to put the learnt taste into words); empty without the CLIP model files."""
         try:
@@ -687,10 +717,16 @@ class MainWindow(QMainWindow):
         box.setWindowTitle("AI đã học")
         box.setTextFormat(Qt.TextFormat.RichText)
         box.setText(self.learning_text())
+        compare = box.addButton("So sánh ảnh…", QMessageBox.ButtonRole.ActionRole)
+        compare.setToolTip("Chọn tấm thích hơn trong từng cặp ảnh giống nhau, để app học gu bạn nhanh hơn")
         forget = box.addButton("Xoá dữ liệu học…", QMessageBox.ButtonRole.DestructiveRole)
         box.addButton("Đóng", QMessageBox.ButtonRole.RejectRole)
         forget.setEnabled(self.teacher.store is not None)
+        compare.setEnabled(self.teacher.store is not None and self.project is not None)
         box.exec()
+        if box.clickedButton() is compare:
+            self.open_compare()
+            return
         if box.clickedButton() is not forget or self.teacher.store is None:
             return
         sure = QMessageBox.question(
