@@ -1,6 +1,7 @@
 # KiraPick UI redesign, part 1: adaptive layout — design
 
-Date: 2026-10-28, revision 2 (owner's review: 8 additions, see "Changes in revision 2").
+Date: 2026-10-28, revision 3 (revision 2: owner's review, 8 additions; revision 3: Task 6 review CR6-01/02 —
+breakpoints on the client area, placement vs visibility).
 Owner-approved in chat: approach A (one adaptive layout), the owner's demo of three window sizes,
 answers to questions 1–4, EXIF hidden by default. Part 2 (Compare 2–4 photos) stays a separate
 spec and is built after this part. **No release between part 1 and part 2**: one beta after part 2.
@@ -48,9 +49,16 @@ Rules:
 ## Layout modes
 
 ### Measuring
-The mode is chosen from the size of the window's **content area** (the central widget: window minus
-title bar, top bar and bottom bar), in logical pixels (after Windows scaling, so the same thresholds
-work at 100–200 % and on 4K), re-evaluated on resize and on moving to a screen with another scale.
+The mode is chosen from the size of the main window's **client area** — Qt's `QMainWindow.size()`: without the
+Windows frame and title bar (so no title-bar height is ever assumed), with KiraPick's own top and bottom bars — in
+logical pixels (after Windows scaling), re-evaluated on resize and on moving to a screen with another scale.
+(Revision 3: revision 2 said "content area"; the review showed a 1920×540 Snap then left ~414 px and fell into
+TINY. Thresholds were re-derived from real Snap client sizes, below.)
+
+Real Windows Snap client sizes (taskbar 48 px): 1080p laptop at 100 / 125 / 150 % — full screen 1920×1000 /
+1536×800 / 1280×667, left/right half 960 / 768 / 640 wide, top/bottom half 484 / 387 / 323 high; 4K at 150 % —
+2560×1387, top half 683 high; 4K at 200 % — left half 960 wide, top half 512 high. Every one of them gets the
+intended mode (full → WIDE/MEDIUM, left/right half → NARROW, top/bottom half and quarters → SHORT).
 A change needs the size to pass the threshold by **40 px** (hysteresis) and is applied after the
 resize settles (**120 ms** debounce) so dragging a window edge never flickers.
 
@@ -58,13 +66,19 @@ resize settles (**120 ms** debounce) so dragging a window edge never flickers.
 
 | Mode | Content area | Grid | Sidebar | Detail panel |
 |---|---|---|---|---|
-| `TINY` | width < 720 or height < 420 | full area | icon rail hidden; ☰ opens overlay drawer | overlay sheet over the grid (Tab), closed by default |
-| `SHORT` (horizontal split) | height < 640 | see Grid Focus / Detail Focus | icon rail + overlay drawer | below the grid, horizontal, only in Detail Focus |
+| `TINY` | width < 600 or height < 300 | full area | icon rail hidden; ☰ opens overlay drawer | overlay sheet over the grid (Tab), closed by default |
+| `SHORT` (horizontal split) | height < 560 | see Grid Focus / Detail Focus | icon rail + overlay drawer | below the grid, horizontal, only in Detail Focus |
 | `NARROW` (vertical split) | width < 1100 | priority, ≥ 2 columns | icon rail + overlay drawer | docked ~280 px column if width ≥ 900, else overlay sheet; hidden/shown with Tab |
 | `MEDIUM` | width < 1440 | | sidebar ~210 px | ~300 px column, smaller preview |
 | `WIDE` | otherwise | | sidebar ~240 px | ~360 px column (up to 420 when width ≥ 2200), large preview |
 
-Minimum window size: 560 × 380 logical px (below that Windows stops shrinking it).
+Minimum window size: 560 × 300 logical px (below the smallest Snap half, 640 × 323 at 150 %, so it never
+blocks a Snap layout). TINY is reached only by dragging a window very small.
+
+**Placement vs visibility.** `detail_docked` says where the panel goes (in the splitter or as an overlay
+sheet); `detail_visible_default` says whether it is shown before the user presses Tab: WIDE/MEDIUM shown,
+SHORT hidden (Grid Focus), NARROW shown when docked, TINY hidden. After Tab, visibility is the user's choice,
+remembered per mode.
 
 **SHORT — Grid Focus (default) and Detail Focus.** Grid and details are not forced on screen together.
 - *Grid Focus*: the grid fills the content area (as many rows as fit); a one-line strip under it shows
@@ -235,7 +249,7 @@ cached next to today's thumbnails; until it exists the 400 px one is shown scale
 and without paired JPEG; burst neighbours; view rotation and export-run storage; migration 7 on a v6
 session; histogram on synthetic images (known clipping shares); workflow step states for each row of the table.
 
-**GUI (offscreen):** content sizes 1920×1080, 1536×864, 960×1080, 1920×540, 700×400 and 3840×2160 at
+**GUI (offscreen):** client sizes 1920×1000, 1536×800, 1280×667, 960×1000, 768×800, 1920×484, 1280×323, 580×400 and 2560×1387 at
 device pixel ratio 2 — no clipped controls, grid ≥ 1 column (≥ 2 in NARROW), detail panel and drawer as
 specified; SHORT Grid Focus ↔ Detail Focus with Tab; NARROW Tab hide/show; drawer open/close returns
 focus; state kept across a full mode cycle (current photo, UI selection, filter, sort, search, scroll,
@@ -267,7 +281,8 @@ here; the owner checks the beta on the laptop after part 2.
 1. SHORT: Grid Focus (default) and Detail Focus, switched with Tab; grid and details no longer forced together.
 2. NARROW: grid priority (≥ 2 columns, detail ≤ 40 %), detail docked or overlay and hideable, sidebar as overlay drawer.
 3. New "Terms" section separating current photo, UI selection and culling state; tick box changes culling only.
-4. Breakpoints measured on the content area, with hysteresis + debounce, a TINY mode and a minimum window size.
+4. Breakpoints with hysteresis + debounce, a TINY mode and a minimum window size (revision 3: measured on the
+   client area, thresholds from real Snap sizes).
 5. "Scores and warning colours": one display module, fixed bands/tokens, AI formulas unchanged.
 6. State-preservation list and a no-reparenting Qt approach with a test.
 7. Performance tests and targets for 1,000 / 5,000 / 10,000 photos.
@@ -277,7 +292,8 @@ here; the owner checks the beta on the laptop after part 2.
 - **D1** Wording: culling = "Chọn / Loại / Bỏ chọn"; batch marking = "đánh dấu". (Avoids two meanings of "chọn".)
 - **D2** "x GB" follows the export option "Kèm JPEG" (default on), so it predicts the export size.
 - **D3** NARROW shows the detail column by default only when the content width is ≥ 900.
-- **D4** TINY limits: < 720 wide or < 420 high; minimum window 560 × 380.
+- **D4** TINY limits: < 600 wide or < 300 high; minimum window 560 × 300 (revision 3, client area; was 720 × 420 /
+  560 × 380 on the content area).
 - **D5** "Chọn ảnh" step is ✓ once ≥ 1 photo is Chọn (an AI pick run alone is ◐).
 - **D6** Xoay xem has no keyboard key in this part (R is "lệch nét"); the AI and export ignore it.
 - **D7** Performance targets above; missing one moves the model reload to a worker thread.
