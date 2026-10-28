@@ -176,41 +176,60 @@ def list_gpus() -> list[dict]:
         return []
 
 
+def create_gpu_session(model: Path, *, gpu_mem_limit_mb: int = DEFAULT_GPU_MEM_LIMIT_MB, cpu_threads: int = 0,
+                       allow_directml: bool = True, fixed_dims: dict[str, int] | None = None,
+                       config: dict[str, str] | None = None, basic_optimizations: bool = False,
+                       errors: list[str] | None = None) -> Session | None:
+    """A session on the graphics card, or None (the reasons are appended to ``errors``).
+
+    ``fixed_dims``: give the model's named free input dimensions fixed sizes (the session then only
+    accepts that size). ``config``: ONNX Runtime session config entries, e.g.
+    {"ep.dml.disable_graph_fusion": "1"}. ``basic_optimizations``: only the basic graph rewrites.
+    These exist because DirectML failed on TOPIQ (owner's RTX 2080) in ways the CPU does not.
+    """
+    info = configure()
+    errors = [] if errors is None else errors
+    for label, providers in _gpu_attempts(info.available, gpu_mem_limit_mb):
+        if label == "directml" and not allow_directml:
+            errors.append("directml: không dùng cho mô hình này")
+            continue
+        assert all((p if isinstance(p, str) else p[0]) in ALLOWED_PROVIDERS for p in providers)
+        opts = _options(label == "directml", cpu_threads, fixed_dims)
+        for key, value in (config or {}).items():
+            opts.add_session_config_entry(key, value)
+        if basic_optimizations:
+            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
+        try:
+            session = ort.InferenceSession(str(model), sess_options=opts, providers=providers)
+        except Exception as exc:  # noqa: BLE001 - a broken GPU setup must not stop the app
+            errors.append(f"{label}: {type(exc).__name__}: {str(exc)[:400]}")
+            continue
+        used = session.get_providers()[0]
+        if used in GPU_PROVIDERS:
+            return Session(session, GPU_PROVIDERS[used], None, Path(model), cpu_threads)
+        errors.append(f"{label}: không dùng được cho mô hình này")
+    return None
+
+
 def create_session(model: Path, *, prefer_gpu: bool = True, gpu_mem_limit_mb: int = DEFAULT_GPU_MEM_LIMIT_MB,
                    cpu_threads: int = 0, allow_directml: bool = True,
                    fixed_dims: dict[str, int] | None = None) -> Session:
-    """``allow_directml=False``: CUDA or CPU only (models DirectML handles badly).
-
-    ``fixed_dims``: give the model's named free input dimensions fixed sizes (the session then only
-    accepts that size). DirectML compiles a fixed-size graph as a whole and failed on TOPIQ's
-    size-free one (Reshape error on the owner's RTX 2080).
-    """
-    info = configure()
-    options = lambda directml: _options(directml, cpu_threads, fixed_dims)  # noqa: E731
-
+    """GPU if possible (see create_gpu_session), else CPU. ``allow_directml=False``: CUDA or CPU only."""
     errors: list[str] = []
     if prefer_gpu:
-        for label, providers in _gpu_attempts(info.available, gpu_mem_limit_mb):
-            if label == "directml" and not allow_directml:
-                errors.append("directml: không dùng cho mô hình này")
-                continue
-            assert all((p if isinstance(p, str) else p[0]) in ALLOWED_PROVIDERS for p in providers)
-            try:
-                session = ort.InferenceSession(str(model), sess_options=options(label == "directml"),
-                                               providers=providers)
-            except Exception as exc:  # noqa: BLE001 - a broken GPU setup must not stop the app
-                errors.append(f"{label}: {type(exc).__name__}")
-                continue
-            used = session.get_providers()[0]
-            if used in GPU_PROVIDERS:
-                return Session(session, GPU_PROVIDERS[used], None, Path(model), cpu_threads)
-            errors.append(f"{label}: không dùng được cho mô hình này")
-    session = ort.InferenceSession(str(model), sess_options=options(False), providers=["CPUExecutionProvider"])
+        gpu = create_gpu_session(model, gpu_mem_limit_mb=gpu_mem_limit_mb, cpu_threads=cpu_threads,
+                                 allow_directml=allow_directml, fixed_dims=fixed_dims, errors=errors)
+        if gpu is not None:
+            return gpu
+    session = ort.InferenceSession(str(model), sess_options=_options(False, cpu_threads, fixed_dims),
+                                   providers=["CPUExecutionProvider"])
     reason = None
     if prefer_gpu:
-        reason = (f"Không dùng được card đồ hoạ ({'; '.join(errors)}); dùng CPU" if errors
+        short = "; ".join(e.split(":")[0] + (f": {e.split(':')[1].strip()}" if e.count(":") > 1 else "")
+                          for e in errors)
+        reason = (f"Không dùng được card đồ hoạ ({short}); dùng CPU" if errors
                   else "Bản ONNX Runtime đang cài không hỗ trợ card đồ hoạ; dùng CPU")
-    return Session(session, "cpu", reason, Path(model), cpu_threads)
+    return Session(session, "cpu", reason, Path(model), cpu_threads, last_error="; ".join(errors) or None)
 
 
 GPU_MUST_BE_FASTER = 0.8  # the GPU is used only if it takes at most 80% of the CPU's time
