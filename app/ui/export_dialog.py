@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -37,11 +38,14 @@ from app.export.copy_export import (
     select_assets,
 )
 from app.selection.client_list import list_collections
+from app.storage import exports
 from app.storage.project import Project
 from app.ui import theme
 from app.ui.jobs import ExportThread
 
 _PREVIEW_ROWS = 300
+INCLUDE_PAIRS_KEY = "export/include_pairs"
+log = logging.getLogger(__name__)
 
 
 def _gb(n: int) -> str:
@@ -50,7 +54,8 @@ def _gb(n: int) -> str:
 
 class ExportDialog(QDialog):
     def __init__(self, project: Project, selected_ids: list[int], parent: QWidget | None = None,
-                 default_destination: Path | None = None, collection_id: int | None = None) -> None:
+                 default_destination: Path | None = None, collection_id: int | None = None,
+                 settings: QSettings | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Xuất ảnh đã chọn (sao chép)")
         self.resize(820, 620)
@@ -89,7 +94,9 @@ class ExportDialog(QDialog):
         self.radios[Selection.KEEP].setChecked(True)
 
         self.include_pairs = QCheckBox("Kèm file JPEG của cặp RAW+JPEG")
-        self.include_pairs.setChecked(True)
+        self.include_pairs.setChecked(settings.value(INCLUDE_PAIRS_KEY, True, bool) if settings is not None else True)
+        if settings is not None:  # the bottom bar's "x GB" follows this choice
+            self.include_pairs.toggled.connect(lambda on: settings.setValue(INCLUDE_PAIRS_KEY, on))
         self.keep_folders = QCheckBox("Giữ cấu trúc thư mục con")
         opts = QHBoxLayout()
         opts.addWidget(self.include_pairs)
@@ -202,6 +209,19 @@ class ExportDialog(QDialog):
             lines.append(f"<span style='color:{theme.REJECT}'>Không đủ dung lượng trống.</span>")
         self._set_summary("<br>".join(lines), error=False, ready=bool(plan.items) and enough)
 
+    def _record_run(self, result: ExportResult) -> None:
+        """A finished, not cancelled export that copied something counts for the "Xuất ảnh" step."""
+        if result.cancelled or not result.copied or self.plan is None:
+            return
+        planned = {actual: planned for planned, actual in result.renamed.items()}
+        copied = {planned.get(c, c) for c in result.copied}
+        ids = [i.asset_id for i in self.plan.items if i.dest_relative in copied]
+        try:
+            with self.project.transaction() as conn:
+                exports.record(conn, exports.photo_count(conn, ids), len(result.copied))
+        except Exception:  # noqa: BLE001 - the copies are done; only the step mark is lost
+            log.exception("could not record the export run")
+
     def _set_summary(self, html: str, *, error: bool, ready: bool = False) -> None:
         self.summary.setText(f"<span style='color:{theme.REJECT}'>{html}</span>" if error else html)
         self.copy_button.setEnabled(ready)
@@ -238,6 +258,7 @@ class ExportDialog(QDialog):
     def _finished(self, result: ExportResult, progress: QProgressDialog) -> None:
         progress.close()
         self.result = result
+        self._record_run(result)
         parts = [f"Đã sao chép {len(result.copied)} file."]
         if result.renamed:
             parts.append(f"{len(result.renamed)} file được đặt tên mới để không ghi đè.")

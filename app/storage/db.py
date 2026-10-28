@@ -259,6 +259,20 @@ CREATE TABLE asset_vectors (
 -- Learned sharpness (2.3): the user's Q/W/R label of the photo; user data like flag and stars.
 ALTER TABLE decisions ADD COLUMN focus TEXT CHECK (focus IN ('sharp', 'soft', 'missed'));
 """),
+    (7, """
+-- UI part 1: "Xoay xem" turns the displayed photo only (never the file, the AI or the export);
+-- no row = not turned. export_runs: finished exports, for the workflow step (no destination path).
+CREATE TABLE view_rotation (
+    asset_id       INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    quarter_turns  INTEGER NOT NULL CHECK (quarter_turns IN (1, 2, 3))   -- clockwise
+);
+CREATE TABLE export_runs (
+    id           INTEGER PRIMARY KEY,
+    finished_at  TEXT NOT NULL,
+    photos       INTEGER NOT NULL,
+    files        INTEGER NOT NULL
+);
+"""),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]

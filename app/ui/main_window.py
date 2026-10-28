@@ -1798,7 +1798,8 @@ class MainWindow(QMainWindow):
         item = self.filters.currentItem()
         data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
         collection_id = data[1] if data and data[0] is Filter.COLLECTION else None
-        dialog = ExportDialog(self.project, [r.id for r in self.selected_records()], self, collection_id=collection_id)
+        dialog = ExportDialog(self.project, [r.id for r in self.selected_records()], self, collection_id=collection_id,
+                              settings=self.settings)
         dialog.show()
         return dialog
 
