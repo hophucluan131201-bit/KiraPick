@@ -94,6 +94,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8  # the title has an en dash
+          $env:PYTHONUTF8 = "1"
           $edition = "${{ matrix.edition }}"
           $version = (python -c "from app import __version__; from app.edition import version_for; print(version_for(__version__, '$edition'))").Trim()
           $title = (python -c "from app.edition import release_name; print(release_name('$version', '$edition'))").Trim()
