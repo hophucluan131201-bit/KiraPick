@@ -25,7 +25,7 @@ from app.core.errors import ImageReadError
 from app.ingest.preview import load_full_resolution, load_image
 from app.ui import theme
 from app.ui.shutdown import Gate
-from app.ui.qt_image import pil_to_qimage
+from app.ui.qt_image import pil_to_qimage_rgb32
 
 PREVIEW_LONG_SIDE = 1600
 _FULL_CACHE = 2  # full-resolution frames kept in memory (~70 MB each for 24 MP)
@@ -39,13 +39,16 @@ class Quality(str, Enum):
 
 
 class _Signals(QObject):
-    done = Signal(int, int, str, QImage, str, str)  # token, full request id, quality, image, source, error
+    done = Signal(int, int, str, QImage, int, str, str)  # token, full request id, quality, image, turns, source, error
 
 
 class _LoadTask(QRunnable):
-    def __init__(self, token: int, path: Path, quality: Quality, signals: _Signals, request: int = 0) -> None:
+    def __init__(self, token: int, path: Path, quality: Quality, signals: _Signals, request: int = 0,
+                 turns: int = 0) -> None:
         super().__init__()
         self.token, self.path, self.quality, self.signals, self.request = token, path, quality, signals, request
+        self.turns = turns % 4
+
 
     def run(self) -> None:
         try:
@@ -53,11 +56,13 @@ class _LoadTask(QRunnable):
                 loaded = load_full_resolution(self.path)
             else:
                 loaded = load_image(self.path, max_long_side=PREVIEW_LONG_SIDE, min_long_side=PREVIEW_LONG_SIDE)
-            self.signals.done.emit(self.token, self.request, self.quality.value, pil_to_qimage(loaded.image), loaded.source.value, "")
+            # Made ready to show here (32-bit, turned by the Xoay xem asked for): ~0.5 s of GUI-thread work at 24 MP
+            image = pil_to_qimage_rgb32(loaded.image, self.turns)
+            self.signals.done.emit(self.token, self.request, self.quality.value, image, self.turns, loaded.source.value, "")
         except ImageReadError as exc:
-            self.signals.done.emit(self.token, self.request, self.quality.value, QImage(), "", f"{exc.reason}: {exc.detail}")
+            self.signals.done.emit(self.token, self.request, self.quality.value, QImage(), 0, "", f"{exc.reason}: {exc.detail}")
         except Exception as exc:  # noqa: BLE001 - never crash the UI on a bad file
-            self.signals.done.emit(self.token, self.request, self.quality.value, QImage(), "", f"internal_error: {type(exc).__name__}")
+            self.signals.done.emit(self.token, self.request, self.quality.value, QImage(), 0, "", f"internal_error: {type(exc).__name__}")
 
 
 class ImageViewer(QGraphicsView):
@@ -108,7 +113,7 @@ class ImageViewer(QGraphicsView):
         self._path: Path | None = None
         self._quality = Quality.PREVIEW
         self._shown_full = False
-        self._full_cache: OrderedDict[Path, tuple[QPixmap, str]] = OrderedDict()
+        self._full_cache: OrderedDict[Path, tuple[QPixmap, str, int]] = OrderedDict()  # pixmap, source, its turns
         self._message = ""
         self.zoom: float | None = None  # None = fit to window
         self._full_long: int | None = None  # long side of the full-resolution image, when known
@@ -127,7 +132,8 @@ class ImageViewer(QGraphicsView):
         self._token += 1
         self._full_request = 0
         self._rotation = rotation % 4
-        self._base: QPixmap | None = None  # the loaded image as in the file (not turned)
+        self._base: QPixmap | None = None  # the loaded image, turned by _base_turns (done by the worker)
+        self._base_turns = 0
         self._focus = None  # a new photo: no requested point yet
         self._path = path
         self._message = ""
@@ -162,8 +168,13 @@ class ImageViewer(QGraphicsView):
         self._rotation = turns
         # Zoomed: the same photo point goes back to the middle (on a preview it also waits for the full image).
         self._focus = QPointF(x, y) if self.zoom is not None else None
-        self._set_pixmap(turned(self._base, turns), keep_view=False)
+        self._set_pixmap(self._shown_base(), keep_view=False)
         return True
+
+    def _shown_base(self) -> QPixmap:
+        """The loaded image turned to the current Xoay xem (no work when the worker already turned it)."""
+        assert self._base is not None
+        return turned(self._base, self._rotation - self._base_turns)
 
     def mousePressEvent(self, event: object) -> None:  # noqa: N802 - Qt override
         self._focus = None  # the user takes over: a pending E point never pulls the view back afterwards
@@ -221,7 +232,7 @@ class ImageViewer(QGraphicsView):
             self._base = base.scaled(PREVIEW_LONG_SIDE, PREVIEW_LONG_SIDE, Qt.AspectRatioMode.KeepAspectRatio,
                                      Qt.TransformationMode.SmoothTransformation)
             self._shown_full = False
-            self._set_pixmap(turned(self._base, self._rotation), keep_view=keep_zoom)
+            self._set_pixmap(self._shown_base(), keep_view=keep_zoom)
         elif self.zoom is None:
             self._fit()
         self._emit_zoom()
@@ -242,9 +253,9 @@ class ImageViewer(QGraphicsView):
         if self._path is None:
             return
         if quality is Quality.FULL and self._path in self._full_cache:
-            pm, source = self._full_cache[self._path]
+            pm, source, turns = self._full_cache[self._path]
             self._full_cache.move_to_end(self._path)
-            self._show_full(pm, source)
+            self._show_full(pm, source, turns)
             self.full_frame_loaded.emit((pm.width(), pm.height()))
             return
         if quality is Quality.FULL:
@@ -257,9 +268,10 @@ class ImageViewer(QGraphicsView):
         if self.gate.open:
             pool = self._full_pool if quality is Quality.FULL else self._pool
             request = self._full_request if quality is Quality.FULL else 0
-            pool.start(_LoadTask(self._token, self._path, quality, self._signals, request))
+            pool.start(_LoadTask(self._token, self._path, quality, self._signals, request, self._rotation))
 
-    def _on_loaded(self, token: int, request: int, quality: str, image: QImage, source: str, error: str) -> None:
+    def _on_loaded(self, token: int, request: int, quality: str, image: QImage, turns: int, source: str,
+                   error: str) -> None:
         if token != self._token:
             return  # user already moved to another photo
         if quality == Quality.FULL.value:
@@ -275,27 +287,26 @@ class ImageViewer(QGraphicsView):
                 self.status_changed.emit(f"Không đọc được ảnh: {error}")
                 self.viewport().update()
             return
-        pm = QPixmap.fromImage(image)  # as in the file; turned when shown
+        pm = QPixmap.fromImage(image)  # already 32-bit and turned by ``turns`` (the worker did both)
         if quality == Quality.FULL.value:
-            self._base = pm
             assert self._path is not None
-            self._full_cache[self._path] = (pm, source)
+            self._full_cache[self._path] = (pm, source, turns)
             while len(self._full_cache) > self._full_cache_size:
                 self._full_cache.popitem(last=False)
-            self._show_full(pm, source)
+            self._show_full(pm, source, turns)
             self.full_frame_loaded.emit((pm.width(), pm.height()))
         elif not self._shown_full:
-            self._base = pm
+            self._base, self._base_turns = pm, turns
             self.source_label = source
-            self._set_pixmap(turned(pm, self._rotation), keep_view=False)
+            self._set_pixmap(self._shown_base(), keep_view=False)
             self.status_changed.emit(f"Xem trước {pm.width()}×{pm.height()} ({_source_vi(source)})")
 
-    def _show_full(self, pm: QPixmap, source: str) -> None:
-        self._base = pm
+    def _show_full(self, pm: QPixmap, source: str, turns: int) -> None:
+        self._base, self._base_turns = pm, turns
         self._shown_full = True
         self._full_long = max(pm.width(), pm.height())
         self.source_label = source
-        self._set_pixmap(turned(pm, self._rotation), keep_view=True)
+        self._set_pixmap(self._shown_base(), keep_view=True)
         self._emit_zoom()
 
     def _emit_zoom(self) -> None:
