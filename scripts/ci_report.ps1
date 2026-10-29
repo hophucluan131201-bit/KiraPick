@@ -11,7 +11,7 @@ function Report-Pytest {
     Write-Host "::notice title=$Title::exit $Code; $summary"
     $failures = @($lines | Where-Object { $_ -match "^(FAILED|ERROR) " })
     if ($failures.Count -gt 0) {
-        $text = ($failures | ForEach-Object { $_.Substring(0, [Math]::Min(400, $_.Length)) }) -join " | "
+        $text = ($failures | ForEach-Object { $_.Substring(0, [Math]::Min(1500, $_.Length)) }) -join " | "
         Write-Host "::notice title=$Title failures ($($failures.Count))::$text"
     }
     $crash = @()

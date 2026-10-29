@@ -208,24 +208,42 @@ def test_back_button_requests_back(qtbot, photos) -> None:  # noqa: ANN001
 def test_resting_pointer_does_not_pick_a_tile_when_compare_opens(qtbot, photos) -> None:  # noqa: ANN001
     """Qt sends Enter to a tile that appears under a resting pointer: the initial active photo stays (spec) until
     the pointer really moves."""
-    view = CompareView()
-    qtbot.addWidget(view)
-    view.resize(1600, 900)
-    view.show()
-    qtbot.waitExposed(view)
-    recs = [_record(p, asset_id=i + 1) for i, p in enumerate(photos[:3])]
-    view.show_records(recs, {}, 2)
-    QApplication.processEvents()
-    tile = view.tile(3)
-    pos = QPointF(5, 5)
-    QApplication.sendEvent(tile, QEnterEvent(pos, pos, tile.mapToGlobal(pos)))  # appeared under the pointer
-    assert view.active_id == 2
-    viewport = tile.viewer.viewport()
+    from PySide6.QtCore import QObject
     from PySide6.QtGui import QCursor
 
-    start = QCursor.pos()
-    moved = move_pointer(viewport, viewport.rect().center() + QPoint(3, 3))  # now the user moves
-    under = QApplication.widgetAt(QCursor.pos())
-    assert moved and view.active_id == 3, (moved, view.active_id, (start.x(), start.y()),
-                                           (QCursor.pos().x(), QCursor.pos().y()), type(under).__name__,
-                                           under is viewport, view._armed, pointer.last_diag)
+    log: list[str] = []
+
+    class Spy(QObject):  # every Enter / MouseMove reaching the view's widgets, for the failure message
+        def eventFilter(self, obj, event) -> bool:  # noqa: ANN001, N802
+            if event.type() in (QEvent.Type.Enter, QEvent.Type.MouseMove) and isinstance(obj, QWidget):
+                tiles = [t for t in view.tiles if t is obj or t.isAncestorOf(obj)]
+                where = f"t{tiles[0].asset_id}" if tiles else type(obj).__name__
+                kind = "E" if event.type() == QEvent.Type.Enter else "M"
+                log.append(f"{kind}{'s' if event.spontaneous() else 'n'}:{where}:{type(obj).__name__[:6]}")
+            return False
+
+    view = CompareView()
+    spy = Spy()
+    QApplication.instance().installEventFilter(spy)
+    try:
+        qtbot.addWidget(view)
+        view.resize(1600, 900)
+        rest = QCursor.pos()
+        view.show()
+        qtbot.waitExposed(view)
+        recs = [_record(p, asset_id=i + 1) for i, p in enumerate(photos[:3])]
+        log.append("records")
+        view.show_records(recs, {}, 2)
+        QApplication.processEvents()
+        tile = view.tile(3)
+        pos = QPointF(5, 5)
+        QApplication.sendEvent(tile, QEnterEvent(pos, pos, tile.mapToGlobal(pos)))  # appeared under the pointer
+        assert view.active_id == 2, log
+        viewport = tile.viewer.viewport()
+        log.append("move")
+        moved = move_pointer(viewport, viewport.rect().center() + QPoint(3, 3))  # now the user moves
+    finally:
+        QApplication.instance().removeEventFilter(spy)
+    assert moved and view.active_id == 3, (f"moved={moved} active={view.active_id} armed={view._armed} "
+                                           f"rest={rest.toTuple()} vp3={viewport.mapToGlobal(viewport.rect().center()).toTuple()} "
+                                           f"log={' '.join(log[-40:])} | {pointer.last_diag}")

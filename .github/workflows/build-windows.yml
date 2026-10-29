@@ -162,6 +162,7 @@ jobs:
         shell: pwsh
         env:
           QT_QPA_PLATFORM: windows
+          COLUMNS: "1500"
         run: |
           python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_main_window.py tests/gui/test_adaptive_layout.py tests/gui/test_detail_panel.py tests/gui/test_review_notes_t15.py `
             tests/gui/test_compare_tile.py tests/gui/test_compare_view.py tests/gui/test_compare_window.py `
@@ -171,15 +172,16 @@ jobs:
           . scripts/ci_report.ps1
           Report-Pytest -Log gui.log -Title gui-windows -Code $code
           exit $code
-      - name: Compare GUI on the real Windows platform, 3 more runs (hover / routing stability)
+      - name: Compare GUI on the real Windows platform, 5 more runs (hover / routing stability)
         if: always()
         shell: pwsh
         env:
           QT_QPA_PLATFORM: windows
+          COLUMNS: "1500"
         run: |
           . scripts/ci_report.ps1
           $failed = 0
-          for ($i = 1; $i -le 3; $i++) {
+          for ($i = 1; $i -le 5; $i++) {
             python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_compare_view.py tests/gui/test_compare_window.py tests/gui/test_compare_actions.py tests/gui/test_compare_overlay.py tests/gui/test_compare_final.py *>&1 | Tee-Object -FilePath "gui_repeat$i.log"
             $code = $LASTEXITCODE
             if ($code -ne 0) { $failed++ }
