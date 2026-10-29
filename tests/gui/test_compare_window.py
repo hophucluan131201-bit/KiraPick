@@ -4,7 +4,6 @@ kept, the detail panel on the panel photo, reloads (review RV-P2-B1-01, RV-P2-B1
 from __future__ import annotations
 
 from PySide6.QtCore import QItemSelectionModel, QPoint, Qt
-from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from app.storage import decisions
@@ -13,6 +12,7 @@ from app.ui.asset_model import Filter
 from app.ui.compare_layout import start_error
 from app.ui.compare_view import PANEL_DELAY_MS
 from tests.gui.test_main_window import _import, _key, _window, env  # noqa: F401 - fixture
+from tests.gui.pointer import move_pointer
 
 
 def _mark(w, rows: list[int], current: int | None = None) -> list[int]:  # noqa: ANN001
@@ -103,10 +103,10 @@ def test_real_mouse_over_the_viewers_changes_the_target_at_once(qtbot, env: dict
     sent to the tile."""
     w, ids = _opened(qtbot, env, [0, 1, 2], current=0)
     QApplication.processEvents()
-    QTest.mouseMove(w.compare.back_button, w.compare.back_button.rect().center())  # start outside the tiles
+    move_pointer(w.compare.back_button, w.compare.back_button.rect().center())  # start outside the tiles
     for asset_id in (ids[2], ids[1], ids[0], ids[2]):
         viewport = w.compare.tile(asset_id).viewer.viewport()
-        QTest.mouseMove(viewport, viewport.rect().center())
+        move_pointer(viewport, viewport.rect().center())
         assert w.compare.active_id == asset_id, asset_id  # no wait: the target is the tile under the pointer
         assert w.view_record().id == asset_id
 
@@ -124,7 +124,7 @@ def test_reload_keeps_zoom_pan_and_active(qtbot, env: dict) -> None:  # noqa: F8
     w.reload_preserving_view()
     assert w.in_compare() and w.compare.active_id == ids[1]
     assert v.zoom == zoom and v._token == token and v.mapToScene(v.viewport().rect().center()) == centre
-    assert "Chọn" in w.compare.tile(ids[2]).header.text()
+    assert "Chọn" in w.compare.tile(ids[2]).header.toolTip()
 
 
 def test_filtered_out_photo_stays_until_compare_closes(qtbot, env: dict) -> None:  # noqa: F811

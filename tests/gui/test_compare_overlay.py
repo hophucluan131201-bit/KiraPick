@@ -172,7 +172,7 @@ def test_an_action_rereads_decisions_only(qtbot, env: dict, monkeypatch) -> None
     tile = w.compare.tile(ids[1])
     rec = next(r for r in w.compare.records() if r.id == ids[1])
     assert rec.flag == "reject" and rec.rating == 3 and rec.rotation == 1
-    assert "Loại" in tile.header.text() and tile.ai_label.text() == "K 66"
+    assert "Loại" in tile.header.toolTip() and tile.ai_label.text() == "K 66"
     assert next(r for r in w.compare.records() if r.id == ids[0]).flag == "keep"  # the other photo untouched
 
 

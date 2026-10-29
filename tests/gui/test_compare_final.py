@@ -13,7 +13,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, Qt, QTimer  # noqa: E402
-from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from app.quality.rank import Ranked  # noqa: E402
@@ -28,6 +27,7 @@ from tests.gui.test_compare_window import _mark, _opened  # noqa: E402
 from tests.gui.test_main_window import _import, _key, _window, env  # noqa: E402, F401 - fixture
 from tests.gui.test_shutdown_timeout import _db_open, _watch_db  # noqa: E402
 from tests.integration.test_import_job import _photo  # noqa: E402
+from tests.gui.pointer import move_pointer  # noqa: E402
 
 LONG = ("mắt hơi mềm vì tiêu cự dài và tốc độ chụp thấp so với chuyển động của người mẫu, tóc che một phần mắt trái, "
         "ánh sáng nền cháy ở góc trên")
@@ -127,8 +127,8 @@ def test_slow_source_keeps_the_window_responsive_and_actions_work(qtbot, env: di
     block = _probe_block(qtbot, lambda: _key(qtbot, w, Qt.Key.Key_C), 300)
     assert w.in_compare() and block < 150  # previews still loading: the window never waits for them
     vp = w.compare.tile(ids[2]).viewer.viewport()
-    QTest.mouseMove(w.compare.back_button, w.compare.back_button.rect().center())
-    QTest.mouseMove(vp, vp.rect().center())
+    move_pointer(w.compare.back_button, w.compare.back_button.rect().center())
+    move_pointer(vp, vp.rect().center())
     _key(qtbot, w, Qt.Key.Key_X)
     assert decisions.get(w.project.conn, ids[2]).flag == "reject"
     assert decisions.get(w.project.conn, ids[0]).flag is None

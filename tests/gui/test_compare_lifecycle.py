@@ -110,7 +110,7 @@ def test_budget_drops_least_recently_active(qtbot, photos, fake, monkeypatch) ->
         _zoom(qtbot, view, r.id)
     assert view.full_pixels() == 3 * 60_200
     _zoom(qtbot, view, recs[3].id)
-    assert view.tile(1).viewer.zoom is None and DROPPED in view.tile(1).header.text()
+    assert view.tile(1).viewer.zoom is None and DROPPED in view.tile(1).header.toolTip()
     assert view.full_pixels() == 3 * 60_200 <= cv.FULL_BUDGET_PIXELS
     assert all(view.tile(r.id).viewer.zoom == 1.0 for r in recs[1:])
     assert not view.tile(1).viewer.is_full_resolution_shown()
@@ -128,7 +128,7 @@ def test_reservation_before_decode(qtbot, photos, fake, monkeypatch) -> None:  #
     fake.gate = threading.Event()
     _zoom(qtbot, view, recs[0].id, wait=False)
     _zoom(qtbot, view, recs[1].id, wait=False)  # same event-loop turn: tile 1's decode has not even started
-    assert view.tile(1).viewer.zoom is None and DROPPED in view.tile(1).header.text()
+    assert view.tile(1).viewer.zoom is None and DROPPED in view.tile(1).header.toolTip()
     assert view.full_pixels() == 60_000  # only tile 2 reserved
     fake.gate.set()
     assert view.wait_idle(10000)
@@ -185,7 +185,7 @@ def test_oversized_single_frame_not_decoded(qtbot, photos, fake) -> None:  # noq
     tile = view.tile(recs[0].id)
     assert photos[0].name not in fake.started and view.full_pixels() == 0
     assert tile.viewer.zoom == 1.0 and not tile.viewer.is_full_resolution_shown()  # stays on the preview
-    assert OVERSIZED in tile.header.text()
+    assert OVERSIZED in tile.header.toolTip()
 
 
 def test_one_full_decode_at_a_time(qtbot, photos, fake) -> None:  # noqa: ANN001
@@ -305,7 +305,7 @@ def test_unknown_size_frame_over_budget_after_decode(qtbot, photos, fake, monkey
     _zoom(qtbot, view, recs[0].id)
     tile = view.tile(recs[0].id)
     assert not tile.viewer.is_full_resolution_shown() and not tile.viewer._full_cache
-    assert tile.viewer.zoom == 1.0 and OVERSIZED in tile.header.text()
+    assert tile.viewer.zoom == 1.0 and OVERSIZED in tile.header.toolTip()
     assert view.full_pixels() == 60_000 and view.tile(recs[1].id).viewer.is_full_resolution_shown()
 
 
@@ -326,7 +326,7 @@ def test_unknown_size_read_from_the_header_avoids_the_decode(qtbot, photos, fake
     view, recs = _view(qtbot, photos[:2], [(0, 0), (300, 200)])
     _zoom(qtbot, view, recs[0].id)
     assert photos[0].name not in fake.started and view.full_pixels() == 0
-    assert OVERSIZED in view.tile(recs[0].id).header.text()
+    assert OVERSIZED in view.tile(recs[0].id).header.toolTip()
 
 
 def test_header_size_reads_only_the_header(tmp_path: Path, public_nef: Path) -> None:  # noqa: ANN001

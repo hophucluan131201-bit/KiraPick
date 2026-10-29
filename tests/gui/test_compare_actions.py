@@ -14,6 +14,7 @@ from app.storage import decisions
 from app.ui.compare_view import PANEL_DELAY_MS
 from tests.gui.test_compare_window import _mark
 from tests.gui.test_main_window import _import, _key, _window, env  # noqa: F401 - fixture
+from tests.gui.pointer import move_os_cursor, move_pointer
 
 _TABLES = ("decisions", "view_rotation", "occurrences")
 REFUSED = "Bảng chi tiết chưa kịp đổi sang ảnh đang chọn — bấm lại."
@@ -34,8 +35,8 @@ def _state(conn, asset_id: int) -> tuple:  # noqa: ANN001
 def _hover(w, asset_id: int) -> None:  # noqa: ANN001
     """The real pointer onto that tile's viewer (review RV-P2-B1-01)."""
     viewport = w.compare.tile(asset_id).viewer.viewport()
-    QTest.mouseMove(w.compare.back_button, w.compare.back_button.rect().center())  # from outside the tiles: a real
-    QTest.mouseMove(viewport, viewport.rect().center())  # move even when the last test left the pointer here
+    move_pointer(w.compare.back_button, w.compare.back_button.rect().center())  # from outside the tiles: a real
+    move_pointer(viewport, viewport.rect().center())  # move even when the last test left the pointer here
     assert w.compare.active_id == asset_id
 
 
@@ -104,27 +105,31 @@ def test_action_hits_active_only(qtbot, env: dict, name: str) -> None:  # noqa: 
     tile = w.compare.tile(ids[1])
     assert tile.viewer._rotation == expected[4]  # the tile follows Xoay xem
     if expected[0] == "keep":
-        assert "Chọn" in tile.header.text()
+        assert "Chọn" in tile.header.toolTip()
     if expected[0] == "reject":
-        assert "Loại" in tile.header.text()
+        assert "Loại" in tile.header.toolTip()
 
 
-def test_rapid_hover_then_key_before_the_panel_follows(qtbot, env: dict) -> None:  # noqa: F811
-    """Batch 2 must: hover A → B → C and press X at once (before 150 ms): only C changes."""
+@pytest.mark.parametrize(("key", "flag"), [(Qt.Key.Key_X, "reject"), (Qt.Key.Key_P, "keep")])
+def test_rapid_hover_then_key_before_the_panel_follows(qtbot, env: dict, key, flag: str) -> None:  # noqa: ANN001, F811
+    """Batch 2 must / CR-P2-FINAL-01: hover A → B → C and press X or P at once (before 150 ms): only C changes; A and B
+    keep byte-identical rows in decisions, view_rotation and occurrences."""
     w, ids = _setup(qtbot, env)
     conn = w.project.conn
+    with w.project.transaction() as c:  # C starts with another state, so P and X both change it
+        decisions.set_flag(c, ids[2], "reject" if flag == "keep" else "keep")
     before = {i: _rows(conn, i) for i in ids}
     for asset_id in (ids[0], ids[1], ids[2]):
         _hover(w, asset_id)
-    _key(qtbot, w, Qt.Key.Key_X)
-    assert decisions.get(conn, ids[2]).flag == "reject"
+    _key(qtbot, w, key)
+    assert decisions.get(conn, ids[2]).flag == flag
     assert {i: _rows(conn, i) for i in ids[:2]} == {i: before[i] for i in ids[:2]}
 
 
 def test_keys_after_leaving_tiles_hit_last_hovered(qtbot, env: dict) -> None:  # noqa: F811
     w, ids = _setup(qtbot, env)
     _hover(w, ids[2])
-    QTest.mouseMove(w.detail, w.detail.rect().center())  # the pointer on the detail panel
+    move_pointer(w.detail, w.detail.rect().center())  # the pointer on the detail panel
     _key(qtbot, w, Qt.Key.Key_X)
     assert decisions.get(w.project.conn, ids[2]).flag == "reject"
     assert decisions.get(w.project.conn, ids[0]).flag is None
@@ -219,3 +224,18 @@ def test_outside_compare_unchanged(qtbot, env: dict) -> None:  # noqa: F811
     ids = _mark(w, [0, 2], current=0)
     _key(qtbot, w, Qt.Key.Key_X)  # the grid: every marked photo (part 1)
     assert all(decisions.get(w.project.conn, i).flag == "reject" for i in ids)
+
+
+def test_os_cursor_sweep_then_x_hits_the_photo_under_it(qtbot, env: dict) -> None:  # noqa: F811
+    """CR-P2-FINAL-01: the operating-system cursor (QCursor.setPos, not QTest) sweeps A → B → C, then X: C only."""
+    w, ids = _setup(qtbot, env)
+    qtbot.waitExposed(w)
+    conn = w.project.conn
+    before = {i: _rows(conn, i) for i in ids}
+    assert move_os_cursor(w.compare.back_button)
+    for asset_id in (ids[0], ids[1], ids[2]):
+        assert move_os_cursor(w.compare.tile(asset_id).viewer.viewport()), asset_id
+        assert w.compare.active_id == asset_id
+    _key(qtbot, w, Qt.Key.Key_X)
+    assert decisions.get(conn, ids[2]).flag == "reject"
+    assert {i: _rows(conn, i) for i in ids[:2]} == {i: before[i] for i in ids[:2]}

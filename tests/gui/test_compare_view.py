@@ -12,13 +12,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest  # noqa: E402
 from PySide6.QtCore import QEvent, QPoint, QPointF  # noqa: E402
 from PySide6.QtGui import QEnterEvent  # noqa: E402
-from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QWidget  # noqa: E402
 
 from app.ui import compare_view as cv  # noqa: E402
 from app.ui.compare_view import PANEL_DELAY_MS, CompareView  # noqa: E402
 from tests.gui.test_compare_tile import _centre, _record  # noqa: E402
 from tests.integration.test_import_job import _photo  # noqa: E402
+from tests.gui.pointer import move_pointer  # noqa: E402
 
 
 @pytest.fixture
@@ -39,9 +39,9 @@ def _view(qtbot, photos: list[Path], n: int = 3, size=(1600, 900), active: int |
 
 def _enter(view: CompareView, asset_id: int) -> None:
     """The real pointer onto the tile's photo (from outside the tiles first, so it is a real move)."""
-    QTest.mouseMove(view.back_button, view.back_button.rect().center())
+    move_pointer(view.back_button, view.back_button.rect().center())
     viewport = view.tile(asset_id).viewer.viewport()
-    QTest.mouseMove(viewport, viewport.rect().center())
+    move_pointer(viewport, viewport.rect().center())
 
 
 def _leave(view: CompareView) -> None:
@@ -69,10 +69,10 @@ def test_active_changes_immediately_on_enter(qtbot, photos) -> None:  # noqa: AN
 def test_quick_hover_emits_panel_once(qtbot, photos) -> None:  # noqa: ANN001
     view, _recs = _view(qtbot, photos)
     active, panel = _signals(view)
-    QTest.mouseMove(view.back_button, view.back_button.rect().center())
+    move_pointer(view.back_button, view.back_button.rect().center())
     for asset_id in (1, 2, 3):  # one sweep across the tiles
         viewport = view.tile(asset_id).viewer.viewport()
-        QTest.mouseMove(viewport, viewport.rect().center())
+        move_pointer(viewport, viewport.rect().center())
         qtbot.wait(15)
     assert active == [2, 3]  # 1 was already active
     qtbot.wait(PANEL_DELAY_MS + 60)
@@ -177,7 +177,7 @@ def test_update_record_without_size_change_does_not_rearrange(qtbot, photos, mon
     real = cv.arrange
     monkeypatch.setattr(cv, "arrange", lambda *a, **k: calls.append(1) or real(*a, **k))
     view.update_record(replace(recs[0], flag="keep", rating=4))
-    assert calls == [] and "Chọn" in view.tile(1).header.text()
+    assert calls == [] and "Chọn" in view.tile(1).header.toolTip()
 
 
 def test_tiles_and_pools_created_once(qtbot, photos) -> None:  # noqa: ANN001
@@ -193,7 +193,7 @@ def test_tiles_and_pools_created_once(qtbot, photos) -> None:  # noqa: ANN001
     assert (view.preview_pool, view.full_pool) == pools
     assert view.preview_pool.maxThreadCount() == 1 and view.full_pool.maxThreadCount() == 1
     assert all(t.viewer._pool is view.preview_pool and t.viewer._full_pool is view.full_pool for t in tiles)
-    assert view.records() == recs[:3] and [view.tile(r.id).header.text()[0] for r in recs[:3]] == ["1", "2", "3"]
+    assert view.records() == recs[:3] and [view.tile(r.id).header.toolTip()[0] for r in recs[:3]] == ["1", "2", "3"]
 
 
 def test_back_button_requests_back(qtbot, photos) -> None:  # noqa: ANN001
@@ -220,5 +220,5 @@ def test_resting_pointer_does_not_pick_a_tile_when_compare_opens(qtbot, photos) 
     QApplication.sendEvent(tile, QEnterEvent(pos, pos, tile.mapToGlobal(pos)))  # appeared under the pointer
     assert view.active_id == 2
     viewport = tile.viewer.viewport()
-    QTest.mouseMove(viewport, viewport.rect().center() + QPoint(3, 3))  # now the user moves
+    move_pointer(viewport, viewport.rect().center() + QPoint(3, 3))  # now the user moves
     assert view.active_id == 3
