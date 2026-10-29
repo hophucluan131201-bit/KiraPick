@@ -18,6 +18,7 @@ from app.ui import compare_view as cv  # noqa: E402
 from app.ui.compare_view import PANEL_DELAY_MS, CompareView  # noqa: E402
 from tests.gui.test_compare_tile import _centre, _record  # noqa: E402
 from tests.integration.test_import_job import _photo  # noqa: E402
+from tests.gui import pointer  # noqa: E402
 from tests.gui.pointer import move_pointer  # noqa: E402
 
 
@@ -41,7 +42,7 @@ def _enter(view: CompareView, asset_id: int) -> None:
     """The real pointer onto the tile's photo (from outside the tiles first, so it is a real move)."""
     move_pointer(view.back_button, view.back_button.rect().center())
     viewport = view.tile(asset_id).viewer.viewport()
-    assert move_pointer(viewport, viewport.rect().center())
+    assert move_pointer(viewport, viewport.rect().center()), pointer.last_diag
 
 
 def _leave(view: CompareView) -> None:
@@ -227,4 +228,4 @@ def test_resting_pointer_does_not_pick_a_tile_when_compare_opens(qtbot, photos) 
     under = QApplication.widgetAt(QCursor.pos())
     assert moved and view.active_id == 3, (moved, view.active_id, (start.x(), start.y()),
                                            (QCursor.pos().x(), QCursor.pos().y()), type(under).__name__,
-                                           under is viewport, view._armed)
+                                           under is viewport, view._armed, pointer.last_diag)
