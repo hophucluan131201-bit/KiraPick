@@ -214,3 +214,61 @@ def test_snap_sizes_with_compare_open(qtbot, env: dict, size) -> None:  # noqa: 
         assert tile.ai_label.geometry().right() <= tile.viewer.width()
     skip_without_real_fonts()
     assert clipped_buttons(w) == []
+
+
+def _raw_files() -> list[Path]:
+    root = Path(__file__).resolve().parents[2] / "test_photos"
+    nefs = sorted((root / "user_nikon").glob("*.NEF"))[:2] or sorted((root / "public").glob("*.NEF"))[:2]
+    return nefs if len(nefs) == 2 else []
+
+
+@pytest.mark.skipif(not _raw_files(), reason="RAW samples are git-ignored (local / owner files only)")
+def test_real_raw_in_compare_reload_switch_and_close(qtbot, env: dict, tmp_path: Path, monkeypatch) -> None:  # noqa: F811
+    """Review additional regression: two real NEFs and a JPEG compared; 100 % on a NEF shows the full-resolution
+    frame (header size, turned by Xoay xem); P hits it only; a reload keeps Compare and the zoom; a folder switch then
+    closes Compare and the database after the pools; the source files are byte-identical throughout."""
+    import hashlib
+    import shutil
+
+    from app.ingest.preview import header_size, load_full_resolution
+
+    folder = tmp_path / "raw"
+    folder.mkdir()
+    files = [Path(shutil.copy2(p, folder / p.name)) for p in _raw_files()]
+    files.append(_photo(folder / "ZZZ_0001.jpg", 5, size=(1200, 800)))
+    sha = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+    w = _window(qtbot, env)
+    _import(qtbot, w, folder)
+    rows = {r.path.name: i for i, r in enumerate(w.model.records())}
+    nef_row = rows[files[0].name]
+    w.select_row(nef_row)
+    ids = _mark(w, [rows[p.name] for p in files], current=nef_row)
+    w.rotate_view()  # Xoay xem on the NEF before comparing
+    _key(qtbot, w, Qt.Key.Key_C)
+    assert w.in_compare()
+    nef_id = w.model.records()[nef_row].id
+    tile = w.compare.tile(nef_id)
+    move_pointer(w.compare.back_button)
+    move_pointer(tile.viewer.viewport())
+    assert w.compare.active_id == nef_id
+    _key(qtbot, w, Qt.Key.Key_Z)
+    qtbot.waitUntil(tile.viewer.is_full_resolution_shown, timeout=60000)
+    full = load_full_resolution(files[0]).image.size  # as the file shows it (EXIF orientation applied)
+    assert tile.viewer.pixmap_size() == (full[1], full[0])  # then turned once by Xoay xem
+    assert header_size(files[0]) is not None  # the budget's size before the decode
+    others = [i for i in ids if i != nef_id]
+    before = {i: decisions.get(w.project.conn, i) for i in others}
+    _key(qtbot, w, Qt.Key.Key_P)
+    assert decisions.get(w.project.conn, nef_id).flag == "keep"
+    assert {i: decisions.get(w.project.conn, i) for i in others} == before
+    w.reload_preserving_view()
+    assert w.in_compare() and tile.viewer.zoom_percent() == 100
+    events: list[str] = []
+    project = _watch_db(w, events, monkeypatch)
+    other = tmp_path / "other"
+    _photo(other / "IMG_0001.jpg", 98)
+    assert w.start_import(other) is not None
+    qtbot.waitUntil(lambda: w.import_thread is None, timeout=20000)
+    assert events == ["db closed"] and not _db_open(project) and not w.in_compare()
+    w.close()
+    assert {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in files} == sha
