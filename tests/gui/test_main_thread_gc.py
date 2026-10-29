@@ -43,3 +43,23 @@ def test_check_collects_the_oldest_generation_over_its_threshold(monkeypatch) ->
         monkeypatch.setattr(gc_guard.gc, "get_count", lambda c=counts: c)
         gc_guard.GuiThreadCollector.check()
         assert calls == expected, counts
+
+
+def test_collections_are_timed_for_the_log(monkeypatch) -> None:
+    """RV14-03: each GUI-thread collection is timed; the summary (counts and milliseconds only) goes to the app log
+    when the app quits, so pauses on the owner's Windows PC can be read from kirapick.log."""
+    import time
+
+    from app.ui import gc_guard
+
+    monkeypatch.setattr(gc_guard, "_pauses", [])
+    monkeypatch.setattr(gc_guard.gc, "collect", lambda gen=2: time.sleep(0.02 if gen == 2 else 0.002))
+    t0, t1, t2 = gc_guard.THRESHOLD
+    for counts in ((t0 + 1, 0, 0), (t0 + 1, 0, 0), (0, 0, t2 + 1)):
+        monkeypatch.setattr(gc_guard.gc, "get_count", lambda c=counts: c)
+        gc_guard.GuiThreadCollector.check()
+    assert [g for g, _ms in gc_guard._pauses] == [0, 0, 2]
+    text = gc_guard.summary()
+    assert text.startswith("GUI-thread GC: 3 runs") and "worst" in text
+    worst = float(text.split("worst ")[1].split(" ms")[0])
+    assert 15 <= worst < 200

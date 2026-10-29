@@ -26,13 +26,19 @@ cycles created by worker threads is reclaimed later than with automatic GC.
 from __future__ import annotations
 
 import gc
+import logging
+import statistics
+import time
 
 from PySide6.QtCore import QObject, QTimer
 
 THRESHOLD = gc.get_threshold()  # Python's own thresholds for this interpreter, kept
 INTERVAL_MS = 500
+MAX_TIMED = 10_000  # collections kept for the summary (a long session runs a few per minute)
 
+log = logging.getLogger(__name__)
 _installed: GuiThreadCollector | None = None
+_pauses: list[tuple[int, float]] = []  # (generation, ms) of each collection run by the timer
 
 
 class GuiThreadCollector(QObject):
@@ -53,7 +59,10 @@ class GuiThreadCollector(QObject):
         counts = gc.get_count()
         for generation in (2, 1, 0):  # the oldest generation over its threshold, like CPython
             if counts[generation] > THRESHOLD[generation]:
+                started = time.perf_counter()
                 gc.collect(generation)
+                if len(_pauses) < MAX_TIMED:
+                    _pauses.append((generation, (time.perf_counter() - started) * 1000))
                 return
 
 
@@ -72,6 +81,8 @@ def uninstall() -> None:
     if guard is None:
         return
     guard.timer.stop()
+    if _pauses:
+        log.info(summary())  # numbers only: how long the window was paused by collections (review RV14-03)
     if guard._was_enabled:
         gc.enable()
     gc.collect()
@@ -80,3 +91,13 @@ def uninstall() -> None:
 
 def installed() -> GuiThreadCollector | None:
     return _installed
+
+
+def summary() -> str:
+    """How long the GUI thread spent in each collection this session (no other data)."""
+    if not _pauses:
+        return "GUI-thread GC: 0 runs"
+    ms = [m for _g, m in _pauses]
+    full = [m for g, m in _pauses if g == 2]
+    return (f"GUI-thread GC: {len(ms)} runs, median {statistics.median(ms):.1f} ms, worst {max(ms):.1f} ms; "
+            f"full collections {len(full)}, worst {max(full, default=0.0):.1f} ms")

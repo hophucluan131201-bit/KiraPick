@@ -15,7 +15,7 @@ on:
         description: "Editions to build (comma-separated: directml,cuda,openvino)"
         default: "directml,cuda,openvino"
       run_perf:
-        description: "Also run the performance / stress tests on Windows (no build needed for this)"
+        description: "Also run the Windows tests: full suite, GUI smoke, Snap/DPI, performance, stress (no build needed)"
         type: boolean
         default: false
   push:
@@ -118,13 +118,15 @@ jobs:
             gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file packaging/notes/RELEASE_NOTES.md --latest
           }
 
-  # Performance and stress tests on a real Windows machine (Python 3.12): grid / culling / layout timings on synthetic
-  # 1k-10k sessions, HD thumbnails, shutdown and worker stress. Never blocks anything and never publishes: started by
-  # hand ("run_perf") or by "[perf]" in a commit message. The numbers are printed as notices.
+  # Tests on a real Windows machine (Python 3.12): the full test suite, a GUI smoke run on the real `windows` platform
+  # (Windows fonts), Snap sizes at 100/125/150/200 %, performance (synthetic 1k-10k sessions, HD thumbnails) and
+  # shutdown / worker stress. Never blocks anything and never publishes: started by hand ("run_perf") or by "[perf]"
+  # in a commit message. Each part prints its OWN notice (suite / gui-windows / snap-dpi / perf / stress): the job is
+  # non-blocking, so a green job is not evidence that any part passed (review RV14-01) — read the notices.
   perf:
     if: github.event.inputs.run_perf == 'true' || contains(github.event.head_commit.message, '[perf]')
     runs-on: windows-2022
-    timeout-minutes: 60
+    timeout-minutes: 90
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -134,7 +136,48 @@ jobs:
       - name: Install
         shell: pwsh
         run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt "pytest>=8,<10" "pytest-qt>=4.4,<5"
+      - name: Full test suite (offscreen)
+        if: always()
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -X faulthandler -m pytest -q -p no:cacheprovider *>&1 | Tee-Object -FilePath suite.log
+          $code = $LASTEXITCODE
+          $summary = (Get-Content suite.log | Where-Object { $_ -match "(passed|failed|error)" } | Select-Object -Last 1)
+          $failures = (Get-Content suite.log | Where-Object { $_ -match "^(FAILED|ERROR) " } | Select-Object -First 8) -join " | "
+          Write-Host "::notice title=suite::exit $code; $summary $failures"
+          exit $code
+      - name: GUI smoke on the real Windows platform (Windows fonts, real windows)
+        if: always()
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: windows
+        run: |
+          python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_main_window.py tests/gui/test_adaptive_layout.py tests/gui/test_review_notes_t15.py *>&1 | Tee-Object -FilePath gui.log
+          $code = $LASTEXITCODE
+          $summary = (Get-Content gui.log | Where-Object { $_ -match "(passed|failed|error)" } | Select-Object -Last 1)
+          $failures = (Get-Content gui.log | Where-Object { $_ -match "^(FAILED|ERROR) " } | Select-Object -First 8) -join " | "
+          Write-Host "::notice title=gui-windows::exit $code; $summary $failures"
+          exit $code
+      - name: Snap sizes and per-monitor DPI scale (real Windows platform)
+        if: always()
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: windows
+        run: |
+          $failed = 0
+          foreach ($f in "1", "1.25", "1.5", "2") {
+            $env:QT_SCALE_FACTOR = $f
+            $out = python -m pytest -q -p no:cacheprovider tests/gui/test_snap_sizes.py 2>&1
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+            $summary = ($out | Where-Object { $_ -match "(passed|failed|error)" } | Select-Object -Last 1)
+            $failures = ($out | Where-Object { $_ -match "^(FAILED|E  ) " } | Select-Object -First 4) -join " | "
+            Write-Host "::notice title=snap-dpi $f::$summary $failures"
+          }
+          exit $failed
       - name: Performance tests
+        if: always()
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
@@ -169,5 +212,8 @@ jobs:
         if: always()
         with:
           name: kirapick-perf-windows
-          path: perf.jsonl
+          path: |
+            perf.jsonl
+            suite.log
+            gui.log
           retention-days: 30

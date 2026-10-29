@@ -358,6 +358,33 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
+## UI part 1 — finish (Task 15, 2026-10-29) — status: tested offscreen (Linux); Windows CI pending; Windows manual blocked
+
+Release checklist, known issues and the owner's Windows manual validation: `docs/beta-release-checklist.md`.
+
+| Item | Status | Evidence |
+|---|---|---|
+| RV2-05 session upgrade v5 (2.2.1) / v6 → v7, data intact, backup `<db>.v<N>.bak` kept once before the upgrade | **tested** | `tests/unit/test_storage.py`; cross-version run with the real 2.2.1 code: 2.2.1 session → this build (v7, decisions identical) → 2.2.1 refuses (`SchemaTooNewError`), file unchanged (SHA-256) |
+| A session from a newer app / a full disk on open: Vietnamese message instead of the unexpected-error box | **tested** | `tests/gui/test_review_notes_t15.py` |
+| RV9-03 panel people action changes only the current photo (marked photos' rows identical) | **tested** | same file; fails if the panel used the marking (checked) |
+| RV2-04 real NEF + JPEG pair: one card, P, bar size = export plan, byte-identical copies, sources untouched, also after Xoay xem | **tested (Linux; skips in CI without the public NEF)** | same file |
+| HD cache (`thumb_hd`) and the upgrade backup removed with the session (↺ Làm lại, 30-day clean-up) | **tested** | same file |
+| Closing / switching folders during an export asks first (No keeps copying); a full disk while writing an HD thumbnail leaves no partial file | **tested** | same file; `tests/gui/test_shutdown_callbacks.py` |
+| Broken / unsupported RAW files (fake NEF, empty CR3, 10 stripped rare-format samples) | **tested** | same file: 7 ok, 12 errors, import and large HD cards unaffected |
+| Snap sizes 100 / 125 / 150 % (13 sizes): expected layout mode, no button text cut off | **tested offscreen, also at QT_SCALE_FACTOR 1.25 / 2** | `tests/gui/test_snap_sizes.py`; on Windows CI with the real `windows` platform at 1 / 1.25 / 1.5 / 2 (pending) |
+| GC pauses on the owner's PC (RV14-03) | **implemented** (measurement only) | a `GUI-thread GC: … worst … ms` line in `kirapick.log` on quit; no `gc.freeze()` |
+| Windows CI: full suite, GUI smoke on the real `windows` platform, Snap/DPI, perf, stress — one notice each (RV14-01) | **pending** | `.github/workflows/build-windows.yml`, job `perf` |
+
+Real files (Linux VM, 4 vCPU, offscreen; owner NEFs + public / contributed samples, 34 RAW files, 13 brands,
+803 MB; numbers only): import 0.44–0.58 s; first paint of the visible cards at 140 px / 200 % (20 HD files made)
+0.67–0.79 s, Qt thread never blocked more than 17 ms; 340 px cards 0.05 s (re-uses those HD files); first scroll to
+the end (7 new cards) 0.22–0.24 s, worst block 11 ms; the same with a cold HD cache WHILE the AI analysis runs (CPU,
+no GPU here) 0.28–0.36 s, worst block 30–36 ms; closing with the analysis running 0.19–0.43 s. Real camera JPEGs
+(19 full-size previews embedded in the RAW samples, 1.8 MB median): HD thumbnail 60 ms median / 104 ms worst. Large
+export of the 34 RAW files, window closed after 0.3 s with "Dừng xuất và thoát": closed in 0.1 s, 4 files copied
+complete; exporting again into the same folder copied the 30 missing ones (2.3 s) and the folder ended byte-identical
+to the sources with no duplicates.
+
 ## Unreleased on beta (after 2.2.1): app update, learned sharpness
 
 | Item | Status | Evidence |
