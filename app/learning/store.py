@@ -128,6 +128,11 @@ class LearningStore:
         folder.mkdir(parents=True, exist_ok=True)
         self.path = folder / DB_NAME
         self.conn = sqlite3.connect(self.path)
+        # Like the session databases: a write-ahead log and no disk flush per commit. Each Chọn / Loại writes one
+        # example here on the GUI thread; with SQLite's defaults (rollback journal, a full flush per commit) that
+        # took 20+ ms on Windows (Task 14 benchmark). A power cut can lose the last examples, never corrupt the file.
+        self.conn.execute("PRAGMA journal_mode = WAL")
+        self.conn.execute("PRAGMA synchronous = NORMAL")
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
         if version > SCHEMA_VERSION:
             raise RuntimeError(f"learning data is from a newer app version ({version})")
