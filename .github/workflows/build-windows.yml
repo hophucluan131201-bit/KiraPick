@@ -164,7 +164,10 @@ jobs:
         env:
           QT_QPA_PLATFORM: windows
         run: |
-          python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_main_window.py tests/gui/test_adaptive_layout.py tests/gui/test_detail_panel.py tests/gui/test_review_notes_t15.py *>&1 | Tee-Object -FilePath gui.log
+          python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_main_window.py tests/gui/test_adaptive_layout.py tests/gui/test_detail_panel.py tests/gui/test_review_notes_t15.py `
+            tests/gui/test_compare_tile.py tests/gui/test_compare_view.py tests/gui/test_compare_window.py `
+            tests/gui/test_compare_actions.py tests/gui/test_compare_overlay.py tests/gui/test_compare_final.py `
+            tests/gui/test_qt_image.py *>&1 | Tee-Object -FilePath gui.log
           $code = $LASTEXITCODE
           $summary = (Get-Content gui.log | Where-Object { $_ -match "(passed|failed|error)" } | Select-Object -Last 1)
           $failures = (Get-Content gui.log | Where-Object { $_ -match "^(FAILED|ERROR) " } | Select-Object -First 8) -join " | "

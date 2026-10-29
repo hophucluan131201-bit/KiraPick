@@ -2,6 +2,7 @@
 
     python scripts/ui_screenshots.py --out <folder>            # all sizes at 100 %
     python scripts/ui_screenshots.py --out <folder> --scale 2   # e.g. 2560×1387 physical = 1280×693 logical
+    python scripts/ui_screenshots.py --out <folder> --compare   # Compare (part 2) with 2, 3 and 4 photos
 
 Uses synthetic photos in a temporary folder and a temporary settings file; never touches real photos or the
 user's KiraPick data. Sizes are the window's client area in logical pixels (as app.ui.layout_modes expects).
@@ -18,6 +19,7 @@ from pathlib import Path
 SIZES = [(1920, 1000), (1536, 800), (1280, 667), (960, 1000), (768, 800), (1920, 484), (1280, 323), (580, 400),
          (2560, 683), (2560, 664), (3840, 1024)]
 SCALED = [(1280, 693)]  # with --scale 2: 2560×1387 physical
+COMPARE_SIZES = [(1920, 1000), (1280, 667), (960, 1000), (1920, 484), (580, 400)]  # WIDE MEDIUM NARROW SHORT TINY
 
 
 def _photos(folder: Path, n: int = 24) -> None:
@@ -35,10 +37,51 @@ def _photos(folder: Path, n: int = 24) -> None:
         img.save(folder / f"DSC_{i:04d}.jpg", quality=85, exif=exif)
 
 
+def _compare_shots(w, out: Path, suffix: str, settle) -> None:  # noqa: ANN001
+    """Compare with 2 / 3 / 4 marked photos at the five layout modes (AI line on, one tile zoomed to 100 %)."""
+    from PySide6.QtCore import QItemSelectionModel
+    from PySide6.QtWidgets import QApplication
+
+    def ready() -> None:
+        tiles = [w.compare.tile(r.id) for r in w.compare.records()]
+        for _ in range(500):
+            QApplication.processEvents()
+            if all(t.viewer.source_label for t in tiles):
+                break
+        w.compare.wait_idle(10_000)
+        QApplication.processEvents()
+
+    for count in (2, 3, 4):
+        w.leave_compare()
+        w.resize(1920, 1000)
+        settle()
+        sel = w.grid.selectionModel()
+        sel.clearSelection()
+        for row in range(count):
+            sel.select(w.model.index(row), QItemSelectionModel.SelectionFlag.Select)
+        assert w.show_compare()
+        if not w.compare.ai_visible:
+            w.toggle_compare_ai()
+        for width, height in COMPARE_SIZES:
+            w.resize(width, height)
+            settle()
+            ready()
+            name = f"compare{count}_{width}x{height}{suffix}_{w.layout_controller.mode.value}.png"
+            w.grab().save(str(out / name))
+            print(name)
+    w.resize(1920, 1000)
+    settle()
+    first = w.compare.tile(w.compare.records()[0].id)
+    first.viewer.set_zoom(1.0)
+    ready()
+    w.grab().save(str(out / f"compare4_1920x1000{suffix}_zoom100.png"))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--scale", type=float, default=1.0)
+    parser.add_argument("--compare", action="store_true", help="Compare screenshots instead of the grid ones")
     args = parser.parse_args()
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     if args.scale != 1.0:
@@ -78,6 +121,10 @@ def main() -> int:
             w.model.wait_for_thumbnails()
             QApplication.processEvents()
 
+    if args.compare:
+        _compare_shots(w, args.out, suffix, settle)
+        w.close()
+        return 0
     for width, height in (SCALED if args.scale != 1.0 else SIZES):
         w.resize(width, height)
         settle()

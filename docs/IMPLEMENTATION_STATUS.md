@@ -358,10 +358,11 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
-## UI part 2 — Compare mode (in progress, 2026-10-29) — status: Tasks 1–7 tested offscreen; Task 8 not started
+## UI part 2 — Compare mode (2026-10-29) — status: Tasks 1–8 tested offscreen (Linux); Windows CI per run below; Windows manual blocked
 
 Spec `docs/superpowers/specs/2026-10-29-kirapick-compare-design.md` (rev 3), plan
-`docs/superpowers/plans/2026-10-29-kirapick-compare.md`. Batches 1–2 (Tasks 1–6) approved by the external reviewer.
+`docs/superpowers/plans/2026-10-29-kirapick-compare.md`. Batches 1–2 and Task 7 approved by the external reviewer;
+Task 8 waits for the final Part 2 review. Not released: no tag, no build, no publish.
 
 | Task | Status | Evidence |
 |---|---|---|
@@ -372,12 +373,25 @@ Spec `docs/superpowers/specs/2026-10-29-kirapick-compare-design.md` (rev 3), pla
 | 5 Actions on the active photo only | tested | `tests/gui/test_compare_actions.py` |
 | 6 AI line (I), arrangement settings | tested | `tests/gui/test_compare_overlay.py` |
 | 7 Pools, 200 000 000 px budget, shutdown | tested (offscreen) | `tests/gui/test_compare_lifecycle.py`, `tests/perf/test_compare_memory.py` |
-| 8 Regression, performance, Windows CI | not started | — |
+| 8 Regression, late callbacks, slow source, performance, Windows CI | tested offscreen; Windows CI see `docs/beta-release-checklist.md` B2 | `tests/gui/test_compare_final.py`, `tests/gui/test_qt_image.py`, `tests/perf/test_compare_perf.py`; Compare GUI files also run on the real `windows` platform in CI |
 
-Peak memory, four tiles zoomed to 100 % one after another (Linux VM, real loader): 24 MP NEF +587 MB over base
-(4 frames held, 96.6 Mpx); synthetic 45 MP +1 194 MB (181.8 Mpx held); 61 MP +1 299 MB (three held, the fourth tile
-dropped back to fit); never more than one full decode at a time; after leaving Compare all frames are released
-(allocator-trimmed RSS 184–210 MB).
+Task 8 fixes found by the measurements (each with a test that fails without it):
+- P / X / stars / ⟳ in Compare re-read only the compared photos' decisions and Xoay xem; before, every press scored
+  the whole session again (10,000 photos: median 79 ms → 15 ms, worst 95 → 20–22 ms).
+- The viewer's worker now makes the image ready to show: 32-bit and already turned (Pillow, which releases the GIL;
+  copied into the QImage in 4 MB steps). Qt's `convertToFormat` / `transformed` / `copy` keep Python's GIL for
+  their whole run, so a worker using them froze the window. Longest Qt-thread block while four 24 MP NEFs load at
+  100 %: 354–418 ms → 42–91 ms (synthetic 24 MP JPEG: 161 ms; target < 250 ms).
+
+Performance (Linux VM, 4 vCPU, offscreen; numbers only):
+- 10,000-photo session: enter Compare 23–24 ms, leave 18–23 ms, P/X median 15 ms (p95 18, worst 20–22), pointer
+  sweep over the tiles worst block 15 ms.
+- Cold (fresh session, 4 photos): previews in all tiles 0.53–0.55 s (24 MP NEF) / 0.40 s (24 MP JPEG), worst block
+  12–20 ms; 100 % on each tile: median 0.28–0.33 s, worst 0.36–0.54 s.
+- Peak memory, four tiles zoomed to 100 % one after another: 24 MP NEF +655 MB over base (4 frames, 96.6 Mpx);
+  synthetic 45 MP +1 275 MB (181.8 Mpx); 61 MP +1 456 MB (three held, the fourth dropped back to fit); never more
+  than one full decode at a time; after leaving Compare every frame is released (trimmed RSS 181–227 MB). The
+  worker-side conversion adds ~70–110 MB to the transient peak (packed bytes + QImage while the frame is made).
 
 ## UI part 1 — finish (Task 15, 2026-10-29) — status: tested offscreen (Linux); Windows CI pending; Windows manual blocked
 

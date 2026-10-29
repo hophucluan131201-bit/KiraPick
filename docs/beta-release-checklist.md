@@ -1,4 +1,4 @@
-# UI part 1 beta — release checklist, known issues, Windows manual validation
+# Beta 3.0.0b1 (UI parts 1 + 2) — release checklist, known issues, Windows manual validation
 
 Status words: **done** (evidence linked), **pending** (not run yet), **blocked** (needs the owner's PC).
 Do not declare the beta ready until every row of section 1 is done (pre-beta review, Task 14 approval).
@@ -9,6 +9,8 @@ No release marker is pushed until the owner gives the release command.
 | Decision | Status |
 |---|---|
 | Code review of UI part 1 (Tasks 1–15) | **passed** — Task 15 APPROVED WITH NOTES (implementation only) |
+| Code review of UI part 2 — Compare (Tasks 1–8) | **pending** — Tasks 1–7 approved; Task 8 final review package sent |
+| Part 3 — Advanced Export | **not started** — designed and built after part 2 is approved; no beta before it (review) |
 | Release ready (beta may be published) | **NO** — open: B3, B4, B5, B6, K2. Next phase: release-candidate validation, nothing published |
 
 Rules for the release-candidate phase (review):
@@ -30,6 +32,10 @@ Rules for the release-candidate phase (review):
 | B5 | Beta release notes: the v7 session upgrade, the `.v5.bak` / `.v6.bak` copy, what 2.2.1 shows for an upgraded folder, how to go back (section 2, K1) | pending | `packaging/notes/RELEASE_NOTES.md` at release time |
 | B6 | Packaged build self-test with the network blocked (`scripts/build_windows.ps1`, run by the build job) | pending | runs with the release build only |
 
+B2 for part 2: the `gui-windows` step also runs the Compare GUI files on the real `windows` platform (real mouse
+moves for the hover tests), `perf` includes `test_compare_perf.py` / `test_compare_memory.py` (Windows RSS from
+`K32GetProcessMemoryInfo`), `stress` includes `test_compare_lifecycle.py`.
+
 ## 2. Known issues (not blockers unless the owner decides otherwise)
 
 | # | Issue | Impact | Mitigation / next step |
@@ -41,6 +47,8 @@ Rules for the release-candidate phase (review):
 | K5 | Closing or switching folders during an export stops it after the current file (Task 11); the user is now asked first. Exporting again into the same folder copies only what is missing | — | Tested with 34 real RAW files (Task 15) |
 | K6 | No real camera JPEG folder from the owner: JPEG numbers use the full-size JPEGs embedded in RAW samples | Unknown for very large JPEGs | Optional: a JPEG shoot in step 8 |
 | K7 | Disk full: opening a folder explains it; a failed HD thumbnail leaves no file and keeps the small thumbnail; a full disk DURING an import or the AI analysis was not tested | Import / analysis would report the error and stop | Accept for the beta; test when a full-disk VM is available |
+| K9 | Compare: four 61 MP photos at 100 % use ~1.5 GB more RAM at the peak; the fourth tile goes back to its preview with a note (200 Mpx budget). Measured on Linux and in Windows CI only | Fine with the owner's 32 GB; an 8 GB PC with other apps open may page | Budget fixed in the spec; owner step 10 |
+| K10 | Compare: the active photo follows the mouse only (owner decision); a pen / touch screen without hover cannot change it except by tapping into a tile | Touch-only use is awkward | Not in scope for part 2 |
 | K8 | `test_real_raw_*`, RV2-04 pair test and RAW HD numbers skip in CI (RAW samples are git-ignored, some are not redistributable) | Covered on Linux only | — |
 
 Not an issue (checked on the real `windows` platform): the detail tabs need 349 px with full titles in Segoe UI
@@ -60,3 +68,4 @@ Ghi kết quả từng bước (Đạt / Lỗi + ảnh chụp màn hình nếu l
 7. **Đổi thư mục khi đang chạy:** như bước 6 nhưng mở thư mục khác.
 8. **Tốc độ:** một buổi chụp lớn (≥ 1.000 ảnh): mở, cuộn nhanh, kéo thanh cỡ ảnh lớn nhất, P/X liên tục 2–3 phút, chạy 📊 phân tích AI rồi cuộn trong lúc chạy. Ghi lại chỗ nào thấy giật. Thoát app rồi gửi dòng `GUI-thread GC` cuối cùng trong `kirapick.log`.
 9. **Ổ đầy (không bắt buộc):** USB gần đầy làm nơi xuất → app báo không đủ chỗ trước khi chép.
+10. **So sánh (phần 2):** đánh dấu 2, 3 rồi 4 ảnh (Ctrl+click) → bấm C (hoặc ⧉ So sánh). Rê chuột qua từng ảnh: khung xanh và bảng chi tiết đi theo ảnh dưới chuột. P / X / 1–5 / ⟳ chỉ đổi ảnh đang có khung xanh. Z 100 % trên từng ảnh (ảnh RAW lớn): cửa sổ không bị đứng khi ảnh gốc hiện ra. Đổi Xếp: Tự động / Một hàng / Lưới 2×2; kéo cửa sổ vào nửa màn hình. I bật/tắt dòng AI. Esc / G về lưới, vị trí cuộn của lưới giữ nguyên. Bấm ✕ khi đang ở So sánh và ảnh gốc đang tải: app đóng bình thường.

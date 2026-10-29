@@ -30,15 +30,25 @@ OWNER = ROOT / "test_photos" / "user_nikon"
 def _rss() -> int:
     """Resident memory of this process in bytes (Linux /proc; Windows working set)."""
     if sys.platform == "win32":
-        class Counters(ctypes.Structure):
-            _fields_ = [("cb", ctypes.c_ulong), ("faults", ctypes.c_ulong), ("peak_ws", ctypes.c_size_t),
-                        ("ws", ctypes.c_size_t), *((f"x{i}", ctypes.c_size_t) for i in range(6))]
+        from ctypes import wintypes
 
+        class Counters(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                        ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                        ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        get_info = kernel32.K32GetProcessMemoryInfo
+        get_info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+        get_info.restype = wintypes.BOOL
         c = Counters()
         c.cb = ctypes.sizeof(c)
-        handle = ctypes.windll.kernel32.GetCurrentProcess()
-        ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(c), c.cb)
-        return int(c.ws)
+        if not get_info(kernel32.GetCurrentProcess(), ctypes.byref(c), c.cb):
+            raise OSError(ctypes.get_last_error(), "GetProcessMemoryInfo failed")
+        return int(c.WorkingSetSize)
     for line in Path("/proc/self/status").read_text().splitlines():
         if line.startswith("VmRSS:"):
             return int(line.split()[1]) * 1024
@@ -76,9 +86,10 @@ def _trim() -> int:
     return _rss()
 
 
-def _jpeg(path: Path, size: tuple[int, int]) -> Path:
+def _jpeg(path: Path, size: tuple[int, int], mark: int = 0) -> Path:
+    """``mark`` changes the colour: different files (the import keeps one of identical photos)."""
     img = Image.linear_gradient("L").resize(size).convert("RGB")
-    ImageDraw.Draw(img).ellipse((size[0] // 4, size[1] // 4, size[0] // 2, size[1] // 2), fill=(200, 80, 40))
+    ImageDraw.Draw(img).ellipse((size[0] // 4, size[1] // 4, size[0] // 2, size[1] // 2), fill=(200, 80 + mark, 40))
     img.save(path, "JPEG", quality=85)
     return path
 
@@ -107,6 +118,7 @@ def test_peak_memory_zooming_four_tiles(qtbot, tmp_path: Path) -> None:  # noqa:
         assert view.wait_idle(120_000)
         QApplication.processEvents()
         base = _rss()
+        assert base > 0  # a memory reading that silently returns 0 must fail, not report "0 MB"
         decode_peaks: list[int] = []
         with _Sampler(view) as s:
             for r in recs:
