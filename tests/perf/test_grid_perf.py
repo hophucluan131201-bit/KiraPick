@@ -7,6 +7,7 @@ there as JSON lines (the review reads them). Targets come from the UI spec (Task
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import json
 import os
@@ -19,6 +20,7 @@ from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication
 
 from app.storage.sessions import open_session
+from app.storage.project import DB_NAME
 from app.ui import gc_guard
 from app.ui import main_window as mw
 from app.ui.asset_model import Filter, Sort
@@ -169,8 +171,26 @@ def test_sustained_culling(session, n: int, monkeypatch) -> None:  # noqa: ANN00
 
         monkeypatch.setattr(obj, name, wrapper)
 
-    for name in ("_learn_taste", "_show_inspector", "_update_counts", "refresh_steps", "retrain_taste"):
+    for name in ("_learn_taste", "_show_inspector", "_update_counts", "refresh_steps", "retrain_taste", "step"):
         timed_part(w, name, name.strip("_"))
+    timed_part(w.model, "refresh_record", "refresh_record")
+    real_transaction = w.project.transaction
+
+    @contextlib.contextmanager
+    def timed_transaction():  # noqa: ANN202 - the decision write incl. COMMIT (a WAL checkpoint would land here)
+        t0 = time.perf_counter()
+        with real_transaction() as conn:
+            yield conn
+        parts["transaction"] = parts.get("transaction", 0.0) + _ms(t0)
+
+    monkeypatch.setattr(w.project, "transaction", timed_transaction)
+    wal = w.project.folder / (DB_NAME + "-wal")
+
+    def wal_size() -> int:
+        try:
+            return wal.stat().st_size
+        except OSError:
+            return 0
     gc.callbacks.append(on_gc)
     rss0 = _rss_mb()
     times = []
@@ -179,6 +199,7 @@ def test_sustained_culling(session, n: int, monkeypatch) -> None:  # noqa: ANN00
         for i in range(presses):
             parts.clear()
             pauses_before = len(pauses)
+            wal_before = wal_size()
             t0 = time.perf_counter()
             w.set_flag("keep" if i % 2 == 0 else "reject")  # what P / X call (auto-advance on)
             t_paint = time.perf_counter()
@@ -187,8 +208,10 @@ def test_sustained_culling(session, n: int, monkeypatch) -> None:  # noqa: ANN00
             times.append(_ms(t0))
             if len(pauses) > pauses_before:
                 parts["gc"] = sum(pauses[pauses_before:])
+            wal_shrank = wal_size() < wal_before  # the WAL was checkpointed and restarted during this press
             if times[-1] > slowest[0]:  # "other": the decision commit, auto-advance, Qt events in between
-                slowest = (times[-1], {**parts, "other": times[-1] - sum(parts.values())})
+                slowest = (times[-1], {**parts, "other": times[-1] - sum(parts.values()),
+                                       "wal_checkpoint": float(wal_shrank)})
             if i % 20 == 0:  # the GUI-thread collector runs on its timer; let it run like in real use
                 gc_guard.GuiThreadCollector.check()
     finally:
