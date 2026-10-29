@@ -177,3 +177,26 @@ def test_key_hints_in_compare(qtbot, env: dict) -> None:  # noqa: F811
 def test_compare_needs_a_session(qtbot, env: dict) -> None:  # noqa: F811
     w = _window(qtbot, env)
     assert w.show_compare() is False and not w.in_compare()
+
+
+def test_view_buttons_leave_compare_cleanly(qtbot, env: dict) -> None:  # noqa: F811
+    """▦ Lưới ảnh returns to the grid; 🔍 Xem lớn and the panel preview open the loupe of the grid's current photo —
+    each closes Compare first (tiles emptied, nothing left loading in the background)."""
+    for trigger in ("grid", "loupe", "preview"):
+        w, ids = _opened(qtbot, env, [0, 1, 2], current=1)
+        current = w.current_record().id
+        tokens = {i: w.compare.tile(i).viewer._token for i in ids}
+        if trigger == "grid":
+            w.act_grid_view.trigger()
+            assert w.center.currentIndex() == 1
+        elif trigger == "loupe":
+            w.act_loupe.trigger()
+            assert w.center.currentIndex() == 2 and w.viewer._path == w.current_record().path
+        else:
+            w.detail.open_loupe.emit()
+            assert w.center.currentIndex() == 2
+        assert not w.in_compare() and w.current_record().id == current
+        assert not any(t.isVisible() for t in w.compare.tiles)
+        assert all(t.asset_id is None for t in w.compare.tiles)
+        assert all(w.compare.tiles[k].viewer._token != tokens[i] for k, i in enumerate(ids))  # late loads ignored
+        w.close()

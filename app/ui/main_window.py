@@ -276,7 +276,7 @@ class MainWindow(QMainWindow):
         self.act_grid_view = QAction("▦ Lưới ảnh", self)
         self.act_grid_view.setToolTip("Xem nhiều ảnh dạng lưới (Esc)")
         self.act_grid_view.setCheckable(True)
-        self.act_grid_view.triggered.connect(lambda: self.show_loupe(False))
+        self.act_grid_view.triggered.connect(lambda: self.leave_compare() or self.show_loupe(False))
         self.act_loupe = QAction("🔍 Xem lớn", self)
         self.act_loupe.setToolTip("Xem một ảnh lớn, phóng to tới 800% (Space / Enter)")
         self.act_loupe.setCheckable(True)
@@ -1912,6 +1912,8 @@ class MainWindow(QMainWindow):
         self.show_loupe(self.center.currentIndex() != 2)
 
     def show_loupe(self, on: bool) -> None:
+        if on and self.in_compare():
+            self.leave_compare()  # 🔍 Xem lớn / the panel preview: Compare closes first (tiles emptied)
         if on:
             rec = self.current_record()
             if rec is None:
