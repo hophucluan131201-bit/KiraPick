@@ -18,6 +18,7 @@ from PySide6.QtCore import QObject, QPointF, QRectF, QRunnable, Qt, QThreadPool,
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QToolButton, QWidget
 
+from app.storage.view import rotate_point
 from app.ui.asset_model import turned
 from app.core.errors import ImageReadError
 from app.ingest.preview import load_full_resolution, load_image
@@ -111,6 +112,7 @@ class ImageViewer(QGraphicsView):
         quarter turns clockwise here (Xoay xem: display only)."""
         self._token += 1
         self._rotation = rotation % 4
+        self._base: QPixmap | None = None  # the loaded image as in the file (not turned)
         self._focus = None  # a new photo: no requested point yet
         self._path = path
         self._message = ""
@@ -125,6 +127,30 @@ class ImageViewer(QGraphicsView):
             self._request(Quality.FULL)
         else:
             self._request(Quality.PREVIEW)
+
+    def set_rotation(self, turns: int) -> bool:
+        """Xoay xem on the photo shown: the image already loaded is turned in place (no reload) and, when zoomed,
+        the same photo point stays in the middle of the window. False when nothing is loaded yet (the caller then
+        shows the photo again)."""
+        turns %= 4
+        if self._path is None or getattr(self, "_base", None) is None:
+            return False
+        delta = (turns - self._rotation) % 4
+        if delta == 0:
+            return True
+        pm = self._item.pixmap()
+        centre = self.mapToScene(self.viewport().rect().center())
+        rel = QPointF(centre.x() / pm.width(), centre.y() / pm.height()) if not pm.isNull() else QPointF(0.5, 0.5)
+        x, y = rotate_point(min(max(rel.x(), 0.0), 1.0), min(max(rel.y(), 0.0), 1.0), delta)
+        self._rotation = turns
+        # Zoomed: the same photo point goes back to the middle (on a preview it also waits for the full image).
+        self._focus = QPointF(x, y) if self.zoom is not None else None
+        self._set_pixmap(turned(self._base, turns), keep_view=False)
+        return True
+
+    def mousePressEvent(self, event: object) -> None:  # noqa: N802 - Qt override
+        self._focus = None  # the user takes over: a pending E point never pulls the view back afterwards
+        super().mousePressEvent(event)  # type: ignore[arg-type]
 
     def toggle_zoom(self) -> None:
         """Z: fit <-> 100%."""
@@ -197,17 +223,20 @@ class ImageViewer(QGraphicsView):
             return
         pm = QPixmap.fromImage(image)  # as in the file; turned when shown
         if quality == Quality.FULL.value:
+            self._base = pm
             assert self._path is not None
             self._full_cache[self._path] = (pm, source)
             while len(self._full_cache) > _FULL_CACHE:
                 self._full_cache.popitem(last=False)
             self._show_full(pm, source)
         elif not self._shown_full:
+            self._base = pm
             self.source_label = source
             self._set_pixmap(turned(pm, self._rotation), keep_view=False)
             self.status_changed.emit(f"Xem trước {pm.width()}×{pm.height()} ({_source_vi(source)})")
 
     def _show_full(self, pm: QPixmap, source: str) -> None:
+        self._base = pm
         self._shown_full = True
         self._full_long = max(pm.width(), pm.height())
         self.source_label = source

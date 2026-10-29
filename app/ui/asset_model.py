@@ -36,6 +36,7 @@ from app.quality.score import Score, photo_scores
 from app.storage import view
 from app.storage.stats import SHOWN_PHOTO_SQL
 from app.storage.project import Project
+from app.ui.score_style import chip_for, display_value
 from app.ui.shutdown import Gate
 
 THUMB_DISPLAY = 240  # long side of cached pixmaps at 100 % and the default card size
@@ -390,8 +391,12 @@ class AssetListModel(QAbstractListModel):
             return None
         if role == Qt.ItemDataRole.DisplayRole:
             return rec.name
-        if role == Qt.ItemDataRole.ToolTipRole:
-            return rec.relative_path + (f"\n{rec.error}" if rec.error else "")
+        if role == Qt.ItemDataRole.ToolTipRole:  # the filmstrip shows no chip or score: they are here
+            chip = chip_for(rec.flag, rec.pick_rank is not None, rec.score, rec.ranked, rec.uncertain)
+            value = display_value(rec.ranked)
+            lines = [rec.relative_path] + ([chip.text] if chip else []) + ([f"Điểm {value}"] if value is not None
+                                                                           else [])
+            return "\n".join(lines) + (f"\n{rec.error}" if rec.error else "")
         if role == Qt.ItemDataRole.DecorationRole:
             return self.pixmap(rec)
         if role == ROLE_RECORD:

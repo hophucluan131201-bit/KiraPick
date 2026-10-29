@@ -1853,7 +1853,8 @@ class MainWindow(QMainWindow):
             self.model.set_rotation(asset_id, t)
         current = self.current_record()
         if current is not None and current.id in turns and self.center.currentIndex() == 2:
-            self.viewer.show_photo(current.path, self.model.pixmap(current), _long_side(current), current.rotation)
+            if not self.viewer.set_rotation(current.rotation):  # nothing loaded yet: show it again, turned
+                self.viewer.show_photo(current.path, self.model.pixmap(current), _long_side(current), current.rotation)
 
     def set_grid_cell(self, size: int) -> None:
         """Thumbnail size slider: card size of the grid (remembered)."""
