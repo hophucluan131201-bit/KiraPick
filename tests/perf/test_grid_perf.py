@@ -308,12 +308,8 @@ def test_close_and_switch_with_work_running(session, tmp_path: Path, n: int) -> 
     assert switch <= 1000 and close <= 1000
 
 
-@pytest.mark.parametrize("n", [10000])
-def test_long_session_gc_and_memory(session, n: int) -> None:  # noqa: ANN001
-    """Task 11 review: GC pauses of the GUI-thread collector and memory over a long session (2,000 P/X presses with
-    browsing in between, gc_guard on: the collector runs on its own timer through processEvents)."""
-    w, make = session
-    _open(w, make(n))
+def _long_session(w) -> tuple[list[float], list[float], float]:  # noqa: ANN001
+    """2,000 P/X presses with browsing in between; returns (GC pauses ms, RSS samples, seconds)."""
     w.select_row(0)
     pauses: list[float] = []
     started: list[float] = []
@@ -340,9 +336,38 @@ def test_long_session_gc_and_memory(session, n: int) -> None:  # noqa: ANN001
                 rss.append(_rss_mb())
     finally:
         gc.callbacks.remove(on_gc)
-    _record("long_session", n, presses=2000, seconds=time.perf_counter() - t_start, gc_runs=len(pauses),
+    return pauses, rss, time.perf_counter() - t_start
+
+
+@pytest.mark.parametrize("n", [10000])
+def test_long_session_gc_and_memory(session, n: int) -> None:  # noqa: ANN001
+    """Task 11 review: GC pauses of the GUI-thread collector and memory over a long session (2,000 P/X presses with
+    browsing in between, gc_guard on: the collector runs on its own timer through processEvents)."""
+    w, make = session
+    _open(w, make(n))
+    pauses, rss, seconds = _long_session(w)
+    _record("long_session", n, presses=2000, seconds=seconds, gc_runs=len(pauses),
             gc_pause_median_ms=statistics.median(pauses) if pauses else 0.0,
             gc_pause_worst_ms=max(pauses) if pauses else 0.0, rss_start_mb=rss[0], rss_end_mb=rss[-1],
             rss_growth_mb=rss[-1] - rss[0])
     assert gc_guard.installed() is not None
     assert (max(pauses) if pauses else 0.0) <= 100
+
+
+@pytest.mark.parametrize("n", [10000])
+def test_long_session_gc_freeze_experiment(session, n: int) -> None:  # noqa: ANN001
+    """RV14-03 evidence only (the app does NOT freeze): the same long session after ``gc.collect(); gc.freeze()``
+    once the session is open, so full collections skip the objects alive at that point (the 10,000 records, Qt
+    wrappers). No target asserted: the numbers are for the reviewer's decision."""
+    w, make = session
+    _open(w, make(n))
+    gc.collect()
+    tracked = len(gc.get_objects())
+    gc.freeze()
+    try:
+        pauses, rss, seconds = _long_session(w)
+    finally:
+        gc.unfreeze()
+    _record("long_session_gc_freeze_experiment", n, presses=2000, seconds=seconds, frozen_objects=tracked,
+            gc_runs=len(pauses), gc_pause_median_ms=statistics.median(pauses) if pauses else 0.0,
+            gc_pause_worst_ms=max(pauses) if pauses else 0.0, rss_growth_mb=rss[-1] - rss[0])
