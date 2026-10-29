@@ -1,6 +1,7 @@
 # KiraPick UI redesign, part 2: Compare mode — design
 
-Date: 2026-10-29. Owner-approved in chat, one question at a time:
+Date: 2026-10-29, revision 2 (external design review: CR-P2-01 action targets, CR-P2-02 arrangement, CR-P2-03 true
+100 % zoom, CR-P2-04 viewer resources). Owner-approved in chat, one question at a time:
 - how to start: marked photos only (Q1 = A);
 - zoom: each photo on its own (Q2 = C);
 - deciding: per photo, photos stay on screen (Q3 = A);
@@ -107,30 +108,149 @@ behaviour is unchanged.
 ## Architecture
 
 - `app/ui/compare_view.py` (new):
-  - `arrange(n, width, height, mode) -> (rows, cols)`: a pure function. **Tự động** picks the grid that maximises the
-    smallest displayed photo, using the compared photos' own aspect ratios after Xoay xem.
+  - `arrange(...)`: a pure function, contract and rules in "Arrangement" below.
   - `CompareTile(QWidget)`: one part 1 `ImageViewer` plus a header and overlay labels and the active frame. It emits
-    `hovered(asset_id)`. Its viewer shares the window's gate; its full-resolution cache holds 1 frame.
+    `hovered(asset_id)` from `enterEvent` (immediately). Its viewer shares the window's gate and Compare's decode
+    pool; its full-resolution cache holds 1 frame (see "Viewer resources").
   - `CompareView(QWidget)`:
     - holds up to 4 tiles in a `QGridLayout`;
     - methods `show_records(records, active_id)`, `set_arrangement(mode)`, `set_ai_visible(on)`,
       `refresh(asset_id)` (chips after a decision), `active_id`, `stop_pending()`, `wait_idle(ms)`;
-    - signals `active_changed(int)` (debounced 150 ms), `back_requested()`.
+    - signals `active_changed(int)` (immediate: the action target), `panel_photo_changed(int)` (debounced 150 ms,
+      flushed when the pointer leaves the tiles), `back_requested()`.
 - `MainWindow` (`app/ui/main_window.py`):
   - centre page 3 = Compare;
   - `show_compare()` / `leave_compare()`, key C, bottom bar button, G and Esc;
-  - `_targets()` returns `[active photo]` while Compare is shown;
+  - `_action_records()` / `view_record()` route every action (see "Action targets");
   - `step()` / auto-advance and ← → / Space / Enter do nothing in Compare;
-  - `_show_inspector()` uses the active photo in Compare;
-  - `_session_work()` adds every tile's `wait_idle` / `stop_pending`;
+  - `_session_work()` adds the Compare pool (see "Viewer resources");
   - `_close_session()` leaves Compare first.
 - `app/ui/bottom_bar.py`: the ⧉ So sánh button (with a tooltip on C and the 2–4 rule); compact width follows part 1.
 - Settings: `compare/arrangement` (auto | row | grid), `compare/show_ai` (bool). No schema change, no new table.
 
+## Action targets (CR-P2-01)
+
+One routing point decides which photo an action changes. Every culling action goes through it; no handler reads the
+marking or the current photo on its own while Compare is shown.
+
+- `MainWindow._action_records()` replaces the direct uses in `_targets()`:
+  - outside Compare: part 1 behaviour (the marked photos when more than one, else the current photo);
+  - in Compare: `[active photo]`, always exactly one record.
+- **The active ID changes at once** when the pointer enters a tile (`enterEvent`). Keys pressed right after
+  moving the mouse act on the new tile. The 150 ms debounce delays only the detail panel's refresh, never the
+  target.
+- **Detail-panel buttons and the panel's people menu act on the photo the panel shows.** When the pointer leaves the
+  tiles, the pending panel refresh is flushed at once. By the time a panel button can be clicked, panel photo ==
+  active photo. A click while they differ (a race inside one event-loop turn) is refused with a status message,
+  never applied to another photo.
+- `MainWindow.view_record()` gives the photo shown for E / Z / zoom / Xoay xem / the people menu / the inspector:
+  the active photo in Compare, the current photo otherwise. `current_record()` keeps meaning the grid's current photo.
+- **Audit list.** Each handler is routed through `_action_records()` or `view_record()` and gets a Compare test:
+  - keys and window actions:
+    - `set_flag` (P, K, X, U);
+    - `set_rating` (1–5, 0);
+    - `toggle_favorite` (F);
+    - `set_focus_label` (Q, W, R);
+    - `rotate_view`;
+  - detail panel:
+    - `detail.keep_clicked`, `reject_clicked`, `clear_clicked`, `rating_clicked`, `favorite_clicked`;
+    - `detail.people_menu_requested`;
+    - `detail.neighbour_clicked` (in Compare: shows that photo in the panel only, does not change the compared set);
+  - bottom bar: the Chọn / Loại / Bỏ chọn buttons, the "⋯" Xoay xem / Bỏ chọn entries, and the size / count refresh
+    after a change;
+  - view keys:
+    - `zoom_to_eyes` (E);
+    - `toggle_zoom` (Z);
+    - `zoom_step` (+ / −);
+  - inactive in Compare (no-ops):
+    - `step` / auto-advance / ← →;
+    - `toggle_loupe` (Space / Enter);
+  - not reachable in Compare (the grid is hidden): tick boxes, `_grid_context_menu`.
+  The tests check that the other compared photos' rows (`decisions`, `view_rotation`, `occurrences`) are
+  byte-identical before and after each action.
+
+## Arrangement (CR-P2-02)
+
+`arrange(sizes, area, mode, *, gap=6, header=22, min_tile=(120, 90)) -> Arrangement`
+
+- `sizes`: each compared photo's (width, height) **after Xoay xem** (quarter turns swap them), in tile order.
+  Unknown sizes count as 3:2.
+- `area`: the Compare page's size in logical pixels.
+- Result: `rows`, `cols` and each photo's (row, col, row span, col span).
+
+Each tile's photo box is `(area.w − gaps) / cols × (area.h − gaps) / rows − header`. A photo's displayed size is its
+aspect fitted into that box.
+
+| Mode | 2 photos | 3 photos | 4 photos |
+|---|---|---|---|
+| **Một hàng** (row) | 1 × 2 | 1 × 3 | 1 × 4 |
+| **Lưới 2×2** (grid) | 1 × 2 | 2 × 2: two on top, the third centred below (spans both columns) | 2 × 2 |
+| **Tự động** (auto) | best of 1 × 2, 2 × 1 | best of 1 × 3, 3 × 1, 2 × 2 (2 + 1) | best of 1 × 4, 4 × 1, 2 × 2 |
+
+- "Best": the candidate whose **smallest displayed photo area** is largest. Ties: fewer rows, then the order
+  listed.
+- Row or Grid where a tile box would be smaller than `min_tile` (e.g. 1 × 4 in a TINY window): Tự động is used for
+  this size; the arrangement button shows "Tự động (cửa sổ nhỏ)". The user's choice stays saved and returns when the
+  window is large enough.
+- SHORT / TINY get no special case: the rules run on the Compare page's own size, which part 1's layout modes
+  already decide. Examples tested:
+  - SHORT 1920 × 484 with four 3:2 photos → 1 × 4;
+  - NARROW 960 × 1000 with two 3:2 photos → 2 × 1;
+  - TINY 580 × 400 with four 3:2 photos → 2 × 2.
+- Re-arranged on resize (debounced with part 1's 120 ms), on Xoay xem of a compared photo and on a mode change. Each
+  tile keeps its zoom level and the photo point at its centre (relative coordinates).
+
+## Zoom: true 100 % (CR-P2-03)
+
+Each tile is a part 1 `ImageViewer` and keeps its contract, now written down and tested for tiles:
+
+- **100 % = one photo pixel per physical screen pixel.**
+  - The scale is `zoom / devicePixelRatio / (shown pixmap pixels per full-resolution pixel)`.
+  - At 150 % Windows scaling, 100 % therefore draws the photo at 1/1.5 logical pixels per photo pixel.
+  - The DPR is read from the tile's own screen; moving the window to another monitor re-applies the zoom.
+- **Before the full image arrives** (async load), a zoomed tile shows the preview scaled to the same physical size;
+  its header says "đang tải ảnh gốc…". When the full image arrives it replaces the preview without moving the photo
+  point at the tile centre.
+- **Xoay xem:** the loaded image turns in place; the photo point at the centre stays.
+- **E:**
+  - uses the face box (file coordinates) turned by Xoay xem;
+  - 200 % for small faces, 100 % for close-ups (part 1 rule);
+  - the point is kept until the full image is shown, unless the user pans first.
+- Wheel zoom keeps the photo point under the pointer. Double-click toggles fit ↔ 100 % at that point. Z toggles fit
+  ↔ 100 % at the centre.
+- Tests: physical pixel scale at DPR 1 / 1.5 / 2, preview → full swap keeps the centre point, rotation while zoomed,
+  E with a turned photo, wheel point fixed.
+
+## Viewer resources (CR-P2-04)
+
+- **Workers:** the four tiles share one decode pool owned by `CompareView`, **2 threads** (the loupe keeps its own,
+  as today). `ImageViewer` takes an optional `pool` argument.
+- **Full-resolution frames:**
+  - each tile caches at most 1 full frame;
+  - a Compare-wide budget of **200 megapixels** of full frames (≈ 800 MB at 4 bytes per pixel) — four 45 MP photos
+    fit, four 61 MP ones do not;
+  - when a new full frame would pass the budget, the least recently active zoomed tile drops its full frame and goes
+    back to fit (header: "đã trả về vừa khung để đủ bộ nhớ").
+  - Previews (≤ 2560 px) are not counted.
+- **Lifetime:**
+  - the tiles and the shared pool are created once with the window and **never deleted** while the window lives.
+    Closing Compare hides them and calls `show_photo(None)`, so their tokens change and late results are dropped.
+  - Workers hold only a path and a signal object owned by the tile, on the GUI thread.
+- **Leaving Compare:** `stop_pending()` on the shared pool (queued loads dropped; a running decode finishes and its
+  result is ignored by token).
+- **Folder switch / close:** `_session_work()` contains a `Work("đọc ảnh để so sánh", pool.waitForDone,
+  pool.clear)`. The part 1 contract applies: gate closed → settle → the database closes only after the pool is idle;
+  the hung-worker question and `os._exit(3)` path unchanged.
+- **Tests:**
+  - close and switch with 4 full loads running (slowed decode);
+  - a late result after leaving Compare is ignored;
+  - the budget drop;
+  - the shared pool never has more than 2 threads;
+  - stress loop added to the CI stress step.
+
 ## Memory and speed
 
-- A tile requests full resolution only when it is zoomed to 100 % or more. Each tile caches 1 full frame: 4 tiles
-  at 24 MP is about 400 MB, and only when all four are zoomed.
+- Memory and workers: see "Viewer resources".
 - Tiles show the grid's cached thumbnail at once, then the preview (as the loupe does); all loading is off the Qt
   thread.
 - Targets:
@@ -152,9 +272,8 @@ behaviour is unchanged.
 
 ## Testing
 
-1. `arrange()`:
-   - 2 / 3 / 4 photos in landscape, portrait and part 1 Snap sizes;
-   - each mode.
+1. `arrange()`: the table above for 2 / 3 / 4 photos in each mode, mixed portrait / landscape after Xoay xem, the
+   min-tile fallback, and the SHORT / NARROW / TINY examples.
 2. Start / leave:
    - C with 0, 1, 2, 4, 5 marked;
    - after Esc / G the current photo, marking, scroll and filter are unchanged.
@@ -185,8 +304,17 @@ behaviour is unchanged.
 
 ## Process
 
-- Same as part 1: an implementation plan in small tasks; after each task, a review package for the external
-  reviewer, then wait for approval.
+- The implementation plan follows the reviewer's 8 tasks:
+  1. arrangement and state model;
+  2. CompareTile and independent ImageViewer;
+  3. CompareView and active hover;
+  4. MainWindow integration;
+  5. active-photo culling commands;
+  6. AI overlay and settings;
+  7. worker lifecycle and memory;
+  8. regression, performance and Windows CI.
+- Same as part 1: after each task, a review package (diff, targeted and full suite, screenshots when visual,
+  regression risks) for the external reviewer, then wait for approval.
 - No tag / publish / release without the owner's release command; the beta is 3.0.0b1.
 - The owner tries the installed build afterwards (release-candidate validation, `docs/beta-release-checklist.md`
   section 3) and may change details then.
