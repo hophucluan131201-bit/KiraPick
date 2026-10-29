@@ -311,3 +311,12 @@ def test_initial_active():
 - RV-P2-B1-04 (Task 8): layout inside the real MainWindow, especially SHORT / TINY, and scroll bars while zoomed.
 - Batch 2 musts: rapid hover A → B → C then X before 150 ms → only C changes (Task 5); detail-panel button while the
   panel lags → refused (Task 5); actions from the bottom bar and its compact "⋯" menu (Task 5).
+
+## Review notes after Batch 2A (Tasks 4–5 APPROVED WITH NOTES)
+
+- RV-P2-B2A-01: test that the grid's scroll position is kept when Compare opens and closes in a session large enough
+  for the scroll bar to move; check the effect of `scrollTo(currentIndex())` on leaving.
+- RV-P2-B2A-02: make the detail panel's state clear when Ảnh tương tự shows a photo outside the compared set while
+  the action target stays the active tile.
+- RV-P2-B2A-03 (Task 7): both Compare pools in the shutdown contract; no session resource released while a worker runs.
+- Task 6 must: shortcuts (I) never fire while typing in a text field.
