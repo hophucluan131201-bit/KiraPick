@@ -142,3 +142,47 @@ def test_panel_on_a_photo_outside_the_compared_set_says_so(qtbot, env: dict) -> 
     assert w.detail.shown_id == other
     assert w.status.text() == ("Bảng chi tiết đang hiện ảnh ngoài nhóm so sánh — phím tắt vẫn áp dụng cho ảnh có "
                                "viền xanh; rê chuột lên một ảnh để quay lại.")
+
+
+def test_an_action_rereads_decisions_only(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    """P / X / stars / ⟳ in Compare (task 8 perf): the compared records get their decisions and Xoay xem re-read,
+    the session is not scored again (records_by_id took ~200 ms per press at 10,000 photos); the AI line stays."""
+    from app.storage import decisions
+    from app.ui.asset_model import Filter
+    from tests.gui.test_compare_actions import _hover
+
+    w, ids = _opened(qtbot, env, [0, 1], current=0)
+    _key(qtbot, w, Qt.Key.Key_I)
+    real = w.model.records_by_id
+    monkeypatch.setattr(w.model, "records_by_id", lambda asset_ids: {
+        i: replace(r, score=Score(total=66.0, parts={"eyes": 90.0}, confidence=1.0), ranked=Ranked(66.0, None, 66.0))
+        for i, r in real(asset_ids).items()})
+    w.reload_preserving_view()
+    with w.project.transaction() as conn:
+        decisions.set_flag(conn, ids[0], "keep")
+    w.model.set_filter(Filter.KEEP)  # photo 2 is not in the grid's list any more: re-read anyway
+    w.reload_preserving_view()
+    calls = []
+    monkeypatch.setattr(w.model, "records_by_id", lambda asset_ids: calls.append(asset_ids) or real(asset_ids))
+    _hover(w, ids[1])
+    _key(qtbot, w, Qt.Key.Key_X)
+    _key(qtbot, w, Qt.Key.Key_3)
+    w.rotate_view()
+    assert calls == []
+    tile = w.compare.tile(ids[1])
+    rec = next(r for r in w.compare.records() if r.id == ids[1])
+    assert rec.flag == "reject" and rec.rating == 3 and rec.rotation == 1
+    assert "Loại" in tile.header.text() and tile.ai_label.text() == "K 66"
+    assert next(r for r in w.compare.records() if r.id == ids[0]).flag == "keep"  # the other photo untouched
+
+
+def test_an_action_on_a_photo_gone_leaves_compare(qtbot, env: dict) -> None:  # noqa: F811
+    from tests.gui.test_compare_actions import _hover
+
+    w, ids = _opened(qtbot, env, [0, 1, 2], current=0)
+    _hover(w, ids[1])
+    with w.project.transaction() as conn:
+        conn.execute("DELETE FROM assets WHERE id = ?", (ids[1],))
+    w._refresh_compare([ids[1]])
+    assert not w.in_compare()
+    assert w.status.text() == "Một ảnh đang so sánh không còn trong danh sách — đã về lưới."

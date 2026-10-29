@@ -1911,7 +1911,17 @@ class MainWindow(QMainWindow):
         filter; zoom, pan and the active photo stay. A photo gone from the session closes Compare."""
         if not self.in_compare():
             return
-        ids = [r.id for r in self.compare.records() if changed is None or r.id in changed]
+        if changed is not None:  # an action: only decisions / Xoay xem changed, no need to score the session again
+            for rec in self.compare.records():
+                if rec.id in changed:
+                    new = self.model.with_decisions(rec)
+                    if new is None:
+                        self.leave_compare()
+                        self.status.setText("Một ảnh đang so sánh không còn trong danh sách — đã về lưới.")
+                        return
+                    self.compare.update_record(new)
+            return
+        ids = [r.id for r in self.compare.records()]
         if not ids:
             return
         fresh = self.model.records_by_id(ids)

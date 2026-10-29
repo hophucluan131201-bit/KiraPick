@@ -11,7 +11,7 @@ import json
 import threading
 import re
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from collections.abc import Callable
@@ -396,6 +396,21 @@ class AssetListModel(QAbstractListModel):
             (d["flag"], d["rating"], bool(d["favorite"]), d["focus"]) if d else (None, 0, False, None))
         idx = self.index(row)
         self.dataChanged.emit(idx, idx)
+
+    def with_decisions(self, rec: AssetRecord) -> AssetRecord | None:
+        """A copy of ``rec`` with its decisions and Xoay xem re-read (cheap: no scores; Compare after an action).
+        None when the photo is no longer in the session."""
+        if self._project is None:
+            return None
+        conn = self._project.conn
+        if conn.execute("SELECT 1 FROM assets WHERE id = ?", (rec.id,)).fetchone() is None:
+            return None
+        d = conn.execute(
+            "SELECT flag, rating, favorite, focus FROM decisions WHERE asset_id = ? AND subject_id IS NULL", (rec.id,)
+        ).fetchone()
+        flag, rating, favorite, focus = (d["flag"], d["rating"], bool(d["favorite"]), d["focus"]) if d else (None, 0, False, None)
+        return replace(rec, flag=flag, rating=rating, favorite=favorite, focus=focus,
+                       rotation=view.rotation(conn, rec.id))
 
     def record(self, index: QModelIndex | QPersistentModelIndex) -> AssetRecord | None:
         return self._rows[index.row()] if index.isValid() and index.row() < len(self._rows) else None
