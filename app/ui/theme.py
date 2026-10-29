@@ -58,5 +58,9 @@ def apply_dark_theme(app: QApplication) -> None:
         QToolButton#backToGrid {{ background: rgba(30, 31, 34, 210); border: 1px solid {RAISED};
                                   padding: 6px 12px; font-weight: 600; }}
         QToolButton#backToGrid:hover {{ background: #2d4a78; }}
+        QWidget#compareTile {{ border: 2px solid transparent; }}
+        QWidget#compareTile[active="true"] {{ border: 2px solid {ACCENT}; }}
+        QLabel#compareHeader {{ padding: 2px 6px; }}
+        QLabel#compareAi {{ background: rgba(30, 31, 34, 210); padding: 3px 8px; border-radius: 4px; }}
         """
     )

@@ -63,7 +63,10 @@ class ImageViewer(QGraphicsView):
     status_changed = Signal(str)  # human-readable description of what is shown
     back_requested = Signal()  # the "back to grid" button was pressed
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *, pool: QThreadPool | None = None,
+                 full_pool: QThreadPool | None = None, full_cache: int = _FULL_CACHE) -> None:
+        """``pool`` / ``full_pool``: decode pools shared with other viewers (Compare), used and never owned;
+        full-resolution loads go to ``full_pool`` (default: ``pool``). Without them the viewer owns one 2-thread pool."""
         super().__init__(parent)
         self.setScene(QGraphicsScene(self))
         self._item = QGraphicsPixmapItem()
@@ -83,8 +86,12 @@ class ImageViewer(QGraphicsView):
         self.back_button.move(12, 12)
         self.back_button.clicked.connect(self.back_requested.emit)
 
-        self._pool = QThreadPool(self)
-        self._pool.setMaxThreadCount(2)
+        if pool is None:
+            pool = QThreadPool(self)
+            pool.setMaxThreadCount(2)
+        self._pool = pool
+        self._full_pool = full_pool or pool
+        self._full_cache_size = max(1, full_cache)
         self.gate = Gate()  # the window shares its own: closed while a session is being released
         self._signals = _Signals(self)  # destroyed by the viewer, on the GUI thread (app.ui.shutdown)
         self._signals.done.connect(self._on_loaded)
@@ -192,11 +199,15 @@ class ImageViewer(QGraphicsView):
         return pm.width(), pm.height()
 
     def wait_idle(self, msecs: int = 30000) -> bool:
-        return self._pool.waitForDone(msecs)
+        done = self._pool.waitForDone(msecs)
+        return (self._full_pool is self._pool or self._full_pool.waitForDone(msecs)) and done
 
     def stop_pending(self) -> None:
-        """Drop loads not started yet (a running decode cannot be interrupted; it finishes)."""
+        """Drop loads not started yet (a running decode cannot be interrupted; it finishes). On shared pools this
+        also drops the other viewers' queued loads (Compare stops all its tiles together)."""
         self._pool.clear()
+        if self._full_pool is not self._pool:
+            self._full_pool.clear()
 
     # ----------------------------------------------------------- loading
     def _request(self, quality: Quality) -> None:
@@ -208,7 +219,8 @@ class ImageViewer(QGraphicsView):
             self._show_full(pm, source)
             return
         if self.gate.open:
-            self._pool.start(_LoadTask(self._token, self._path, quality, self._signals))
+            pool = self._full_pool if quality is Quality.FULL else self._pool
+            pool.start(_LoadTask(self._token, self._path, quality, self._signals))
 
     def _on_loaded(self, token: int, quality: str, image: QImage, source: str, error: str) -> None:
         if token != self._token:
@@ -226,7 +238,7 @@ class ImageViewer(QGraphicsView):
             self._base = pm
             assert self._path is not None
             self._full_cache[self._path] = (pm, source)
-            while len(self._full_cache) > _FULL_CACHE:
+            while len(self._full_cache) > self._full_cache_size:
                 self._full_cache.popitem(last=False)
             self._show_full(pm, source)
         elif not self._shown_full:
