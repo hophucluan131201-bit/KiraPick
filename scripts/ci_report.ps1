@@ -16,8 +16,8 @@ function Report-Pytest {
     }
     $crash = @()
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match "(Fatal Python error|Windows fatal exception|Segmentation fault|access violation)") {
-            $crash += $lines[$i..([Math]::Min($i + 25, $lines.Count - 1))]
+        if ($lines[$i] -match "(Fatal Python error|Windows fatal exception|Segmentation fault|access violation|Exceptions caught in Qt event loop)") {
+            $crash += $lines[$i..([Math]::Min($i + 40, $lines.Count - 1))]
         }
     }
     if ($crash.Count -gt 0) {

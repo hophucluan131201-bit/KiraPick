@@ -41,7 +41,7 @@ def _enter(view: CompareView, asset_id: int) -> None:
     """The real pointer onto the tile's photo (from outside the tiles first, so it is a real move)."""
     move_pointer(view.back_button, view.back_button.rect().center())
     viewport = view.tile(asset_id).viewer.viewport()
-    move_pointer(viewport, viewport.rect().center())
+    assert move_pointer(viewport, viewport.rect().center())
 
 
 def _leave(view: CompareView) -> None:
@@ -220,5 +220,11 @@ def test_resting_pointer_does_not_pick_a_tile_when_compare_opens(qtbot, photos) 
     QApplication.sendEvent(tile, QEnterEvent(pos, pos, tile.mapToGlobal(pos)))  # appeared under the pointer
     assert view.active_id == 2
     viewport = tile.viewer.viewport()
-    move_pointer(viewport, viewport.rect().center() + QPoint(3, 3))  # now the user moves
-    assert view.active_id == 3
+    from PySide6.QtGui import QCursor
+
+    start = QCursor.pos()
+    moved = move_pointer(viewport, viewport.rect().center() + QPoint(3, 3))  # now the user moves
+    under = QApplication.widgetAt(QCursor.pos())
+    assert moved and view.active_id == 3, (moved, view.active_id, (start.x(), start.y()),
+                                           (QCursor.pos().x(), QCursor.pos().y()), type(under).__name__,
+                                           under is viewport, view._armed)
