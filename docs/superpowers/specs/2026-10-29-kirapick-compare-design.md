@@ -1,7 +1,8 @@
 # KiraPick UI redesign, part 2: Compare mode — design
 
-Date: 2026-10-29, revision 2 (external design review: CR-P2-01 action targets, CR-P2-02 arrangement, CR-P2-03 true
-100 % zoom, CR-P2-04 viewer resources). Owner-approved in chat, one question at a time:
+Date: 2026-10-29, revision 3 (review of revision 2: CR-P2-V2-01 minimum size measured on the fitted photo, CR-P2-V2-02
+spans in the arrangement score; RV-P2-01 exact pixel budget, RV-P2-02 decode peak and oversized frames). Revision 2:
+CR-P2-01 action targets, CR-P2-02 arrangement, CR-P2-03 true 100 % zoom, CR-P2-04 viewer resources. Owner-approved in chat, one question at a time:
 - how to start: marked photos only (Q1 = A);
 - zoom: each photo on its own (Q2 = C);
 - deciding: per photo, photos stay on screen (Q3 = A);
@@ -169,34 +170,60 @@ marking or the current photo on its own while Compare is shown.
   The tests check that the other compared photos' rows (`decisions`, `view_rotation`, `occurrences`) are
   byte-identical before and after each action.
 
-## Arrangement (CR-P2-02)
+## Arrangement (CR-P2-02, revision 3)
 
-`arrange(sizes, area, mode, *, gap=6, header=22, min_tile=(120, 90)) -> Arrangement`
+`arrange(sizes, area, mode, *, gap=6, header=22, min_long=160) -> Arrangement`
 
 - `sizes`: each compared photo's (width, height) **after Xoay xem** (quarter turns swap them), in tile order.
   Unknown sizes count as 3:2.
 - `area`: the Compare page's size in logical pixels.
-- Result: `rows`, `cols` and each photo's (row, col, row span, col span).
+- Result: `rows`, `cols`, each photo's cell (row, col, row span, col span), and `fallback`.
 
-Each tile's photo box is `(area.w − gaps) / cols × (area.h − gaps) / rows − header`. A photo's displayed size is its
-aspect fitted into that box.
+**Candidates** (cells listed in tile order):
 
 | Mode | 2 photos | 3 photos | 4 photos |
 |---|---|---|---|
 | **Một hàng** (row) | 1 × 2 | 1 × 3 | 1 × 4 |
-| **Lưới 2×2** (grid) | 1 × 2 | 2 × 2: two on top, the third centred below (spans both columns) | 2 × 2 |
-| **Tự động** (auto) | best of 1 × 2, 2 × 1 | best of 1 × 3, 3 × 1, 2 × 2 (2 + 1) | best of 1 × 4, 4 × 1, 2 × 2 |
+| **Lưới 2×2** (grid) | 1 × 2 | "2 + 1": 2 rows × 2 cols, photos 1–2 on top, photo 3 below spanning both columns | 2 × 2 |
+| **Tự động** (auto) | best of 1 × 2, 2 × 1 | best of 1 × 3, 3 × 1, 2 + 1 | best of 1 × 4, 4 × 1, 2 × 2 |
 
-- "Best": the candidate whose **smallest displayed photo area** is largest. Ties: fewer rows, then the order
-  listed.
-- Row or Grid where a tile box would be smaller than `min_tile` (e.g. 1 × 4 in a TINY window): Tự động is used for
-  this size; the arrangement button shows "Tự động (cửa sổ nhỏ)". The user's choice stays saved and returns when the
-  window is large enough.
+**Geometry of one candidate.**
+- Column width `cw = (area.w − gap·(cols − 1)) / cols`; row height `rh = (area.h − gap·(rows − 1)) / rows`.
+- A cell's photo box uses its spans:
+  - width `cw·col_span + gap·(col_span − 1)`;
+  - height `rh·row_span + gap·(row_span − 1) − header`.
+
+  So the third photo of 2 + 1 is fitted into the full width of both columns.
+- A photo's **displayed size** is its aspect fitted into its own box.
+
+**Choosing.**
+- Auto picks the candidate whose smallest displayed photo **area** (rounded to whole px²) is largest. Ties: fewer
+  rows, then the order listed.
+- **Minimum size (`min_long`)** is measured on the **displayed photo**, not on the box: a candidate is too small
+  when any displayed photo's long side is under 160 px. Row or Grid that is too small for the current size is
+  replaced by Auto, with `fallback = True`. The arrangement button then shows "Tự động (cửa sổ nhỏ)"; the user's
+  saved choice is kept and used again when the window is large enough. Auto is used even if its best candidate is
+  under 160 px (nothing larger is possible); `fallback` stays False then.
+
+**Worked examples** (3:2 photo = 6000 × 4000, portrait = 4000 × 6000; values from a prototype of exactly these
+rules, used as the test expectations):
+
+| Area | Photos | Mode | Result | Why (smallest displayed area px², long side px) |
+|---|---|---|---|---|
+| 1920 × 484 (SHORT) | 4 landscape | auto | 1 × 4 | 1 × 4: 150 734; 2 × 2: 70 634; 4 × 1: 13 395 |
+| 960 × 1000 (NARROW) | 2 landscape | auto | 2 × 1 | 2 × 1: 338 438; 1 × 2: 151 686 |
+| 580 × 400 (TINY) | 4 landscape | auto | 2 × 2 | 2 × 2: 45 938; 1 × 4: 13 160 |
+| 580 × 400 (TINY) | 4 landscape | row | 2 × 2, fallback | 1 × 4 long side 140.5 < 160 |
+| 1600 × 900 | 4 landscape | row | 1 × 4, no fallback | long side 395.5 |
+| 1200 × 800 | 2 portrait | auto | 1 × 2 | 1 × 2: 403 523; 2 × 1: 93 750 |
+| 1600 × 900 | 3 landscape | auto | 2 + 1 | 2 + 1: 270 938; 1 × 3: 186 796; 3 × 1: 112 614 |
+| 1600 × 900 | portrait, portrait, landscape | auto | 1 × 3 | 1 × 3: 186 796; 2 + 1: 120 417; 3 × 1: 50 051 |
+| 1600 × 900 | landscape, landscape, portrait | auto | 1 × 3 | 1 × 3: 186 796; 2 + 1: 120 417; 3 × 1: 50 051 |
+| 1000 × 800 | 3 landscape | grid | 2 + 1 | photos 1–2 fitted 497.0 × 331.3; photo 3 (spanning) 562.5 × 375.0 |
+| 960 × 1000 | 3 landscape | auto | 2 + 1 | 2 + 1: 151 686; 3 × 1: 141 681; 1 × 3: 66 571 |
+
 - SHORT / TINY get no special case: the rules run on the Compare page's own size, which part 1's layout modes
-  already decide. Examples tested:
-  - SHORT 1920 × 484 with four 3:2 photos → 1 × 4;
-  - NARROW 960 × 1000 with two 3:2 photos → 2 × 1;
-  - TINY 580 × 400 with four 3:2 photos → 2 × 2.
+  decide.
 - Re-arranged on resize (debounced with part 1's 120 ms), on Xoay xem of a compared photo and on a mode change. Each
   tile keeps its zoom level and the photo point at its centre (relative coordinates).
 
@@ -223,29 +250,44 @@ Each tile is a part 1 `ImageViewer` and keeps its contract, now written down and
 
 ## Viewer resources (CR-P2-04)
 
-- **Workers:** the four tiles share one decode pool owned by `CompareView`, **2 threads** (the loupe keeps its own,
-  as today). `ImageViewer` takes an optional `pool` argument.
-- **Full-resolution frames:**
+- **Workers (revision 3):** Compare owns two single-thread pools, 2 threads in all (the loupe keeps its own, as
+  today):
+  - **previews**, 1 thread;
+  - **full-resolution decodes**, 1 thread, so at most one full decode runs at a time. This bounds the transient
+    peak of a decode — RAW buffer, 8-bit RGB, byte copy and QImage copy, about 11 bytes per pixel, ≈ 670 MB for a
+    61 MP RAW — to one decode, and previews never wait behind a 2-second demosaic.
+  - `ImageViewer` takes optional `pool` and `full_pool` arguments (`full_pool` defaults to `pool`).
+- **Full-resolution frames (budget in exact pixels, revision 3):**
   - each tile caches at most 1 full frame;
-  - a Compare-wide budget of **200 megapixels** of full frames (≈ 800 MB at 4 bytes per pixel) — four 45 MP photos
-    fit, four 61 MP ones do not;
-  - when a new full frame would pass the budget, the least recently active zoomed tile drops its full frame and goes
-    back to fit (header: "đã trả về vừa khung để đủ bộ nhớ").
-  - Previews (≤ 2560 px) are not counted.
+  - the budget is `FULL_BUDGET_PIXELS = 200_000_000` pixels of held full frames (≈ 800 MB at 4 bytes per pixel) —
+    four 45 MP photos fit, four 61 MP ones do not;
+  - frames are counted as `width × height` of the decoded image, an exact integer: no rounding, no megapixel units
+    in signals;
+  - **reservation before decoding:**
+    - a zoomed tile reserves its expected pixels (the asset's recorded width × height, else the preview's size
+      scaled by the known full long side) before its full decode is queued;
+    - the reservation is corrected to the decoded size on arrival and released if the load fails or is dropped;
+  - when a reservation would pass the budget, the least recently active tiles with held or reserved full frames
+    drop them and go back to fit (header: "đã trả về vừa khung để đủ bộ nhớ") until it fits;
+  - **a single frame larger than the whole budget** is never decoded in Compare. The tile stays zoomed on the
+    preview, with header "Ảnh quá lớn để mở độ phân giải đầy đủ khi so sánh — mở ở Xem lớn để soi 100 %";
+  - previews (≤ 2560 px) are not counted.
 - **Lifetime:**
   - the tiles and the shared pool are created once with the window and **never deleted** while the window lives.
     Closing Compare hides them and calls `show_photo(None)`, so their tokens change and late results are dropped.
   - Workers hold only a path and a signal object owned by the tile, on the GUI thread.
 - **Leaving Compare:** `stop_pending()` on the shared pool (queued loads dropped; a running decode finishes and its
   result is ignored by token).
-- **Folder switch / close:** `_session_work()` contains a `Work("đọc ảnh để so sánh", pool.waitForDone,
-  pool.clear)`. The part 1 contract applies: gate closed → settle → the database closes only after the pool is idle;
+- **Folder switch / close:** `_session_work()` contains one `Work("đọc ảnh để so sánh", …)` that waits for and clears
+  both Compare pools. The part 1 contract applies: gate closed → settle → the database closes only after the pool is idle;
   the hung-worker question and `os._exit(3)` path unchanged.
 - **Tests:**
   - close and switch with 4 full loads running (slowed decode);
   - a late result after leaving Compare is ignored;
-  - the budget drop;
-  - the shared pool never has more than 2 threads;
+  - the budget drop with exact pixel counts;
+  - reservation before decoding;
+  - an oversized single frame;
+  - never more than 1 full decode and 2 threads in all;
   - stress loop added to the CI stress step.
 
 ## Memory and speed
@@ -256,6 +298,8 @@ Each tile is a part 1 `ImageViewer` and keeps its contract, now written down and
 - Targets:
   - entering Compare with 4 photos: first paint ≤ 100 ms (thumbnails), previews ≤ 1 s for real NEF files;
   - P/X end-to-end in Compare: median ≤ 50 ms, worst ≤ 100 ms;
+  - peak process RAM measured while full frames decode for 4 tiles (24 MP NEF; synthetic 45 MP and 61 MP), reported
+    with the transient peak per decode (RV-P2-02);
   - the active-photo change on hover never blocks the Qt thread by more than 50 ms.
 
 ## Errors and edge cases
@@ -272,8 +316,8 @@ Each tile is a part 1 `ImageViewer` and keeps its contract, now written down and
 
 ## Testing
 
-1. `arrange()`: the table above for 2 / 3 / 4 photos in each mode, mixed portrait / landscape after Xoay xem, the
-   min-tile fallback, and the SHORT / NARROW / TINY examples.
+1. `arrange()`: every row of the worked-examples table, spans of 2 + 1, mixed portrait / landscape after Xoay xem,
+   the fallback rule measured on the displayed photo.
 2. Start / leave:
    - C with 0, 1, 2, 4, 5 marked;
    - after Esc / G the current photo, marking, scroll and filter are unchanged.

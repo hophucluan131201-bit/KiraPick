@@ -11,7 +11,7 @@ one 2-thread decode pool with a 200 MP full-frame budget, and join the part 1 sh
 **Tech Stack:** Python 3.12/3.13, PySide6 6.12 (Qt Widgets), SQLite (no schema change), pytest + pytest-qt (offscreen;
 real `windows` platform in CI).
 
-**Spec:** `docs/superpowers/specs/2026-10-29-kirapick-compare-design.md` (revision 2). Part 1 spec and plan:
+**Spec:** `docs/superpowers/specs/2026-10-29-kirapick-compare-design.md` (revision 3). Plan revision 2 (review CR-P2-V2-01/02, RV-P2-01/02). Part 1 spec and plan:
 `docs/superpowers/specs/2026-10-28-kirapick-ui-layout-design.md`, `docs/superpowers/plans/2026-10-28-kirapick-ui-layout.md`.
 
 ## Global Constraints
@@ -21,7 +21,7 @@ real `windows` platform in CI).
 - Keys 1–5 stay stars. ← →, Space / Enter, auto-advance: no-ops in Compare. Enter with C or ⧉ So sánh; leave with Esc, G or "◀ Về lưới ảnh".
 - Current photo, marking, scroll and filter unchanged by Compare; photos never leave Compare until it closes.
 - 100 % = one photo pixel per physical screen pixel (`zoom / devicePixelRatio / pixmap_scale`).
-- Shared decode pool: 2 threads; ≤ 1 full frame per tile; Compare full-frame budget 200 megapixels.
+- Compare pools: previews 1 thread + full decodes 1 thread (2 in all, ≤ 1 full decode at a time); ≤ 1 full frame per tile; budget `FULL_BUDGET_PIXELS = 200_000_000` exact pixels, reserved before decoding; a frame larger than the budget is never decoded in Compare.
 - Settings only: `compare/arrangement` ∈ {"auto", "row", "grid"} (default "auto"), `compare/show_ai` (default false). No schema change.
 - No change to AI scoring/ranking/learning, decisions beyond user actions, export, source photos. No auto-Reject. No tag / publish / release without the owner's command (beta 3.0.0b1).
 - Wording rename only: 🎓 "So sánh ảnh…" → "🎓 Dạy gu…".
@@ -47,46 +47,61 @@ real `windows` platform in CI).
 - Produces:
   - `Mode = Literal["auto", "row", "grid"]`
   - `@dataclass(frozen=True) class Cell: row: int; col: int; row_span: int = 1; col_span: int = 1`
-  - `@dataclass(frozen=True) class Arrangement: rows: int; cols: int; cells: tuple[Cell, ...]; fallback: bool` (fallback = Row/Grid replaced by auto for min-tile)
-  - `arrange(sizes: Sequence[tuple[int, int] | None], area: tuple[int, int], mode: Mode, *, gap: int = 6, header: int = 22, min_tile: tuple[int, int] = (120, 90)) -> Arrangement`
+  - `@dataclass(frozen=True) class Arrangement: rows: int; cols: int; cells: tuple[Cell, ...]; fallback: bool` (fallback = Row/Grid replaced by auto because a displayed photo's long side < `min_long`)
+  - `arrange(sizes: Sequence[tuple[int, int] | None], area: tuple[int, int], mode: Mode, *, gap: int = 6, header: int = 22, min_long: int = 160) -> Arrangement`
+  - `displayed_sizes(sizes, area, rows: int, cols: int, cells: Sequence[Cell], *, gap: int = 6, header: int = 22) -> list[tuple[float, float]]` (each photo fitted into its cell's box, spans included)
   - `turned_size(width: int | None, height: int | None, rotation: int) -> tuple[int, int] | None` (odd quarter turns swap; None when unknown)
   - `start_error(count: int) -> str | None` (the two exact status texts; None for 2–4)
   - `initial_active(compared: Sequence[int], current: int | None) -> int`
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing tests** (expected values = the spec's worked-examples table, revision 3)
 
 ```python
-@pytest.mark.parametrize("n,mode,expected", [
-    (2, "row", (1, 2)), (3, "row", (1, 3)), (4, "row", (1, 4)),
-    (2, "grid", (1, 2)), (3, "grid", (2, 2)), (4, "grid", (2, 2)),
-])
-def test_fixed_modes(n, mode, expected):
-    a = arrange([(6000, 4000)] * n, (1600, 900), mode)
-    assert (a.rows, a.cols) == expected and not a.fallback
+L, P = (6000, 4000), (4000, 6000)
 
-def test_grid_three_puts_third_centred_below():
-    a = arrange([(6000, 4000)] * 3, (1600, 900), "grid")
+@pytest.mark.parametrize("sizes,area,mode,shape,fallback", [
+    ([L] * 4, (1920, 484), "auto", (1, 4), False),     # SHORT
+    ([L] * 2, (960, 1000), "auto", (2, 1), False),     # NARROW
+    ([L] * 4, (580, 400), "auto", (2, 2), False),      # TINY
+    ([L] * 4, (580, 400), "row", (2, 2), True),        # 1 × 4 long side 140.5 < 160 → auto
+    ([L] * 4, (1600, 900), "row", (1, 4), False),      # long side 395.5
+    ([P] * 2, (1200, 800), "auto", (1, 2), False),
+    ([L] * 3, (1600, 900), "auto", (2, 2), False),     # 2 + 1
+    ([P, P, L], (1600, 900), "auto", (1, 3), False),   # mixed
+    ([L, L, P], (1600, 900), "auto", (1, 3), False),   # mixed, other order
+    ([L] * 3, (960, 1000), "auto", (2, 2), False),     # 2 + 1 beats 3 × 1 (151 686 vs 141 681)
+    ([L] * 3, (1600, 900), "grid", (2, 2), False),
+    ([L] * 2, (1600, 900), "grid", (1, 2), False),
+    ([L] * 4, (1600, 900), "grid", (2, 2), False),
+])
+def test_worked_examples(sizes, area, mode, shape, fallback):
+    a = arrange(sizes, area, mode)
+    assert (a.rows, a.cols) == shape and a.fallback is fallback
+
+def test_two_plus_one_third_spans_both_columns_and_is_fitted_wider():
+    a = arrange([L] * 3, (1000, 800), "grid")
     assert a.cells[2] == Cell(1, 0, 1, 2)
+    fitted = displayed_sizes([L] * 3, (1000, 800), a.rows, a.cols, a.cells)
+    assert fitted[0] == pytest.approx((497.0, 331.3), abs=0.1)
+    assert fitted[2] == pytest.approx((562.5, 375.0), abs=0.1)  # wider than one column: the span counts
 
-@pytest.mark.parametrize("area,n,expected", [
-    ((1920, 484), 4, (1, 4)),   # SHORT
-    ((960, 1000), 2, (2, 1)),   # NARROW
-    ((580, 400), 4, (2, 2)),    # TINY
-])
-def test_auto_examples(area, n, expected):
-    a = arrange([(6000, 4000)] * n, area, "auto")
-    assert (a.rows, a.cols) == expected
+def test_auto_score_uses_spans():
+    # the 2 + 1 score at 1600 × 900 is the smallest displayed area with photo 3 in its spanning box
+    a = arrange([L] * 3, (1600, 900), "auto")
+    fitted = displayed_sizes([L] * 3, (1600, 900), a.rows, a.cols, a.cells)
+    assert round(min(w * h for w, h in fitted)) == 270938
 
-def test_auto_uses_turned_sizes():  # portraits after Xoay xem prefer one row
-    sizes = [turned_size(6000, 4000, 1)] * 2
-    assert (arrange(sizes, (1200, 800), "auto").rows, arrange(sizes, (1200, 800), "auto").cols) == (1, 2)
+def test_minimum_is_measured_on_the_displayed_photo():
+    # 1 × 4 at 580 × 400: box 140.5 × 378 (larger than 120 × 90) but the photo shown is 140.5 × 93.7 → too small
+    assert arrange([L] * 4, (580, 400), "row").fallback
+    assert not arrange([L] * 4, (580, 400), "auto").fallback  # auto never reports a fallback
 
-def test_row_too_small_falls_back_to_auto():
-    a = arrange([(6000, 4000)] * 4, (580, 400), "row")
-    assert a.fallback and (a.rows, a.cols) == (2, 2)
+def test_turned_sizes_change_the_choice():
+    assert turned_size(6000, 4000, 1) == (4000, 6000) and turned_size(6000, 4000, 2) == (6000, 4000)
+    assert turned_size(None, 4000, 1) is None
 
 def test_unknown_size_counts_as_3_2():
-    assert arrange([None, (6000, 4000)], (1600, 900), "auto") == arrange([(3, 2), (6000, 4000)], (1600, 900), "auto")
+    assert arrange([None, L], (1600, 900), "auto") == arrange([(3, 2), L], (1600, 900), "auto")
 
 def test_start_error_texts():
     assert start_error(1) == "Đánh dấu 2–4 ảnh (Ctrl+click) rồi bấm C để so sánh."
@@ -98,7 +113,7 @@ def test_initial_active():
 ```
 
 - [ ] **Step 2: Run** `.venv/bin/python -m pytest -q tests/unit/test_compare_layout.py` — Expected: FAIL (module missing).
-- [ ] **Step 3: Implement `app/ui/compare_layout.py`.** Auto: candidates per n from the spec table (2: 1×2, 2×1; 3: 1×3, 3×1, 2×2 with the third spanning; 4: 1×4, 4×1, 2×2); score = smallest displayed photo area, box = `((W − gap·(cols−1)) / cols, (H − gap·(rows−1)) / rows − header)`; ties: fewer rows, then listed order. Row/Grid whose box is below `min_tile` → auto result with `fallback=True`.
+- [ ] **Step 3: Implement `app/ui/compare_layout.py`.** Candidates per n exactly as the spec table (cells in tile order); `displayed_sizes` fits each photo into its cell box `cw·col_span + gap·(col_span−1)` × `rh·row_span + gap·(row_span−1) − header`; auto = max of `round(min(area))`, ties fewer rows then listed order; Row/Grid with any displayed long side < `min_long` → the auto result with `fallback=True`.
 - [ ] **Step 4: Run** the same command — Expected: all pass.
 - [ ] **Step 5: Commit** `"Compare: arrangement and state model (part 2 task 1)"`.
 
@@ -112,11 +127,11 @@ def test_initial_active():
 **Interfaces:**
 - Consumes: part 1 `ImageViewer.show_photo(path, placeholder, full_long_side, rotation)`, `set_zoom`, `set_rotation`, `toggle_zoom`, `zoom`, `is_full_resolution_shown()`, `_apply_zoom` scale rule; `card_texts(rec)` from `app/ui/grid.py`.
 - Produces:
-  - `ImageViewer(parent=None, *, pool: QThreadPool | None = None, full_cache: int = 2)` — a given pool is used and never owned; `full_cache` replaces the module constant per instance.
+  - `ImageViewer(parent=None, *, pool: QThreadPool | None = None, full_pool: QThreadPool | None = None, full_cache: int = 2)` — given pools are used and never owned (`full_pool` defaults to `pool`; FULL loads go to `full_pool`); `full_cache` replaces the module constant per instance.
   - `class CompareTile(QWidget)`: `hovered = Signal(int)` (emitted from `enterEvent`), `viewer: ImageViewer`, `asset_id: int | None`, `show_record(rec: AssetRecord, pixmap: QPixmap | None) -> None`, `update_record(rec: AssetRecord) -> None` (header: number, name, chip, ★, ♥ — no reload), `set_number(n: int)`, `set_active(on: bool)` (frame), `set_ai_text(text: str | None)` (overlay; content from Task 6), `set_note(text: str)` (header note, e.g. "đang tải ảnh gốc…").
 
 - [ ] **Step 1: Write the failing tests**
-  - `test_viewer_uses_given_pool`: `ImageViewer(pool=p)._pool is p`; default viewer still owns a 2-thread pool.
+  - `test_viewer_uses_given_pools`: `ImageViewer(pool=p, full_pool=f)`: a preview load is started on `p`, a FULL load on `f`; default viewer still owns one 2-thread pool used for both.
   - `test_true_100_percent_at_dpr` (CR-P2-03), parametrised dpr 1 / 1.5 / 2 (monkeypatch `devicePixelRatioF`): after full image shown and `set_zoom(1.0)`, `viewer.transform().m11() == pytest.approx(1 / dpr)`.
   - `test_preview_to_full_keeps_centre_point`: zoom 1.0 at focus (0.3, 0.6) on a preview; deliver the full image; the scene point at the viewport centre maps to (0.3, 0.6) ± 0.01 of the pixmap.
   - `test_rotation_while_zoomed_keeps_point` and `test_eye_point_with_turned_photo` (face box at (0.2, 0.1, 0.1, 0.1), rotation 1 → centre at `rotate_point(0.25, 0.142, 1)`).
@@ -144,7 +159,7 @@ def test_initial_active():
   - `active_id: int | None`, `tile(asset_id: int) -> CompareTile | None`, `records() -> list[AssetRecord]`
   - `update_record(rec: AssetRecord) -> None` (chips / rotation; re-arranges when the turned size changes)
   - `set_arrangement(mode: Mode) -> None`, `arrangement: Arrangement`
-  - `pool: QThreadPool` (2 threads, created once), four tiles created once in `__init__`
+  - `preview_pool: QThreadPool` (1 thread) and `full_pool: QThreadPool` (1 thread), created once; four tiles created once in `__init__`
 
 - [ ] **Step 1: Write the failing tests**
   - `test_active_changes_immediately_on_enter`: hover tile 2 → `active_id == id2` and `active_changed` emitted before any event-loop wait; `panel_photo_changed` not yet emitted; after 150 ms it is emitted once with id2.
@@ -154,7 +169,7 @@ def test_initial_active():
   - `test_layout_matches_arrange`: 3 records at 1600×900 in "grid" → tile geometries in a 2×2 grid, third tile spanning both columns.
   - `test_resize_keeps_each_tile_zoom`: tiles 1 and 2 zoomed to 1.0 at different points; resize 1600×900 → 960×1000 (arrangement changes) → each tile's `zoom` and centre point unchanged (± 0.01).
   - `test_rotation_rearranges_keeping_zoom` (Review Focus): two landscape photos 1×2 at 1200×800; `update_record` with rotation 1 for one → arrangement recomputed; the other tile's zoom and centre point unchanged.
-  - `test_tiles_and_pool_created_once`: `show_records` / `clear` repeated 5× → same 4 tile objects, same pool, `pool.maxThreadCount() == 2`.
+  - `test_tiles_and_pools_created_once`: `show_records` / `clear` repeated 5× → same 4 tile objects, same two pools, each `maxThreadCount() == 1`.
 - [ ] **Step 2: Run** `.venv/bin/python -m pytest -q tests/gui/test_compare_view.py` — Expected: FAIL.
 - [ ] **Step 3: Implement** `CompareView` (QGridLayout rebuilt from `arrange` on show / resize — part 1 `DEBOUNCE_MS` 120 ms — / rotation; panel timer single-shot 150 ms restarted by each change; `leaveEvent` of the tiles' container flushes).
 - [ ] **Step 4: Run** the task tests — Expected: pass.
@@ -240,18 +255,22 @@ def test_initial_active():
 ### Task 7: Worker lifecycle and memory (CR-P2-04)
 
 **Files:**
-- Modify: `app/ui/compare_view.py` (full-frame budget), `app/ui/viewer.py` (`full_frame_loaded = Signal(int)` megapixels, `drop_full() -> None`), `app/ui/main_window.py` (`_session_work`, `_close_session`, `closeEvent` leave Compare first), `.github/workflows/build-windows.yml` (stress step adds the new test file)
+- Modify: `app/ui/compare_view.py` (full-frame budget), `app/ui/viewer.py` (`full_frame_loaded = Signal(object)` carrying `(width, height)` of the decoded image, `full_load_failed = Signal()`, `drop_full() -> None`, `request_full_allowed: Callable[[], bool] | None` hook asked before a FULL load is queued), `app/ui/main_window.py` (`_session_work`, `_close_session`, `closeEvent` leave Compare first), `.github/workflows/build-windows.yml` (stress step adds the new test file)
 - Test: `tests/gui/test_compare_lifecycle.py` (stress-marked loop variant `@pytest.mark.stress`)
 
 **Interfaces:**
-- Consumes: Task 3 `pool`, tiles; part 1 `shutdown.Work`, `settle`, gate.
-- Produces: `FULL_BUDGET_MP = 200`; `CompareView.full_megapixels() -> float`; `Work("đọc ảnh để so sánh", compare.pool.waitForDone, compare.pool.clear)` in `_session_work()`.
+- Consumes: Task 3 `preview_pool`, `full_pool`, tiles; part 1 `shutdown.Work`, `settle`, gate.
+- Produces: `FULL_BUDGET_PIXELS = 200_000_000`; `CompareView.full_pixels() -> int` (held + reserved, exact); `CompareView.wait_idle(msecs: int) -> bool` and `stop_pending()` over both pools; `Work("đọc ảnh để so sánh", compare.wait_idle, compare.stop_pending)` in `_session_work()`; header texts "đã trả về vừa khung để đủ bộ nhớ" and "Ảnh quá lớn để mở độ phân giải đầy đủ khi so sánh — mở ở Xem lớn để soi 100 %".
 
 - [ ] **Step 1: Write the failing tests**
-  - `test_budget_drops_least_recently_active`: tiles report 60 MP frames (monkeypatched loader); zoom tiles 1, 2, 3 (180 MP), activate 4 and zoom → tile 1 (least recently active) back to fit, header "đã trả về vừa khung để đủ bộ nhớ", total ≤ 200.
+  - `test_budget_counts_exact_pixels`: frames of 6000 × 4000 and 6001 × 4001 → `full_pixels() == 24_000_000 + 24_010_001` (no rounding).
+  - `test_budget_drops_least_recently_active`: assets recorded 9504 × 6336 (60 217 344 px); zoom tiles 1, 2, 3 (180 652 032), activate 4 and zoom → before tile 4's decode is queued, tile 1 (least recently active) is back to fit with the exact header text, `full_pixels() <= 200_000_000`.
+  - `test_reservation_before_decode`: two tiles zoomed within one event-loop turn whose expected sizes together pass the budget → the second reservation drops the first tile before any decode starts (held decode via threading.Event; only one FULL task ever queued at a time).
+  - `test_reservation_released_on_failure_and_drop`: a FULL load that fails, and one dropped by leaving Compare → `full_pixels() == 0`.
+  - `test_oversized_single_frame_not_decoded`: an asset recorded 20000 × 12000 (240 MP) zoomed → no FULL task queued, tile stays on the preview, exact oversized header text.
   - `test_late_result_after_leaving_is_ignored`: hold a decode (threading.Event), Esc, release → no tile pixmap change, no exception.
   - `test_close_with_full_loads_running` and `test_switch_with_full_loads_running`: 4 held full decodes; close / folder switch waits (part 1 status "Đang đợi đọc ảnh để so sánh …"), DB closed only after the pool is idle (part 1 `_watch_db` order check).
-  - `test_pool_never_more_than_two`: 4 zoomed tiles → `pool.activeThreadCount() <= 2` sampled during the loads.
+  - `test_one_full_decode_at_a_time`: 4 zoomed tiles with held decodes → `full_pool.activeThreadCount() <= 1` and the two pools together `<= 2`, sampled during the loads.
   - `test_compare_stress` (`@pytest.mark.stress`): 30 × (enter, zoom all, Esc / switch / close) without crash.
 - [ ] **Step 2: Run** `.venv/bin/python -m pytest -q tests/gui/test_compare_lifecycle.py -m "not stress"` — Expected: FAIL.
 - [ ] **Step 3: Implement.**
@@ -269,8 +288,9 @@ def test_initial_active():
 - Consumes: everything above.
 
 - [ ] **Step 1: Write the tests**
-  - perf: enter Compare with 4 photos (synthetic 10,000-photo session) first paint ≤ 100 ms; real NEF previews ≤ 1 s (skips without samples); P/X in Compare median ≤ 50 ms, worst ≤ 100 ms (200 presses); hover change worst Qt-thread block ≤ 50 ms (10 ms probe, part 1 method); memory with 4 zoomed tiles recorded.
-  - Snap: Compare at the 13 part 1 Snap sizes → no cut-off button (`clipped_buttons`), tiles ≥ `min_tile` or auto fallback.
+  - perf: enter Compare with 4 photos (synthetic 10,000-photo session) first paint ≤ 100 ms; real NEF previews ≤ 1 s (skips without samples); P/X in Compare median ≤ 50 ms, worst ≤ 100 ms (200 presses); hover change worst Qt-thread block ≤ 50 ms (10 ms probe, part 1 method).
+  - RV-P2-02 memory: zoom all 4 tiles and record process peak RSS (sampled every 20 ms) and each decode's transient peak, for 24 MP NEF (owner samples, skip without), synthetic 45 MP (8256 × 5504) and 61 MP (9504 × 6336) JPEGs; assert held full pixels ≤ `FULL_BUDGET_PIXELS` throughout and no more than one full decode in flight; the 61 MP set shows the budget drop (four do not fit).
+  - Snap: Compare at the 13 part 1 Snap sizes → no cut-off button (`clipped_buttons`), every displayed photo's long side ≥ 160 px or the auto fallback.
 - [ ] **Step 2: Run** `.venv/bin/python -m pytest -q -m perf tests/perf/test_compare_perf.py -s` and `.venv/bin/python -m pytest -q tests/gui/test_snap_sizes.py` — Expected: pass; numbers recorded.
 - [ ] **Step 3: Full suite** `.venv/bin/python -m pytest -q` three times — Expected: all pass each time.
 - [ ] **Step 4: Windows CI** — push with `[perf]` (never a release marker); read each notice (`suite`, `gui-windows`, `snap-dpi`, `perf`, `stress`), record them in `docs/beta-release-checklist.md` B2; screenshots WIDE / NARROW / SHORT / TINY.
