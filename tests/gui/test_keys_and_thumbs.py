@@ -285,3 +285,19 @@ def test_decode_size_follows_smaller_cards_and_new_sessions(qtbot, env: dict, tm
     assert not (w.project.cache_dir / asset_model.HD_DIR).exists()  # 280 px: the import thumbnail is enough
     w.set_grid_cell(340)  # larger again: a new generation, sharper decodes
     assert w.model.decode_size == 680
+
+
+def test_thumbnail_cache_stays_within_its_memory_budget(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    """Task 14 finding: 600 thumbnails of large cards at 200 % took 739 MB; the cache now also has a byte budget
+    (least recently shown dropped first) and its byte count stays exact."""
+    monkeypatch.setattr(asset_model, "_PIXMAP_BUDGET", 3 * 680 * 453 * 4)  # room for three large thumbnails
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.model.wait_for_thumbnails()
+    m = w.model
+    for i, rec in enumerate(m.records()[:6]):
+        m._on_thumb_loaded(rec.id, QImage(680, 453, QImage.Format.Format_RGB32), m._gen + 1 + i)
+    assert len(m._pixmaps) == 3 and m._bytes <= asset_model._PIXMAP_BUDGET
+    assert m._bytes == sum(p.width() * p.height() * 4 for p in m._pixmaps.values())
+    newest = [r.id for r in m.records()[3:6]]
+    assert list(m._pixmaps) == newest  # the most recent ones are kept

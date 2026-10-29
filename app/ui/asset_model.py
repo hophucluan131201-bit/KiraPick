@@ -43,7 +43,8 @@ THUMB_DISPLAY = 240  # long side of cached pixmaps at 100 % and the default card
 THUMB_FILE = 400  # long side of the thumbnail written at import (app.workers.import_job.THUMB_LONG_SIDE)
 HD_LONG_SIDE = 800  # larger cards / high-DPI screens: a sharper thumbnail made once from the photo, cached
 HD_DIR = "thumb_hd"  # in the session's cache folder; the file name carries the photo's size and mtime
-_PIXMAP_CACHE_SIZE = 600
+_PIXMAP_CACHE_SIZE = 600  # at most this many thumbnails …
+_PIXMAP_BUDGET = 256 * 1024 * 1024  # … and at most this many bytes (large cards at 200 %: ~1.2 MB each)
 
 ROLE_RECORD = Qt.ItemDataRole.UserRole + 1
 
@@ -162,6 +163,10 @@ def _camera(make: str | None, model: str | None) -> str | None:
     return model
 
 
+def _pixmap_bytes(pm: QPixmap) -> int:
+    return pm.width() * pm.height() * 4
+
+
 def turned(pm: QPixmap, turns: int) -> QPixmap:
     """The pixmap turned ``turns`` quarter turns clockwise (display only)."""
     return pm.transformed(QTransform().rotate(90 * (turns % 4))) if turns % 4 and not pm.isNull() else pm
@@ -227,6 +232,7 @@ class AssetListModel(QAbstractListModel):
         self._sort = Sort.TIME
         self._ranker: Callable[[int, Score], Ranked] | None = None
         self._pixmaps: OrderedDict[int, QPixmap] = OrderedDict()
+        self._bytes = 0  # memory of the cached pixmaps
         # Decode generations (review CR12-03): a larger card or a sharper screen starts a new generation; a result
         # never replaces a newer one, and an older pixmap stays on screen until the sharper one arrives.
         self._pix_gen: dict[int, int] = {}  # asset id -> generation of the cached pixmap
@@ -246,6 +252,7 @@ class AssetListModel(QAbstractListModel):
     def set_project(self, project: Project | None) -> None:
         self._project = project
         self._pixmaps.clear()
+        self._bytes = 0
         self._pix_gen.clear()
         self._pending.clear()
         self._gen += 1
@@ -451,11 +458,16 @@ class AssetListModel(QAbstractListModel):
             return
         row = self._row_of.get(asset_id)
         turns = self._rows[row].rotation if row is not None else 0
+        old = self._pixmaps.get(asset_id)
+        if old is not None:
+            self._bytes -= _pixmap_bytes(old)
         self._pixmaps[asset_id] = turned(QPixmap.fromImage(image), turns)
+        self._bytes += _pixmap_bytes(self._pixmaps[asset_id])
         self._pixmaps.move_to_end(asset_id)
         self._pix_gen[asset_id] = generation
-        while len(self._pixmaps) > _PIXMAP_CACHE_SIZE:
-            dropped, _pm = self._pixmaps.popitem(last=False)
+        while len(self._pixmaps) > 1 and (len(self._pixmaps) > _PIXMAP_CACHE_SIZE or self._bytes > _PIXMAP_BUDGET):
+            dropped, pm = self._pixmaps.popitem(last=False)  # least recently shown first
+            self._bytes -= _pixmap_bytes(pm)
             self._pix_gen.pop(dropped, None)
         if row is not None:
             idx = self.index(row)

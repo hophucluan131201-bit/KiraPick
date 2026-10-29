@@ -314,6 +314,41 @@ The Test subset (old labels) measures 1.000 / 0.725 now. Remaining splits are mo
 stragglers (profile, motion blur, hands over face) that the owner can merge with the tick boxes +
 "🔗 Gộp người".
 
+## UI part 1 — performance (Task 14, 2026-10-29) — status: tested offscreen (Linux), Windows pending
+
+Method: `pytest -m perf tests/perf` (`tests/perf/test_grid_perf.py`, `test_hd_perf.py`); synthetic sessions written
+straight into a session database (`tests/perf/synthetic_session.py`: capture times, EXIF, one shared 400 px thumbnail
+per 50 photos, 10 % Chọn, 3 % Loại, half with a scored main person). Every UI number is end-to-end on the Qt thread:
+the call plus the repaint of grid, bottom bar and detail panel. Machine: cloud VM, Intel Xeon 2.3 GHz, 4 vCPU,
+15 GB, Linux, Qt offscreen (software raster) — **not** the owner's Windows laptop; the same tests run on Windows in CI
+with `[perf]` / "run_perf" (`.github/workflows/build-windows.yml`, job `perf`, non-blocking).
+
+| Measure | 1,000 | 5,000 | 10,000 | Target |
+|---|---|---|---|---|
+| Open session → first paint | 71 ms | 205 ms | 400 ms | 0.5 / 1.5 / 3 s |
+| Filter Giữ / Tất cả | 16 / 29 ms | 80 / 111 ms | 171 / 226 ms | 0.2 / 0.6 / 1.2 s |
+| Sort by score / by time | 41 / 34 ms | 199 / 112 ms | 349 / 232 ms | same |
+| Scroll a page (thumbnails cached), median / worst | 8.9 / 21.5 ms | 8.3 / 22.7 ms | 8.6 / 20.5 ms | 16 / 50 ms |
+| Scroll, 340 px cards at 200 %, median / worst | 10.1 / 12.7 ms | 9.9 / 12.2 ms | 10.7 / 17–25 ms ¹ | 16 / 50 ms |
+| P / X end-to-end (decision, counts, steps, detail, repaint), median / worst | 8.9 / 14.5 ms (60) | 11.2 / 17.5 ms (60) | 18.3 / 27.8 ms (200) | 50 / 100 ms |
+| Detail refresh after Chọn (incl. burst), median | 2.1 ms | 2.3 ms | 2.1 ms | 30 ms |
+| Mode change (resize + layout + repaint), median / worst | 14 / 50 ms | 21 / 48 ms | 27 / 57 ms | 100 / 100 / 150 ms |
+| SHORT Detail Focus resize, median / worst | 11 / 12 ms | 15 / 17 ms | 21 / 22 ms | — |
+
+¹ 5 isolated runs: worst 17.3–25.5 ms; once 52.9 ms when the whole perf suite ran in one process (1 of 7 runs).
+
+10,000 photos, other measures: thumbnail memory at 200 % with 340 px cards **267 MB** (217 thumbnails; it was
+**739 MB / 1.9 GB RSS** before the byte budget added in this task, target 300 MB); folder switch with thumbnails and a
+histogram queued 40 ms, close 8 ms; long session (2,000 P/X + browsing, 25 s): 1 GUI-thread GC run of 11–16 ms,
+RSS +9–40 MB (isolated run: 203 → 243 MB).
+
+HD thumbnails (800 px, RV13-02): owner's NEF (7 files) via the embedded preview, median 56 ms / worst 81 ms per photo
+(the half-size demosaic fallback would take 1.4 s median / 1.9 s worst); 27 RAW samples of 13 brands: 26 have a large
+enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 ms); synthetic 24 MP JPEG 28 ms
+(simple content — real camera JPEGs will be slower); HD file ~82 KB (RAW), cached read 0.01 ms. Slider
+140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
+340 step re-reads the cached HD files, 30 ms; the photos are not read again).
+
 ## Unreleased on beta (after 2.2.1): app update, learned sharpness
 
 | Item | Status | Evidence |
