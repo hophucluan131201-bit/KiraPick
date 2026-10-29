@@ -137,3 +137,41 @@ def test_slider_round_trip_decodes(qtbot, tmp_path: Path, monkeypatch) -> None: 
     assert steps[2][1] == 0  # back to small cards: the larger cached thumbnails are reused, nothing decoded
     assert hd_files == 6  # each photo's HD file made once, reused on the second 340 step
     w.close()
+
+
+def _camera_jpegs(folder: Path) -> list[Path]:
+    """Real camera JPEGs: the full-size previews the cameras embedded in the RAW samples (only those ≥ 2000 px)."""
+    import rawpy
+
+    folder.mkdir(parents=True, exist_ok=True)
+    out = []
+    for i, raw in enumerate(_raws()):
+        try:
+            with rawpy.imread(str(raw)) as r:
+                thumb = r.extract_thumb()
+        except Exception:  # noqa: BLE001 - no usable preview in this sample
+            continue
+        if thumb.format != rawpy.ThumbFormat.JPEG:
+            continue
+        path = folder / f"cam_{i}.jpg"
+        path.write_bytes(thumb.data)
+        with Image.open(path) as im:
+            if max(im.size) >= 2000:
+                out.append(path)
+                continue
+        path.unlink()
+    return out
+
+
+@pytest.mark.skipif(not _raws(), reason="no RAW samples in test_photos/ (git-ignored, not in CI)")
+def test_hd_decode_real_camera_jpeg(tmp_path: Path) -> None:
+    photos = _camera_jpegs(tmp_path / "jpg")
+    if not photos:
+        pytest.skip("no full-size camera JPEG previews in the samples")
+    hd_dir = tmp_path / "hd"
+    times = [_time(lambda p=p, i=i: asset_model.hd_thumbnail(p, hd_dir, i)) for i, p in enumerate(photos)]
+    sizes = [f.stat().st_size / 1024 for f in hd_dir.glob("*.jpg")]
+    _record("hd_camera_jpeg", len(photos), decode_median_ms=statistics.median(times), decode_worst_ms=max(times),
+            hd_file_kb_median=statistics.median(sizes),
+            source_mb_median=statistics.median(p.stat().st_size / 1e6 for p in photos))
+    assert len(sizes) == len(photos)

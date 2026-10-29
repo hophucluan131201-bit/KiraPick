@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QMessageBox
 from app.storage import db
 from app.storage.sessions import session_dir
 from app.ui import main_window as mw
-from tests.gui.test_main_window import _import, _window, env  # noqa: F401 - fixture
+from tests.gui.test_main_window import _import, _photo, _window, env  # noqa: F401 - fixture
 
 
 def _warnings(monkeypatch) -> list[str]:  # noqa: ANN001
@@ -209,3 +209,110 @@ def test_hd_cache_and_backups_go_with_the_session(qtbot, env: dict, monkeypatch)
     gone = purge_old_sessions(env["photos"].parent / "sessions", now=time.time() + 400 * 86400)
     assert folder in gone and not folder.exists()
     assert {p.name: _sha(p) for p in env["photos"].iterdir()} == photos
+
+
+# ------------------------------------------------------------------ RV14-04: disk full, unsupported RAW
+def test_full_disk_while_writing_an_hd_thumbnail_leaves_no_partial_file(tmp_path: Path, monkeypatch) -> None:
+    """The HD file cannot be written (disk full): no half-written file is left taking space, and the card keeps its
+    import thumbnail (the task still delivers an image)."""
+    from PIL import Image
+
+    from app.ui import asset_model
+    from tests.integration.test_import_job import _photo
+
+    source = _photo(tmp_path / "big.jpg", 3, size=(3000, 2000))
+    thumb = _photo(tmp_path / "thumb.jpg", 3, size=(400, 266))
+    hd_dir = tmp_path / "hd"
+
+    def full(self, fp, *a, **k):  # noqa: ANN001, ANN002, ANN003, ANN202
+        Path(fp).write_bytes(b"\xff\xd8 half a file")
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(Image.Image, "save", full)
+    assert asset_model.hd_thumbnail(source, hd_dir, 1) is None
+    assert list(hd_dir.iterdir()) == []
+
+    got = []
+
+    class Signals:
+        class loaded:  # noqa: N801
+            @staticmethod
+            def emit(*args) -> None:  # noqa: ANN002
+                got.append(args)
+
+    asset_model._ThumbTask(1, thumb, Signals, 680, 1, source, hd_dir).run()
+    assert got and not got[0][1].isNull()  # the import thumbnail
+
+
+def test_unsupported_and_broken_raw_files_are_reported_not_fatal(qtbot, env: dict, tmp_path: Path) -> None:  # noqa: F811
+    """Broken RAW files (a fake NEF; locally also stripped samples of rare formats) import without stopping the
+    others, and large HD cards on a 200 % screen never fail on them."""
+    import shutil
+
+    from app.ui import asset_model
+
+    shoot = tmp_path / "mixed"
+    shutil.copytree(env["photos"], shoot)
+    (shoot / "BROKEN.NEF").write_bytes(b"II*\x00" + b"\x00" * 4000)
+    (shoot / "EMPTY.CR3").write_bytes(b"")
+    stripped = Path(__file__).resolve().parents[2] / "test_photos" / "stripped"
+    for p in sorted(stripped.iterdir()) if stripped.is_dir() else []:
+        shutil.copy2(p, shoot / f"S_{p.name}")
+    w = _window(qtbot, env)
+    _import(qtbot, w, shoot)
+    conn = w.project.conn
+    status = dict(conn.execute("SELECT relative_path, status FROM assets"))
+    assert status["BROKEN.NEF"] != "ok" and status.get("EMPTY.CR3", "skipped") != "ok"
+    assert sum(1 for s in status.values() if s == "ok") >= 6  # the good photos all came in
+    w.model.set_device_pixel_ratio(2.0)
+    w.set_grid_cell(340)
+    for _ in range(3):
+        w.grid.viewport().repaint()
+        assert w.model.wait_for_thumbnails(30000)
+    hd = w.project.cache_dir / asset_model.HD_DIR
+    assert not list(hd.glob("*.part"))
+    print("\nstatus counts:", {s: list(status.values()).count(s) for s in set(status.values())})
+
+
+# ------------------------------------------------------------------ RV14-04: closing / switching during an export
+def test_close_during_export_asks_first_and_no_keeps_copying(qtbot, env: dict, tmp_path: Path, monkeypatch) -> None:  # noqa: F811
+    """Closing stops a running export after its current file; the user is asked first. No: the window stays and the
+    copy goes on. Yes: it stops after the current file and the window closes."""
+    from tests.gui.test_shutdown_callbacks import _held_export
+
+    monkeypatch.setattr(mw, "CLOSE_WAIT_MS", 50)
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    gate, dialog = _held_export(qtbot, w, tmp_path / "out", monkeypatch)
+    asked: list[str] = []
+    answer = [QMessageBox.StandardButton.No]
+    monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, text, *a, **k: asked.append(text) or answer[0])
+
+    assert w.close() is False and w.isVisible()
+    assert len(asked) == 1 and "đang xuất ảnh" in asked[0].lower()
+    thread = dialog.copy_thread
+    assert thread.isRunning() and not thread._cancel.is_set()
+
+    answer[0] = QMessageBox.StandardButton.Yes
+    assert w.close() is False  # waits for the file being copied
+    assert thread._cancel.is_set()
+    gate.set()
+    qtbot.waitUntil(lambda: not w.isVisible(), timeout=10000)
+
+
+def test_switch_during_export_asks_first(qtbot, env: dict, tmp_path: Path, monkeypatch) -> None:  # noqa: F811
+    from tests.gui.test_shutdown_callbacks import _held_export
+
+    other = tmp_path / "Buổi khác"
+    _photo(other / "IMG_0001.jpg", 91)
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    project = w.project
+    gate, dialog = _held_export(qtbot, w, tmp_path / "out", monkeypatch)
+    asked: list[str] = []
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda _p, _t, text, *a, **k: asked.append(text) or QMessageBox.StandardButton.No)
+    assert w.start_import(other) is None and w.project is project
+    assert len(asked) == 1 and dialog.copy_thread.isRunning() and not dialog.copy_thread._cancel.is_set()
+    gate.set()
+    qtbot.waitUntil(lambda: not dialog.copy_thread.isRunning(), timeout=10000)

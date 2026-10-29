@@ -189,8 +189,12 @@ def hd_thumbnail(source: Path, hd_dir: Path, asset_id: int) -> Path | None:
         loaded = load_image(source, max_long_side=HD_LONG_SIDE, min_long_side=HD_LONG_SIDE)
         hd_dir.mkdir(parents=True, exist_ok=True)
         tmp = target.with_name(f"{target.stem}.{threading.get_ident()}.part")  # one per worker thread
-        loaded.image.save(tmp, "JPEG", quality=88)
-        tmp.replace(target)  # complete files only, even if two decodes of the same photo race
+        try:
+            loaded.image.save(tmp, "JPEG", quality=88)
+            tmp.replace(target)  # complete files only, even if two decodes of the same photo race
+        except BaseException:
+            tmp.unlink(missing_ok=True)  # e.g. disk full: no half-written file left taking space
+            raise
         return target
     except Exception:  # noqa: BLE001 - only the sharper thumbnail is lost
         return None

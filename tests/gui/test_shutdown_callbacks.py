@@ -154,6 +154,13 @@ def _held_export(qtbot, w: mw.MainWindow, dest: Path, monkeypatch) -> tuple[thre
     return gate, dialog
 
 
+def _stop_export_when_asked(monkeypatch) -> None:  # noqa: ANN001
+    """"Dừng xuất và thoát / đổi thư mục?" → Yes (the question itself: test_review_notes_t15)."""
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+
+
 def _runs(db: Path) -> int:
     with sqlite3.connect(db) as conn:
         return conn.execute("SELECT COUNT(*) FROM export_runs").fetchone()[0]
@@ -167,6 +174,7 @@ def test_close_waits_for_a_running_export_and_records_it(qtbot, env: dict, tmp_p
     project = _watch_db(w, events, monkeypatch)
     db = project.folder / DB_NAME
     gate, dialog = _held_export(qtbot, w, tmp_path / "out", monkeypatch)
+    _stop_export_when_asked(monkeypatch)
     real_finished = dialog._finished
     monkeypatch.setattr(dialog, "_finished", lambda result, progress: (events.append("export finished"),
                                                                        real_finished(result, progress)))
@@ -192,6 +200,7 @@ def test_folder_switch_waits_for_a_running_export(qtbot, env: dict, tmp_path: Pa
     project = _watch_db(w, events, monkeypatch)
     db = project.folder / DB_NAME
     gate, dialog = _held_export(qtbot, w, tmp_path / "out", monkeypatch)
+    _stop_export_when_asked(monkeypatch)
 
     monkeypatch.setattr(mw, "SWITCH_WAIT_MS", 50)
     assert w.start_import(other) is None and w.project is project  # refused while copying

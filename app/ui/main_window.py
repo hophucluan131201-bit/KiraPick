@@ -668,9 +668,18 @@ class MainWindow(QMainWindow):
         if self.model.rowCount():
             self.select_row(0)
 
+    def _export_may_stop(self, doing: str) -> bool:
+        """Closing or switching stops a running export after its current file: ask first (No = keep copying)."""
+        if not any(d.copy_thread is not None and d.copy_thread.isRunning() for d in self.findChildren(ExportDialog)):
+            return True
+        answer = QMessageBox.question(self, "Đang xuất ảnh", export_stop_text(doing))
+        return answer == QMessageBox.StandardButton.Yes
+
     def _close_session(self) -> bool:
         """Close the current session once nothing reads it any more; False (session left open) if work is still
         running after SWITCH_WAIT_MS — the caller must then not switch or delete anything."""
+        if not self._export_may_stop("đổi thư mục"):
+            return False
         self._stop_analysis()
         for dialog in self.findChildren(QDialog):
             dialog.close()
@@ -1019,6 +1028,9 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         if not self._shutdown_ready:
+            if not self._export_may_stop("thoát"):
+                event.ignore()
+                return
             self.settings.setValue("geometry", self.saveGeometry())
             for dialog in self.findChildren(QDialog):  # they use the project database
                 dialog.close()
@@ -2252,6 +2264,13 @@ def quit_anyway_text(left: list[str]) -> str:
                      "danh sách ảnh đã chép (CSV) chưa được ghi. Hãy xuất lại vào một thư mục mới.")
     lines += ["", "Bấm No để chờ thêm."]
     return "\n".join(lines)
+
+def export_stop_text(doing: str) -> str:
+    """Asked before closing / switching folders stops a running export."""
+    return (f"KiraPick đang xuất ảnh. Nếu {doing} bây giờ, việc xuất sẽ dừng sau file đang chép.\n\n"
+            "Các file đã chép vẫn nguyên vẹn. Xuất lại vào cùng thư mục sau: file đã có sẽ được bỏ qua, chỉ chép phần "
+            f"còn thiếu.\n\nDừng xuất và {doing}? (No: tiếp tục xuất)")
+
 
 def session_too_new_text() -> str:
     """A folder last opened by a newer KiraPick: its session database is never touched by this one."""
