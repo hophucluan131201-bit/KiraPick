@@ -62,3 +62,150 @@ def test_full_disk_while_opening_a_session_is_explained(qtbot, env: dict, monkey
     fail[0] = False  # space freed: the same window opens the folder
     _import(qtbot, w, env["photos"])
     assert w.model.rowCount() > 0
+
+
+# ------------------------------------------------------------------ RV9-03
+_ASSET_TABLES = ("occurrences", "decisions", "picks", "collection_items", "view_rotation", "asset_vectors", "previews")
+
+
+def _rows(conn, assets: list[int]) -> dict[str, list[tuple]]:  # noqa: ANN001
+    marks = ",".join("?" * len(assets))
+    out = {t: [tuple(r) for r in conn.execute(f"SELECT * FROM {t} WHERE asset_id IN ({marks}) ORDER BY rowid", assets)]
+           for t in _ASSET_TABLES}
+    out["subjects"] = [tuple(r) for r in conn.execute("SELECT * FROM subjects ORDER BY id")]
+    return out
+
+
+def _seed_people(w) -> list[int]:  # noqa: ANN001
+    conn = w.project.conn
+    assets = [r[0] for r in conn.execute("SELECT id FROM assets WHERE status = 'ok' ORDER BY id")]
+    with w.project.transaction():
+        for sid, owned in ((1, assets[:4]), (2, assets[4:5])):
+            conn.execute("INSERT INTO subjects (id, created_at) VALUES (?, 'n')", (sid,))
+            for a in owned:
+                conn.execute("""INSERT INTO occurrences (asset_id, person_box, prominence, is_main, subject_id,
+                                assignment, analysis_version, created_at) VALUES (?, '[0,0,1,1]', 1, 1, ?, 'auto', 1, 'n')""",
+                             (a, sid))
+    w._fill_people()
+    return assets
+
+
+def _pick(text: str):  # noqa: ANN202
+    from PySide6.QtGui import QAction
+
+    def run(menu, _pos):  # noqa: ANN001, ANN202
+        return next(a for a in menu.findChildren(QAction) if a.text().startswith(text))
+    return run
+
+
+def test_panel_people_action_changes_only_the_current_photo(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    """RV9-03 on a real session database: the Chủ thể tab's people menu acts on the photo shown in the panel only;
+    every row of the marked photos (and the subjects table) is identical before and after."""
+    from app.ui.asset_model import Filter
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    assets = _seed_people(w)
+    w.model.set_filter(Filter.SUBJECT, subject_id=1)
+    assert sorted(r.id for r in w.model.records()) == assets[:4]
+    w.select_row(0)
+    current = w.current_record().id
+    for row in (1, 2):
+        w.grid.selectionModel().select(w.model.index(row), w.grid.selectionModel().SelectionFlag.Select)
+    marked = sorted(r.id for r in w.selected_records() if r.id != current)
+    assert len(marked) == 2 and current not in marked
+    conn = w.project.conn
+    before = _rows(conn, marked)
+
+    monkeypatch.setattr(w, "_run_menu", _pick("Không phải"))
+    w.detail.people_menu_requested.emit(w.mapToGlobal(w.rect().center()))
+    occ = conn.execute("SELECT subject_id, excluded_subject_id, assignment FROM occurrences WHERE asset_id = ?",
+                       (current,)).fetchone()
+    assert tuple(occ) == (None, 1, "manual")
+    assert _rows(conn, marked) == before
+
+    monkeypatch.setattr(w, "_run_menu", _pick("Chủ thể 2"))  # "Gán cho chủ thể…" → Chủ thể 2
+    other = next(a for a in assets[:4] if a not in marked and a != current)
+    w.model.set_filter(Filter.SUBJECT, subject_id=1)
+    w.select_row([r.id for r in w.model.records()].index(other))
+    for a in marked:
+        w.grid.selectionModel().select(w.model.index([r.id for r in w.model.records()].index(a)),
+                                       w.grid.selectionModel().SelectionFlag.Select)
+    w.detail.people_menu_requested.emit(w.mapToGlobal(w.rect().center()))
+    assert conn.execute("SELECT subject_id FROM occurrences WHERE asset_id = ?", (other,)).fetchone()[0] == 2
+    assert _rows(conn, marked) == before
+
+
+# ------------------------------------------------------------------ RV2-04
+def _sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_real_raw_jpeg_pair_import_keep_export(qtbot, env: dict, public_nef: Path, tmp_path: Path) -> None:  # noqa: F811
+    """RV2-04 with a real NEF and its JPEG: one card in the grid, Chọn with P, the bar's size equals the export plan,
+    the export copies both files byte for byte, and "Xoay xem" changes nothing in the files or the export."""
+    import shutil
+
+    from PySide6.QtCore import Qt
+
+    from app.export.copy_export import Selection, plan_export, run_export, select_assets
+    from app.storage.stats import counts
+    from tests.integration.test_import_job import _photo
+
+    shoot = tmp_path / "pair"
+    shoot.mkdir()
+    shutil.copy2(public_nef, shoot / "ISS.NEF")
+    _photo(shoot / "ISS.JPG", 1, taken="2012:03:04 17:20:59")  # the NEF's capture time: a confirmed pair
+    sources = {p.name: (_sha(p), p.stat().st_mtime_ns) for p in shoot.iterdir()}
+    w = _window(qtbot, env)
+    _import(qtbot, w, shoot)
+    assert w.model.rowCount() == 1  # the pair is one photo
+    w.select_row(0)
+    qtbot.keyClick(w, Qt.Key.Key_P)
+    assert w.current_record().flag == "keep"
+    conn = w.project.conn
+    w.rotate_view()
+    assert conn.execute("SELECT count(*) FROM view_rotation").fetchone()[0] >= 1
+    plan = plan_export(w.project, select_assets(w.project, Selection.KEEP), tmp_path / "out", include_pairs=True)
+    assert sorted(i.dest_relative for i in plan.items) == ["ISS.JPG", "ISS.NEF"]
+    assert counts(conn, True).keep_bytes == plan.total_bytes == sum((shoot / n).stat().st_size for n in sources)
+    result = run_export(plan)
+    assert sorted(result.copied) == ["ISS.JPG", "ISS.NEF"]
+    for name, (digest, mtime) in sources.items():
+        assert _sha(tmp_path / "out" / name) == digest  # byte-identical copies
+        assert (_sha(shoot / name), (shoot / name).stat().st_mtime_ns) == (digest, mtime)  # sources untouched
+
+
+# ------------------------------------------------------------------ HD cache lifetime (Task 13 approval note)
+def test_hd_cache_and_backups_go_with_the_session(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    """"↺ Làm lại" and the 30-day clean-up delete the session folder, its HD thumbnails and its pre-upgrade backup;
+    the photos are untouched."""
+    import time
+
+    from app.storage.sessions import purge_old_sessions
+    from app.ui import asset_model
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.model.set_device_pixel_ratio(2.0)
+    w.set_grid_cell(340)
+    for _ in range(3):
+        w.grid.viewport().repaint()
+        w.model.wait_for_thumbnails(30000)
+    hd = w.project.cache_dir / asset_model.HD_DIR
+    made = sorted(p.name for p in hd.glob("*.jpg"))
+    assert made, "no HD thumbnails were made"
+    (hd / "stale_from_before.jpg").write_bytes(b"x")
+    photos = {p.name: _sha(p) for p in env["photos"].iterdir()}
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    w.reset_current_folder()  # forgets the session, then imports again
+    qtbot.waitUntil(lambda: w.import_thread is None, timeout=30000)
+    assert not (hd / "stale_from_before.jpg").exists()
+
+    folder = w.project.folder
+    (folder / "project.snorlu.db.v6.bak").write_bytes(b"backup")  # as an upgrade would leave it
+    w.close()
+    gone = purge_old_sessions(env["photos"].parent / "sessions", now=time.time() + 400 * 86400)
+    assert folder in gone and not folder.exists()
+    assert {p.name: _sha(p) for p in env["photos"].iterdir()} == photos
