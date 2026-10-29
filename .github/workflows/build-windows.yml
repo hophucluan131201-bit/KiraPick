@@ -171,6 +171,21 @@ jobs:
           . scripts/ci_report.ps1
           Report-Pytest -Log gui.log -Title gui-windows -Code $code
           exit $code
+      - name: Compare GUI on the real Windows platform, 3 more runs (hover / routing stability)
+        if: always()
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: windows
+        run: |
+          . scripts/ci_report.ps1
+          $failed = 0
+          for ($i = 1; $i -le 3; $i++) {
+            python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_compare_view.py tests/gui/test_compare_window.py tests/gui/test_compare_actions.py tests/gui/test_compare_overlay.py tests/gui/test_compare_final.py *>&1 | Tee-Object -FilePath "gui_repeat$i.log"
+            $code = $LASTEXITCODE
+            if ($code -ne 0) { $failed++ }
+            Report-Pytest -Log "gui_repeat$i.log" -Title "gui-windows repeat $i" -Code $code
+          }
+          exit $failed
       - name: Compare hover diagnostic (real Windows platform; CR-P2-FINAL-01)
         if: always()
         shell: pwsh
