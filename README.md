@@ -65,6 +65,7 @@ Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng
 | P (hoặc K) / X / U | Chọn / Loại / Bỏ chọn (áp dụng cho mọi ảnh đang đánh dấu) |
 | Tab | hiện / ẩn bảng chi tiết (cửa sổ thấp: lưới ↔ chi tiết) |
 | ô tick, Ctrl/Shift + click | đánh dấu nhiều ảnh |
+| C, G / Esc | **So sánh** 2–4 ảnh đã đánh dấu cạnh nhau; về lưới |
 | 1–5, 0 | chấm sao, xoá sao |
 | F | yêu thích |
 | Q / W / R | chấm nét: nét căng / hơi soft / lệch nét – rung (bấm lại để bỏ); app học độ nét riêng cho từng máy + ống kính |
@@ -73,6 +74,10 @@ Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng
 | Ctrl+L | danh sách khách chọn: dán tin nhắn của khách, vd `9645, 9657-9660, DSC_9665.jpg` |
 
 Khi đang gõ trong ô tìm kiếm (hoặc ô tìm chủ thể), các phím chữ và số chỉ để gõ — không chấm ảnh.
+
+**So sánh (C):** đánh dấu 2–4 ảnh rồi bấm C (hoặc ⧉ So sánh). Ảnh dưới con trỏ chuột là ảnh đang chọn (viền
+xanh): P / X / U / 1–5 / F / Q / W / R chỉ tác động lên ảnh đó, không tự sang ảnh khác. Mỗi ảnh phóng to riêng.
+Esc hoặc G về lưới, giữ nguyên ảnh đang xem và các dấu đánh dấu.
 
 **Bố cục tự thích ứng với cửa sổ:** màn hình rộng có cột bộ lọc bên trái và bảng chi tiết bên phải.
 Chia đôi màn hình theo chiều dọc: bộ lọc thu thành dải biểu tượng (bấm để mở ra), bảng chi tiết hiện bên phải
@@ -171,6 +176,7 @@ keys sits under the photos (toggle with **⌨ Phím tắt**, **F1** shows all).
 | P (or K) / X / U | Chọn (keep) / Loại (reject) / clear (applies to every marked photo) |
 | Tab | show / hide the detail panel (low windows: grid ↔ details) |
 | tick box, Ctrl/Shift + click | mark several photos |
+| C, G / Esc | **Compare** 2–4 marked photos side by side; back to the grid |
 | 1–5, 0 | star rating, clear rating |
 | F | favourite |
 | Ctrl+I / Ctrl+E | import folder / export |
@@ -178,6 +184,10 @@ keys sits under the photos (toggle with **⌨ Phím tắt**, **F1** shows all).
 | Ctrl+L | client pick list: paste the client's message, e.g. `9645, 9657-9660, DSC_9665.jpg` |
 
 While typing in the search box (or the people filter), letter and number keys only type — they never mark photos.
+
+**Compare (C):** mark 2–4 photos and press C (or ⧉ So sánh). The photo under the mouse pointer is the active one
+(blue frame): P / X / U / 1–5 / F / Q / W / R act on it only, with no auto-advance. Each photo zooms on its own.
+Esc or G returns to the grid with the current photo and the marking unchanged.
 
 **The layout adapts to the window:** wide screens show the filters on the left and the detail panel on the right.
 A side-by-side Snap half folds the filters into an icon rail (click to slide them in) and keeps the details on

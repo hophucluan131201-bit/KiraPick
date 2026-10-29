@@ -313,53 +313,68 @@ class AssetListModel(QAbstractListModel):
     def reload(self) -> None:
         rows: list[AssetRecord] = []
         if self._project is not None:
-            sql = _QUERY + _FILTER_SQL[self._filter]
             params: dict[str, Any] = {"min_rating": self._min_rating, "target_id": self._target_id}
-            uncertain: set[int] = set()
-            if self._filter is Filter.SUBJECT:
-                uncertain = {r[0] for r in self._project.conn.execute(
-                    """SELECT asset_id FROM occurrences WHERE subject_id = ? GROUP BY asset_id
-                       HAVING SUM(assignment != 'suggested') = 0""", (self._target_id,))}
+            extra = _FILTER_SQL[self._filter]
             if self._source_id is not None:
-                sql += " AND a.source_id = :source_id"
+                extra += " AND a.source_id = :source_id"
                 params["source_id"] = self._source_id
-            sql += " ORDER BY a.capture_time IS NULL, a.capture_time, a.subsec, a.relative_path"
-            conn = self._project.conn
-            scores = photo_scores(conn, self._target_id if self._filter is Filter.SUBJECT else None)
-            picks = {r[0]: r[1] for r in conn.execute("SELECT asset_id, rank FROM picks")}  # newest run only
-            turns = view.rotations(conn)
-            pairs = self._pair_names(conn)
-            cache = self._project.cache_dir
-            for r in conn.execute(sql, params):
-                if self._search:
-                    name = PurePosixPath(r["relative_path"]).name.casefold()
-                    if not any(t in name for t in self._search):
-                        continue
-                rows.append(
-                    AssetRecord(
-                        id=r["id"], source_id=r["source_id"],
-                        path=Path(r["root_path"]) / Path(r["relative_path"]),
-                        relative_path=r["relative_path"], extension=r["extension"], status=r["status"],
-                        error=r["error"], thumb_file=cache / r["thumb"] if r["thumb"] else None,
-                        capture_time=r["capture_time"], width=r["width"], height=r["height"],
-                        camera=_camera(r["make"], r["model"]), lens=r["lens"],
-                        exif=json.loads(r["exif_json"]) if r["exif_json"] else {},
-                        paired_with=pairs.get(r["pair_group_id"], {}).get(r["id"], []),
-                        preview_source=r["preview_source"],
-                        flag=r["flag"], rating=int(r["rating"]), favorite=bool(r["favorite"]), focus=r["focus"],
-                        uncertain=r["id"] in uncertain,
-                        score=scores[r["id"]][1] if r["id"] in scores else None,
-                        pick_rank=picks.get(r["id"]), rotation=turns.get(r["id"], 0),
-                    )
-                )
-                rec = rows[-1]
-                if rec.score is not None:
-                    rec.ranked = self._ranker(rec.id, rec.score) if self._ranker else rank(rec.score, None, [], 0.0)
-            rows = sort_records(rows, self._sort)
+            rows = sort_records(self._load_rows(extra, params, search=True), self._sort)
         self.beginResetModel()
         self._rows = rows
         self._row_of = {rec.id: i for i, rec in enumerate(rows)}
         self.endResetModel()
+
+    def records_by_id(self, ids: list[int]) -> dict[int, AssetRecord]:
+        """Fresh records of these photos whatever the filter, search or folder shown (Compare keeps its photos);
+        a photo no longer in the session is missing from the result."""
+        if self._project is None or not ids:
+            return {}
+        marks = ",".join(str(int(i)) for i in ids)
+        params: dict[str, Any] = {"min_rating": self._min_rating, "target_id": self._target_id}
+        return {rec.id: rec for rec in self._load_rows(f" AND a.id IN ({marks})", params, search=False)}
+
+    def _load_rows(self, extra_sql: str, params: dict[str, Any], *, search: bool) -> list[AssetRecord]:
+        assert self._project is not None
+        rows: list[AssetRecord] = []
+        sql = _QUERY + extra_sql
+        uncertain: set[int] = set()
+        if self._filter is Filter.SUBJECT:
+            uncertain = {r[0] for r in self._project.conn.execute(
+                """SELECT asset_id FROM occurrences WHERE subject_id = ? GROUP BY asset_id
+                   HAVING SUM(assignment != 'suggested') = 0""", (self._target_id,))}
+        sql += " ORDER BY a.capture_time IS NULL, a.capture_time, a.subsec, a.relative_path"
+        conn = self._project.conn
+        scores = photo_scores(conn, self._target_id if self._filter is Filter.SUBJECT else None)
+        picks = {r[0]: r[1] for r in conn.execute("SELECT asset_id, rank FROM picks")}  # newest run only
+        turns = view.rotations(conn)
+        pairs = self._pair_names(conn)
+        cache = self._project.cache_dir
+        for r in conn.execute(sql, params):
+            if search and self._search:
+                name = PurePosixPath(r["relative_path"]).name.casefold()
+                if not any(t in name for t in self._search):
+                    continue
+            rows.append(
+                AssetRecord(
+                    id=r["id"], source_id=r["source_id"],
+                    path=Path(r["root_path"]) / Path(r["relative_path"]),
+                    relative_path=r["relative_path"], extension=r["extension"], status=r["status"],
+                    error=r["error"], thumb_file=cache / r["thumb"] if r["thumb"] else None,
+                    capture_time=r["capture_time"], width=r["width"], height=r["height"],
+                    camera=_camera(r["make"], r["model"]), lens=r["lens"],
+                    exif=json.loads(r["exif_json"]) if r["exif_json"] else {},
+                    paired_with=pairs.get(r["pair_group_id"], {}).get(r["id"], []),
+                    preview_source=r["preview_source"],
+                    flag=r["flag"], rating=int(r["rating"]), favorite=bool(r["favorite"]), focus=r["focus"],
+                    uncertain=r["id"] in uncertain,
+                    score=scores[r["id"]][1] if r["id"] in scores else None,
+                    pick_rank=picks.get(r["id"]), rotation=turns.get(r["id"], 0),
+                )
+            )
+            rec = rows[-1]
+            if rec.score is not None:
+                rec.ranked = self._ranker(rec.id, rec.score) if self._ranker else rank(rec.score, None, [], 0.0)
+        return rows
 
     @staticmethod
     def _pair_names(conn: Any) -> dict[int, dict[int, list[str]]]:

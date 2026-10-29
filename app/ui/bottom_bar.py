@@ -33,6 +33,7 @@ class BottomBar(QWidget):
     reject = Signal()
     clear = Signal()
     rating = Signal(int)
+    compare = Signal()
     rotate = Signal()
     exif = Signal()
     export = Signal()
@@ -89,6 +90,8 @@ class BottomBar(QWidget):
             b.clicked.connect(lambda _c=False, n=n: self.rating.emit(n))
             row.addWidget(b)
             self.star_buttons.append(b)
+        self.compare_button = button("⧉ So sánh", "So sánh 2–4 ảnh đã đánh dấu cạnh nhau (phím C) — "
+                                     "Ctrl+click để đánh dấu", self.compare)
         self.rotate_button = button("⟳ Xoay xem", "Xoay ảnh 90° để xem (file gốc không đổi)", self.rotate)
         self.exif_button = button("Xem EXIF", "Mở thông số EXIF của ảnh", self.exif)
         self.more_button = QToolButton()
@@ -99,6 +102,7 @@ class BottomBar(QWidget):
         for n in range(1, 6):
             more.addAction(QAction("★" * n, self, triggered=lambda _c=False, n=n: self.rating.emit(n)))
         more.addAction(QAction("Bỏ chọn", self, triggered=lambda _c=False: self.clear.emit()))  # hidden from the bar in compact mode
+        more.addAction(QAction("⧉ So sánh", self, triggered=lambda _c=False: self.compare.emit()))
         more.addAction(QAction("⟳ Xoay xem", self, triggered=lambda _c=False: self.rotate.emit()))
         more.addAction(QAction("Xem EXIF", self, triggered=lambda _c=False: self.exif.emit()))
         self.more_button.setMenu(more)
@@ -129,7 +133,7 @@ class BottomBar(QWidget):
     def set_compact(self, on: bool) -> None:
         """Narrow windows: short counts; ★, Xoay xem and EXIF move into "⋯"; Chọn / Loại / Xuất always stay."""
         self._compact = on
-        for b in (*self.star_buttons, self.rotate_button, self.exif_button, self.clear_button):
+        for b in (*self.star_buttons, self.compare_button, self.rotate_button, self.exif_button, self.clear_button):
             b.setVisible(not on)
         self.more_button.setVisible(on)
         self.rejected.setVisible(not on)

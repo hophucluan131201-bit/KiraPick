@@ -172,6 +172,11 @@ class DetailPanel(QWidget):
         self.show_record(None, taste=None, people=None, neighbours=[])
 
     # ------------------------------------------------------------------ API
+    @property
+    def shown_id(self) -> int | None:
+        """The photo the panel shows now (its buttons act on this one)."""
+        return self._shown_id if self._shown_id != -1 else None
+
     def show_record(self, rec: AssetRecord | None, *, taste: TasteStatus | None, people: str | None,
                     neighbours: list[AssetRecord], pixmap: QPixmap | None = None, selection: str | None = None,
                     neighbour_pixmaps: dict[int, QPixmap] | None = None) -> None:

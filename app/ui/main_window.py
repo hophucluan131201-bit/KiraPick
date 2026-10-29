@@ -86,6 +86,8 @@ from app.ui import update_dialog
 from app.ui.update_dialog import AppUpdater
 from app.updates.app_update import should_auto_check
 from app.ui.people_delegate import PeopleDelegate
+from app.ui.compare_layout import initial_active, start_error
+from app.ui.compare_view import CompareView
 from app.ui.export_dialog import ExportDialog
 from app.ui.grid import card_texts, make_filmstrip, make_grid
 from app.ui.detail_panel import DetailPanel
@@ -123,7 +125,7 @@ def sessions_dir() -> Path:
 _KEYS_GRID = [
     ("Space / Enter", "xem ảnh lớn"), ("← → ↑ ↓", "di chuyển"), ("P / K", "chọn"), ("X", "loại"), ("U", "bỏ chọn"),
     ("1–5 / 0", "sao / xoá sao"), ("F", "yêu thích"), ("Tab", "bảng chi tiết"),
-    ("Q / W / R", "chấm nét"), ("Ctrl/Shift + click", "chọn nhiều ảnh"),
+    ("Q / W / R", "chấm nét"), ("Ctrl/Shift + click", "chọn nhiều ảnh"), ("C", "so sánh 2–4 ảnh"),
     ("Ctrl+A", "chọn tất cả"), ("Ctrl+F", "tìm tên file"), ("Ctrl+E", "xuất ảnh"), ("F1", "tất cả phím tắt"),
 ]
 _KEYS_LOUPE = [
@@ -134,11 +136,17 @@ _KEYS_LOUPE = [
 ]
 
 
-def key_hints_html(loupe: bool) -> str:
+_KEYS_COMPARE = [
+    ("Rê chuột", "chọn ảnh"), ("P / K", "chọn"), ("X", "loại"), ("U", "bỏ chọn"), ("1–5", "sao"), ("F", "yêu thích"),
+    ("Q / W / R", "chấm nét"), ("I", "thông tin AI"), ("E", "mắt"), ("Z", "100%"), ("Esc", "về lưới"),
+]
+
+
+def key_hints_html(loupe: bool, compare: bool = False) -> str:
     """One compact line of key chips for the current view."""
     chip = ("<span style='background-color:#3a3d42; color:#e8eaed;'>&nbsp;{}&nbsp;</span>"
             "&nbsp;<span style='color:#9aa0a6;'>{}</span>")
-    items = _KEYS_LOUPE if loupe else _KEYS_GRID
+    items = _KEYS_COMPARE if compare else _KEYS_LOUPE if loupe else _KEYS_GRID
     nb = lambda text: text.replace(" ", "&nbsp;")  # noqa: E731 - a key and its meaning never wrap apart
     return "<b>Phím tắt</b>&nbsp;&nbsp; " + " &nbsp; ".join(chip.format(nb(k), nb(v)) for k, v in items)
 
@@ -494,6 +502,10 @@ class MainWindow(QMainWindow):
         self.center.addWidget(self.grid)  # 1
         self.center.addWidget(loupe)  # 2
         self.viewer.back_requested.connect(lambda: self.show_loupe(False))
+        self.compare = CompareView()
+        self.compare.back_requested.connect(self.leave_compare)
+        self.compare.panel_photo_changed.connect(self._on_compare_panel)
+        self.center.addWidget(self.compare)  # 3 = COMPARE_PAGE
 
         # Small cheat sheet under the photos; its content follows the current view.
         self.key_hints = QLabel()
@@ -546,6 +558,9 @@ class MainWindow(QMainWindow):
         self.detail.setAutoFillBackground(True)
         self.inspector = self.detail.inspector  # the Thông tin ảnh tab
         self.model.gate = self.viewer.gate = self.detail.score_card.histogram.gate = self._gate
+        for tile in self.compare.tiles:
+            tile.viewer.gate = self._gate
+        self.model.modelReset.connect(self._refresh_compare)
         self.detail.keep_clicked.connect(lambda: self.set_flag("keep"))
         self.detail.reject_clicked.connect(lambda: self.set_flag("reject"))
         self.detail.clear_clicked.connect(lambda: self.set_flag(None))
@@ -606,6 +621,7 @@ class MainWindow(QMainWindow):
         b.rating.connect(self.set_rating)
         b.rotate.connect(self.rotate_view)
         b.exif.connect(self.detail.open_exif)
+        b.compare.connect(self.show_compare)
         b.export.connect(lambda: self.open_export_dialog())
         b.export_client.connect(lambda: self.open_export_dialog(client_list=True))
         self._marking_timer = QTimer(self, singleShot=True, interval=100)  # coalesce bursts of selection changes
@@ -628,7 +644,9 @@ class MainWindow(QMainWindow):
         sc("Left", lambda: self.step(-1))
         sc("Space", self.toggle_loupe)
         sc("Return", self.toggle_loupe)
-        sc("Escape", lambda: self.layout_controller.close_floating() or self.show_loupe(False))
+        sc("Escape", lambda: self.layout_controller.close_floating() or self.leave_compare() or self.show_loupe(False))
+        sc("C", self.show_compare)
+        sc("G", lambda: self.leave_compare() or self.show_loupe(False))
         sc("Z", self.toggle_zoom)
         sc("+", lambda: self.zoom_step(1))
         sc("=", lambda: self.zoom_step(1))
@@ -680,6 +698,7 @@ class MainWindow(QMainWindow):
         running after SWITCH_WAIT_MS — the caller must then not switch or delete anything."""
         if not self._export_may_stop("đổi thư mục"):
             return False
+        self.leave_compare()
         self._stop_analysis()
         for dialog in self.findChildren(QDialog):
             dialog.close()
@@ -946,7 +965,7 @@ class MainWindow(QMainWindow):
             "SELECT asset_id, subject_id FROM occurrences WHERE subject_id IS NOT NULL AND is_main = 1")}
         recs = {r.id: r for r in self.model.records()}
         if not recs or not self.taste.clips:
-            QMessageBox.information(self, "So sánh ảnh", "Cần bấm 📊 Phân tích ảnh (có mô hình CLIP) trước, "
+            QMessageBox.information(self, "Dạy gu", "Cần bấm 📊 Phân tích ảnh (có mô hình CLIP) trước, "
                                                          "và mở danh sách có ảnh.")
             return None
         ranked = {i: r.ranked.value for i, r in recs.items() if r.ranked is not None and r.ranked.value is not None}
@@ -989,7 +1008,7 @@ class MainWindow(QMainWindow):
         box.setWindowTitle("AI đã học")
         box.setTextFormat(Qt.TextFormat.RichText)
         box.setText(self.learning_text())
-        compare = box.addButton("So sánh ảnh…", QMessageBox.ButtonRole.ActionRole)
+        compare = box.addButton("🎓 Dạy gu…", QMessageBox.ButtonRole.ActionRole)
         compare.setToolTip("Chọn tấm thích hơn trong từng cặp ảnh giống nhau, để app học gu bạn nhanh hơn")
         forget = box.addButton("Xoá dữ liệu học…", QMessageBox.ButtonRole.DestructiveRole)
         box.addButton("Đóng", QMessageBox.ButtonRole.RejectRole)
@@ -1629,8 +1648,8 @@ class MainWindow(QMainWindow):
             self.filmstrip.scrollTo(idx)
 
     def step(self, delta: int) -> None:
-        if not self.model.rowCount():
-            return
+        if not self.model.rowCount() or self.in_compare():
+            return  # Compare: ← → and auto-advance do nothing
         row = self.grid.currentIndex().row()
         self.select_row(max(0, min(self.model.rowCount() - 1, (row if row >= 0 else -delta) + delta)))
 
@@ -1785,6 +1804,8 @@ class MainWindow(QMainWindow):
                                    len(self.selected_records()))
 
     def _update_empty_state(self) -> None:
+        if self.in_compare():
+            return  # the compared photos stay on screen whatever the filter shows (spec)
         has_rows = self.model.rowCount() > 0 or (self.project is not None and self.model.is_filtered)
         if not has_rows:
             self.center.setCurrentIndex(0)
@@ -1795,8 +1816,8 @@ class MainWindow(QMainWindow):
     def _on_view_changed(self, index: int) -> None:
         loupe = index == 2
         self.act_loupe.setChecked(loupe)
-        self.act_grid_view.setChecked(not loupe)
-        self.key_hints.setText(key_hints_html(loupe))
+        self.act_grid_view.setChecked(index == 1)
+        self.key_hints.setText(key_hints_html(loupe, compare=index == COMPARE_PAGE))
 
     def _toggle_key_hints(self, on: bool) -> None:
         self.settings.setValue("show_key_hints", on)
@@ -1807,8 +1828,70 @@ class MainWindow(QMainWindow):
         self._hints_room = room
         self.key_hints.setVisible(self.act_help.isChecked() and room)
 
+    # ------------------------------------------------------------ compare
+    def in_compare(self) -> bool:
+        return self.center.currentIndex() == COMPARE_PAGE
+
+    def show_compare(self) -> bool:
+        """C / ⧉ So sánh: the 2–4 marked photos side by side (grid order); False with a status text otherwise."""
+        if self.project is None:
+            return False
+        if self.in_compare():
+            return True
+        marked = sorted(self.selected_records(), key=lambda r: self.model.index_of(r.id).row())
+        error = start_error(len(marked))
+        if error is not None:
+            self.status.setText(error)
+            return False
+        current = self.current_record()
+        active = initial_active([r.id for r in marked], current.id if current else None)
+        self.center.setCurrentIndex(COMPARE_PAGE)
+        self.compare.show_records(marked, {r.id: pm for r in marked if (pm := self.model.pixmap(r)) is not None},
+                                  active)
+        return True
+
+    def leave_compare(self) -> bool:
+        """Esc / G / ◀: back to the grid exactly as it was (current photo, marking, scroll, filter)."""
+        if not self.in_compare():
+            return False
+        self.compare.clear()
+        self.center.setCurrentIndex(1)
+        self._update_empty_state()
+        if self.grid.currentIndex().isValid():
+            self.grid.scrollTo(self.grid.currentIndex())
+        self.grid.setFocus()
+        self._show_inspector(self.current_record())
+        return True
+
+    def view_record(self) -> AssetRecord | None:
+        """The photo shown for E / Z / zoom / the panel: the active photo in Compare, else the current photo."""
+        if self.in_compare() and self.compare.active_id is not None:
+            return next((r for r in self.compare.records() if r.id == self.compare.active_id), None)
+        return self.current_record()
+
+    def _on_compare_panel(self, asset_id: int) -> None:
+        rec = next((r for r in self.compare.records() if r.id == asset_id), None)
+        if rec is not None and self.in_compare():
+            self._show_inspector(rec)
+
+    def _refresh_compare(self) -> None:
+        """After a reload: the compared photos are re-read by id (whatever the filter); zoom, pan and the active
+        photo stay. A photo gone from the session closes Compare."""
+        if not self.in_compare():
+            return
+        ids = [r.id for r in self.compare.records()]
+        fresh = self.model.records_by_id(ids)
+        if len(fresh) != len(ids):
+            self.leave_compare()
+            self.status.setText("Một ảnh đang so sánh không còn trong danh sách — đã về lưới.")
+            return
+        for asset_id in ids:
+            self.compare.update_record(fresh[asset_id])
+
     # ------------------------------------------------------------ loupe
     def toggle_loupe(self) -> None:
+        if self.in_compare():
+            return  # Space / Enter do nothing in Compare
         self.show_loupe(self.center.currentIndex() != 2)
 
     def show_loupe(self, on: bool) -> None:
@@ -2244,6 +2327,7 @@ def strip_text(rec: AssetRecord | None) -> str:
     return "  ·  ".join(p for p in parts if p) + "     —  ▤ Chi tiết: xem phân tích và thông tin ảnh"
 
 
+COMPARE_PAGE = 3  # centre pages: 0 empty hint, 1 grid, 2 loupe, 3 Compare
 SWITCH_WAIT_MS = 10000  # switching folder: how long to wait for workers before refusing
 CLOSE_WAIT_MS = 3000  # closing: blocking wait; afterwards a non-blocking one (GUI timer)
 HUNG_AFTER_S = 15.0  # closing: ask whether to quit at once after this long
