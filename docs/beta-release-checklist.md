@@ -32,7 +32,10 @@ Rules for the release-candidate phase (review):
 | B5 | Beta release notes: the v7 session upgrade, the `.v5.bak` / `.v6.bak` copy, what 2.2.1 shows for an upgraded folder, how to go back (section 2, K1) | pending | `packaging/notes/RELEASE_NOTES.md` at release time |
 | B6 | Packaged build self-test with the network blocked (`scripts/build_windows.ps1`, run by the build job) | pending | runs with the release build only |
 
-B2 for part 2: the `gui-windows` step also runs the Compare GUI files on the real `windows` platform (real mouse
+B2 for part 2, run 40961471146 (`2db7d62`): suite 3 failed / 641 passed (elided-header asserts in
+`test_compare_lifecycle.py`, offscreen fonts); gui-windows 39 failed / 124 passed (Compare hover tests on the real
+platform — open, stop rule); snap-dpi pass; perf pass (P/X in Compare median 29.7 ms, worst 95.9 ms); stress 5 of 6
+failed (same lifecycle asserts; log not readable from the container). The `gui-windows` step also runs the Compare GUI files on the real `windows` platform (real mouse
 moves for the hover tests), `perf` includes `test_compare_perf.py` / `test_compare_memory.py` (Windows RSS from
 `K32GetProcessMemoryInfo`), `stress` includes `test_compare_lifecycle.py`.
 

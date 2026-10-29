@@ -358,7 +358,7 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
-## UI part 2 — Compare mode (2026-10-29) — status: Tasks 1–8 tested offscreen (Linux); Windows CI per run below; Windows manual blocked
+## UI part 2 — Compare mode (2026-10-29) — status: Tasks 1–8 tested offscreen (Linux); Task 8 STOPPED: hover tests fail on the real Windows platform (CI run 40961471146); Windows manual blocked
 
 Spec `docs/superpowers/specs/2026-10-29-kirapick-compare-design.md` (rev 3), plan
 `docs/superpowers/plans/2026-10-29-kirapick-compare.md`. Batches 1–2 and Task 7 approved by the external reviewer;
@@ -373,7 +373,7 @@ Task 8 waits for the final Part 2 review. Not released: no tag, no build, no pub
 | 5 Actions on the active photo only | tested | `tests/gui/test_compare_actions.py` |
 | 6 AI line (I), arrangement settings | tested | `tests/gui/test_compare_overlay.py` |
 | 7 Pools, 200 000 000 px budget, shutdown | tested (offscreen) | `tests/gui/test_compare_lifecycle.py`, `tests/perf/test_compare_memory.py` |
-| 8 Regression, late callbacks, slow source, performance, Windows CI | tested offscreen; Windows CI see `docs/beta-release-checklist.md` B2 | `tests/gui/test_compare_final.py`, `tests/gui/test_qt_image.py`, `tests/perf/test_compare_perf.py`; Compare GUI files also run on the real `windows` platform in CI |
+| 8 Regression, late callbacks, slow source, performance, Windows CI | **blocked** — tested offscreen (Linux 3 × 807 passed); on the real `windows` platform the hover / active-photo tests fail (39 failed), cause not known yet (synthetic QTest moves vs real routing); 2 lifecycle tests fail on offscreen Windows (elided header, test-only). Review package `review_p2_final` | `tests/gui/test_compare_final.py`, `tests/gui/test_qt_image.py`, `tests/perf/test_compare_perf.py`; Compare GUI files also run on the real `windows` platform in CI |
 
 Task 8 fixes found by the measurements (each with a test that fails without it):
 - P / X / stars / ⟳ in Compare re-read only the compared photos' decisions and Xoay xem; before, every press scored
