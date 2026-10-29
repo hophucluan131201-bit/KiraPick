@@ -151,6 +151,7 @@ jobs:
         run: |
           if (Test-Path perf.jsonl) { Get-Content perf.jsonl | Select-Object -Skip 10 | ForEach-Object { Write-Host "::notice title=perf::$_" } }
       - name: Shutdown and worker stress (not reproduced in N runs is not proof)
+        if: always()
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen

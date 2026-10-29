@@ -154,15 +154,41 @@ def test_sustained_culling(session, n: int, monkeypatch) -> None:  # noqa: ANN00
         elif started:
             pauses.append(_ms(started.pop()))
 
+    # Where the time of one press goes (to explain an outlier on another machine): each part's duration per press.
+    parts: dict[str, float] = {}
+
+    def timed_part(obj, name: str, label: str) -> None:  # noqa: ANN001
+        real = getattr(obj, name)
+
+        def wrapper(*a, **k):  # noqa: ANN002, ANN003, ANN202
+            t0 = time.perf_counter()
+            try:
+                return real(*a, **k)
+            finally:
+                parts[label] = parts.get(label, 0.0) + _ms(t0)
+
+        monkeypatch.setattr(obj, name, wrapper)
+
+    for name in ("_learn_taste", "_show_inspector", "_update_counts", "refresh_steps", "retrain_taste"):
+        timed_part(w, name, name.strip("_"))
     gc.callbacks.append(on_gc)
     rss0 = _rss_mb()
     times = []
+    slowest: tuple[float, dict[str, float]] = (0.0, {})
     try:
         for i in range(presses):
+            parts.clear()
+            pauses_before = len(pauses)
             t0 = time.perf_counter()
             w.set_flag("keep" if i % 2 == 0 else "reject")  # what P / X call (auto-advance on)
+            t_paint = time.perf_counter()
             _paint(w)
+            parts["paint"] = _ms(t_paint)
             times.append(_ms(t0))
+            if len(pauses) > pauses_before:
+                parts["gc"] = sum(pauses[pauses_before:])
+            if times[-1] > slowest[0]:  # "other": the decision commit, auto-advance, Qt events in between
+                slowest = (times[-1], {**parts, "other": times[-1] - sum(parts.values())})
             if i % 20 == 0:  # the GUI-thread collector runs on its timer; let it run like in real use
                 gc_guard.GuiThreadCollector.check()
     finally:
@@ -177,6 +203,8 @@ def test_sustained_culling(session, n: int, monkeypatch) -> None:  # noqa: ANN00
             p95_ms=sorted(times)[int(len(times) * 0.95)], inspector_median_ms=statistics.median(inspector),
             gc_pauses=len(pauses), gc_pause_median_ms=statistics.median(pauses) if pauses else 0.0,
             gc_pause_worst_ms=max(pauses) if pauses else 0.0, rss_start_mb=rss0, rss_end_mb=_rss_mb())
+    _record("sustained_culling_slowest_press", n, total_ms=slowest[0],
+            **{f"{k}_ms": v for k, v in sorted(slowest[1].items())})
     assert statistics.median(times) <= 50 and max(times) <= 100
     assert statistics.median(inspector) <= 30
 
