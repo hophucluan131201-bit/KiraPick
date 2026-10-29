@@ -6,7 +6,8 @@
 
 **Architecture:** A pure arrangement/state module, a `CompareTile` wrapping one part 1 `ImageViewer`, and a `CompareView` page
 (centre page 3) that `MainWindow` routes every action through (`_action_records()` / `view_record()`). The tiles share
-one 2-thread decode pool with a 200 MP full-frame budget, and join the part 1 shutdown contract.
+two independent single-thread pools (previews; full-resolution decodes) with an exact 200 000 000-pixel full-frame
+budget, and join the part 1 shutdown contract.
 
 **Tech Stack:** Python 3.12/3.13, PySide6 6.12 (Qt Widgets), SQLite (no schema change), pytest + pytest-qt (offscreen;
 real `windows` platform in CI).
@@ -166,7 +167,8 @@ def test_initial_active():
   - `test_quick_hover_emits_panel_once`: hover 1 → 2 → 3 within 50 ms → `panel_photo_changed` emitted once, with id3.
   - `test_leave_keeps_last_and_flushes_panel`: hover tile 3 then `leaveEvent` on the view → `active_id == id3`, `panel_photo_changed(id3)` emitted at once.
   - `test_initial_active_without_hover` (Review Focus): `show_records(..., active_id=id2)` with the pointer outside → `active_id == id2`, tile 2 frame on.
-  - `test_layout_matches_arrange`: 3 records at 1600×900 in "grid" → tile geometries in a 2×2 grid, third tile spanning both columns.
+  - `test_layout_matches_arrange`: 3 records with the Compare page resized to 1600×900 in "grid" → tile geometries in a 2×2 grid, third tile spanning both columns.
+  - `test_arrange_uses_the_page_size` (RV-P2-V3-03): the size passed to `arrange` is `CompareView.contentsRect().size()` (the page as laid out by Qt, without the arrangement toolbar), never the window size: a window of 1600×1000 with sidebar and detail panel docked gives `arrange` an area smaller than the window and equal to the page.
   - `test_resize_keeps_each_tile_zoom`: tiles 1 and 2 zoomed to 1.0 at different points; resize 1600×900 → 960×1000 (arrangement changes) → each tile's `zoom` and centre point unchanged (± 0.01).
   - `test_rotation_rearranges_keeping_zoom` (Review Focus): two landscape photos 1×2 at 1200×800; `update_record` with rotation 1 for one → arrangement recomputed; the other tile's zoom and centre point unchanged.
   - `test_tiles_and_pools_created_once`: `show_records` / `clear` repeated 5× → same 4 tile objects, same two pools, each `maxThreadCount() == 1`.
@@ -267,6 +269,8 @@ def test_initial_active():
   - `test_budget_drops_least_recently_active`: assets recorded 9504 × 6336 (60 217 344 px); zoom tiles 1, 2, 3 (180 652 032), activate 4 and zoom → before tile 4's decode is queued, tile 1 (least recently active) is back to fit with the exact header text, `full_pixels() <= 200_000_000`.
   - `test_reservation_before_decode`: two tiles zoomed within one event-loop turn whose expected sizes together pass the budget → the second reservation drops the first tile before any decode starts (held decode via threading.Event; only one FULL task ever queued at a time).
   - `test_reservation_released_on_failure_and_drop`: a FULL load that fails, and one dropped by leaving Compare → `full_pixels() == 0`.
+  - `test_double_reservation_same_tile`: Z twice / wheel zoom repeated on one tile before its decode arrives → one reservation, `full_pixels()` counts it once; one FULL task queued (RV-P2-V3-02).
+  - `test_decoded_larger_than_expected`: recorded 6000 × 4000 but the decode returns 8256 × 5504 → reservation corrected to 45 441 024 on arrival; if that passes the budget, least recently active tiles are dropped until `full_pixels() <= 200_000_000` (RV-P2-V3-02).
   - `test_oversized_single_frame_not_decoded`: an asset recorded 20000 × 12000 (240 MP) zoomed → no FULL task queued, tile stays on the preview, exact oversized header text.
   - `test_late_result_after_leaving_is_ignored`: hold a decode (threading.Event), Esc, release → no tile pixmap change, no exception.
   - `test_close_with_full_loads_running` and `test_switch_with_full_loads_running`: 4 held full decodes; close / folder switch waits (part 1 status "Đang đợi đọc ảnh để so sánh …"), DB closed only after the pool is idle (part 1 `_watch_db` order check).
@@ -290,7 +294,7 @@ def test_initial_active():
 - [ ] **Step 1: Write the tests**
   - perf: enter Compare with 4 photos (synthetic 10,000-photo session) first paint ≤ 100 ms; real NEF previews ≤ 1 s (skips without samples); P/X in Compare median ≤ 50 ms, worst ≤ 100 ms (200 presses); hover change worst Qt-thread block ≤ 50 ms (10 ms probe, part 1 method).
   - RV-P2-02 memory: zoom all 4 tiles and record process peak RSS (sampled every 20 ms) and each decode's transient peak, for 24 MP NEF (owner samples, skip without), synthetic 45 MP (8256 × 5504) and 61 MP (9504 × 6336) JPEGs; assert held full pixels ≤ `FULL_BUDGET_PIXELS` throughout and no more than one full decode in flight; the 61 MP set shows the budget drop (four do not fit).
-  - Snap: Compare at the 13 part 1 Snap sizes → no cut-off button (`clipped_buttons`), every displayed photo's long side ≥ 160 px or the auto fallback.
+  - Snap: Compare at the 13 part 1 Snap sizes (layout from the Compare page's real Qt size, RV-P2-V3-03) → no cut-off button (`clipped_buttons`), every displayed photo's long side ≥ 160 px or the auto fallback.
 - [ ] **Step 2: Run** `.venv/bin/python -m pytest -q -m perf tests/perf/test_compare_perf.py -s` and `.venv/bin/python -m pytest -q tests/gui/test_snap_sizes.py` — Expected: pass; numbers recorded.
 - [ ] **Step 3: Full suite** `.venv/bin/python -m pytest -q` three times — Expected: all pass each time.
 - [ ] **Step 4: Windows CI** — push with `[perf]` (never a release marker); read each notice (`suite`, `gui-windows`, `snap-dpi`, `perf`, `stress`), record them in `docs/beta-release-checklist.md` B2; screenshots WIDE / NARROW / SHORT / TINY.
