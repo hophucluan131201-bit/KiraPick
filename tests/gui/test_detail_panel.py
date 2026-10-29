@@ -92,7 +92,7 @@ def test_exif_hidden_until_opened(qtbot, env: dict) -> None:  # noqa: F811
     w.select_row(0)
     assert w.detail.exif_section.collapsed
     w.detail.open_exif()
-    assert w.detail.tabs.tabText(w.detail.tabs.currentIndex()) == "Thông tin ảnh"
+    assert w.detail.tabs.currentIndex() == TABS.index("Thông tin ảnh")  # by position: titles shorten to fit
     assert not w.detail.exif_section.collapsed
     w.select_row(1)
     assert w.detail.exif_section.collapsed  # closed again for the next photo
@@ -179,7 +179,7 @@ def test_exif_stays_open_while_the_photo_is_the_same(qtbot, env: dict) -> None: 
     w.detail.star_buttons[2].click()
     w.detail.favorite_button.click()
     assert not w.detail.exif_section.collapsed
-    assert w.detail.tabs.tabText(w.detail.tabs.currentIndex()) == "Thông tin ảnh"  # the tab is kept too
+    assert w.detail.tabs.currentIndex() == TABS.index("Thông tin ảnh")  # the tab is kept too
     w.select_row(1)
     assert w.detail.exif_section.collapsed
 

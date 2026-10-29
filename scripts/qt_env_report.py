@@ -29,7 +29,7 @@ def main() -> int:
         "font": f"{font.family()} {font.pointSizeF()} pt / {fm.height()} px high",
         "advance_px": {t: fm.horizontalAdvance(t) for t in samples},
     }
-    print(json.dumps(report, ensure_ascii=False))
+    print(json.dumps(report))  # ASCII: a Windows console may not encode the Vietnamese samples
     return 0
 
 

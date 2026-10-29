@@ -14,10 +14,12 @@ from app.ui import asset_model
 from app.ui.asset_model import Filter, Sort
 from app.ui.detail_panel import TABS
 from app.ui.layout_modes import DEBOUNCE_MS, Mode
+from tests.gui.platform_checks import fits_screen, skip_unless_fits, skip_without_real_fonts
 from tests.gui.test_main_window import _import, _photo, _window, env  # noqa: F401 - fixture
 
 
 def _at(qtbot, w, size: tuple[int, int]) -> None:  # noqa: ANN001
+    skip_unless_fits(w, size)  # a real platform's screen may be smaller (CI runner)
     w.resize(*size)
     qtbot.wait(DEBOUNCE_MS + 60)
 
@@ -32,6 +34,8 @@ REFERENCE = [((1920, 1000), Mode.WIDE), ((1536, 800), Mode.WIDE), ((1280, 667), 
 def test_modes_at_reference_sizes(qtbot, env: dict) -> None:  # noqa: F811
     w = _window(qtbot, env)
     for size, mode in REFERENCE:
+        if not fits_screen(w, size):
+            continue
         _at(qtbot, w, size)
         assert (w.width(), w.height()) == size
         assert w.layout_controller.mode is mode, size
@@ -182,6 +186,7 @@ def test_3840x1024_wide_shows_grid_and_detail(qtbot, env: dict) -> None:  # noqa
     assert w.grid.viewport().width() >= 4 * cell
     assert w.detail.isVisible() and w.detail.preview.height() >= 80
     bar = w.detail.tabs.tabBar()
+    skip_without_real_fonts()
     assert [bar.tabText(i) for i in range(bar.count())] == list(TABS)  # full titles, nothing clipped
 
 

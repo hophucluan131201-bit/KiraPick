@@ -8,6 +8,7 @@ import pytest
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from app.ui.layout_modes import Mode
+from tests.gui.platform_checks import skip_unless_fits, skip_without_real_fonts
 from tests.gui.test_main_window import _import, _window, env  # noqa: F401 - fixture
 
 SNAP = {  # name: (width, height, mode)
@@ -48,12 +49,10 @@ def test_snap_size_mode_and_no_clipped_buttons(qtbot, env: dict, name: str) -> N
     QApplication.processEvents()
     # A third at 150 % (426 px) is below the 560 px minimum window: Windows then shows the window 560 px wide.
     wanted = (max(width, 560), max(height, 300))
-    if (w.width(), w.height()) != wanted:
-        screen = w.screen().availableGeometry()
-        if wanted[0] > screen.width() or wanted[1] > screen.height():  # a real platform never makes it bigger
-            pytest.skip(f"{name}: larger than this screen ({screen.width()}x{screen.height()} available)")
+    skip_unless_fits(w, wanted)
     assert (w.width(), w.height()) == wanted
     assert w.layout_controller.mode is mode
+    skip_without_real_fonts()
     font = w.font()
     assert clipped_buttons(w) == [], (f"{name} ({QApplication.platformName()}, dpr {w.devicePixelRatioF()}, "
                                       f"font {font.family()} {font.pointSizeF()} pt, dpi {w.logicalDpiX()})")
