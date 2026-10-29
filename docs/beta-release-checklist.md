@@ -4,6 +4,21 @@ Status words: **done** (evidence linked), **pending** (not run yet), **blocked**
 Do not declare the beta ready until every row of section 1 is done (pre-beta review, Task 14 approval).
 No release marker is pushed until the owner gives the release command.
 
+## 0. Two separate decisions (final review, 2026-10-29)
+
+| Decision | Status |
+|---|---|
+| Code review of UI part 1 (Tasks 1–15) | **passed** — Task 15 APPROVED WITH NOTES (implementation only) |
+| Release ready (beta may be published) | **NO** — open: B3, B4, B5, B6, K2. Next phase: release-candidate validation, nothing published |
+
+Rules for the release-candidate phase (review):
+- Report Windows manual validation step by step (section 3), with the GC log line and any errors.
+- Read Windows perf / stress from each step's notice, never from the non-blocking job's green status.
+- Finish version (B4), release notes with backup + rollback steps (B5), packaged offline self-test (B6).
+- No tag, publish or release without the owner's release command.
+- GC (K2): **no `gc.freeze()` in production now**; keep the tested GUI-thread GC guard; decide after numbers from
+  the target laptop. One passing CI run does not prove the latency outlier gone.
+
 ## 1. Release blockers
 
 | # | Item | Status | Evidence / what is missing |

@@ -317,3 +317,12 @@ def test_unscored_photo_shows_dash_and_no_ai_chip():
 - [ ] RV14-04 (review): real JPEGs, unsupported RAW, `thumb_hd` disk use, session cleanup, low disk space, a large export while closing / switching.
 - [ ] Before the beta (review): Windows Snap in WIDE / MEDIUM / NARROW / SHORT / TINY; per-monitor DPI 100/125/150/200 %; real Windows fonts, no clipped buttons; schema v6 → v7 migration, backup and compatibility; RAW+JPEG pairing, Keep/Reject, EXIF, rotation, byte-identical export copies; worker shutdown during work; full suite and GUI smoke on Windows; a known-issues and release-blockers list. Do not declare the beta ready until the Windows manual validation is done.
 - [ ] Full suite `.venv/bin/python -m pytest -q` green; perf numbers in `docs/IMPLEMENTATION_STATUS.md` with status "tested offscreen" (no real Windows GUI run here); screenshots sent; push to `beta` with no release marker; report to the owner in Vietnamese and start the part 2 discussion.
+
+### After Task 15 (final review 2026-10-29: APPROVED WITH NOTES — implementation only; beta release NOT approved)
+
+Release-candidate validation, nothing published (`docs/beta-release-checklist.md` section 0):
+- [ ] B3 owner's Windows manual validation, step by step, with the `GUI-thread GC` log line and any errors.
+- [ ] B4 beta version; B5 release notes incl. session backup / rollback; B6 packaged offline self-test (artifacts-only build).
+- [ ] K2: no `gc.freeze()` in production; decide on GC after target-laptop numbers.
+- [ ] Windows perf / stress read per step notice, never from the job status.
+- [ ] No tag / publish / release without the owner's release command.
