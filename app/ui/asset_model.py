@@ -8,6 +8,7 @@ into QPixmaps on the UI thread.
 from __future__ import annotations
 
 import json
+import threading
 import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -37,7 +38,10 @@ from app.storage.stats import SHOWN_PHOTO_SQL
 from app.storage.project import Project
 from app.ui.shutdown import Gate
 
-THUMB_DISPLAY = 240  # long side of cached pixmaps
+THUMB_DISPLAY = 240  # long side of cached pixmaps at 100 % and the default card size
+THUMB_FILE = 400  # long side of the thumbnail written at import (app.workers.import_job.THUMB_LONG_SIDE)
+HD_LONG_SIDE = 800  # larger cards / high-DPI screens: a sharper thumbnail made once from the photo, cached
+HD_DIR = "thumb_hd"  # in the session's cache folder; the file name carries the photo's size and mtime
 _PIXMAP_CACHE_SIZE = 600
 
 ROLE_RECORD = Qt.ItemDataRole.UserRole + 1
@@ -163,22 +167,47 @@ def turned(pm: QPixmap, turns: int) -> QPixmap:
 
 
 class _ThumbSignals(QObject):
-    loaded = Signal(int, QImage)
+    loaded = Signal(int, QImage, int)  # asset id, image, generation
+
+
+def hd_thumbnail(source: Path, hd_dir: Path, asset_id: int) -> Path | None:
+    """An 800 px thumbnail of the photo, made once (RAW: its embedded preview) and cached in the session folder.
+    The photo is only read. None when it cannot be made (the 400 px import thumbnail is used then)."""
+    try:
+        st = source.stat()
+        target = hd_dir / f"{asset_id}_{st.st_size}_{st.st_mtime_ns}.jpg"
+        if target.is_file():
+            return target
+        from app.ingest.preview import load_image
+
+        loaded = load_image(source, max_long_side=HD_LONG_SIDE, min_long_side=HD_LONG_SIDE)
+        hd_dir.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_name(f"{target.stem}.{threading.get_ident()}.part")  # one per worker thread
+        loaded.image.save(tmp, "JPEG", quality=88)
+        tmp.replace(target)  # complete files only, even if two decodes of the same photo race
+        return target
+    except Exception:  # noqa: BLE001 - only the sharper thumbnail is lost
+        return None
 
 
 class _ThumbTask(QRunnable):
-    def __init__(self, asset_id: int, path: Path, signals: _ThumbSignals, target: int = THUMB_DISPLAY) -> None:
+    def __init__(self, asset_id: int, path: Path, signals: _ThumbSignals, target: int = THUMB_DISPLAY,
+                 generation: int = 0, source: Path | None = None, hd_dir: Path | None = None) -> None:
         super().__init__()
         self.asset_id, self.path, self.signals, self.target = asset_id, path, signals, target
+        self.generation, self.source, self.hd_dir = generation, source, hd_dir
 
     def run(self) -> None:
-        image = QImage(str(self.path))
+        path = self.path
+        if self.target > THUMB_FILE and self.source is not None and self.hd_dir is not None:
+            path = hd_thumbnail(self.source, self.hd_dir, self.asset_id) or path
+        image = QImage(str(path))
         if not image.isNull():
             image = image.scaled(
                 self.target, self.target, Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-        self.signals.loaded.emit(self.asset_id, image)
+        self.signals.loaded.emit(self.asset_id, image, self.generation)
 
 
 class AssetListModel(QAbstractListModel):
@@ -197,8 +226,15 @@ class AssetListModel(QAbstractListModel):
         self._sort = Sort.TIME
         self._ranker: Callable[[int, Score], Ranked] | None = None
         self._pixmaps: OrderedDict[int, QPixmap] = OrderedDict()
-        self._pending: set[int] = set()
+        # Decode generations (review CR12-03): a larger card or a sharper screen starts a new generation; a result
+        # never replaces a newer one, and an older pixmap stays on screen until the sharper one arrives.
+        self._pix_gen: dict[int, int] = {}  # asset id -> generation of the cached pixmap
+        self._pending: dict[int, int] = {}  # asset id -> generation being decoded
+        self._gen = 0
+        self._floor = 0  # oldest generation still accepted (the current session's first)
+        self._gen_target = THUMB_DISPLAY  # physical pixels the current generation decodes to
         self._dpr = 1.0  # device pixel ratio of the screen the grid is on: thumbnails are decoded for it
+        self._cell = THUMB_DISPLAY  # logical card size the grid shows
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(2)
         self.gate = Gate()  # the window shares its own: closed while a session is being released
@@ -209,7 +245,10 @@ class AssetListModel(QAbstractListModel):
     def set_project(self, project: Project | None) -> None:
         self._project = project
         self._pixmaps.clear()
+        self._pix_gen.clear()
         self._pending.clear()
+        self._gen += 1
+        self._floor = self._gen  # results decoded for the previous session (same asset ids!) are dropped
         self.reload()
 
     def set_filter(
@@ -366,21 +405,50 @@ class AssetListModel(QAbstractListModel):
         pm = self._pixmaps.get(rec.id)
         if pm is not None:
             self._pixmaps.move_to_end(rec.id)
-            return pm
-        if rec.thumb_file is not None and rec.id not in self._pending and self.gate.open:
-            self._pending.add(rec.id)
-            self._pool.start(_ThumbTask(rec.id, rec.thumb_file, self._signals, round(THUMB_DISPLAY * self._dpr)))
-        return None
+        current = self._pix_gen.get(rec.id, -1) >= self._gen
+        if (not current and rec.thumb_file is not None and self._pending.get(rec.id) != self._gen
+                and self.gate.open):
+            self._pending[rec.id] = self._gen
+            hd = self._project.cache_dir / HD_DIR if self._project is not None else None
+            self._pool.start(_ThumbTask(rec.id, rec.thumb_file, self._signals, self._gen_target, self._gen,
+                                        rec.path, hd))
+        return pm  # possibly an older, softer one until the new decode arrives
 
-    def _on_thumb_loaded(self, asset_id: int, image: QImage) -> None:
-        self._pending.discard(asset_id)
+    def set_display_size(self, cell: int | None = None, ratio: float | None = None) -> None:
+        """The card size (logical px) or the screen's pixel ratio changed. A NEW generation starts only when the
+        cards need clearly more pixels than the current one decodes (smaller cards reuse what is cached)."""
+        if cell is not None:
+            self._cell = cell
+        if ratio is not None:
+            self._dpr = max(1.0, float(ratio))
+        need = min(HD_LONG_SIDE, max(THUMB_DISPLAY, round(self._cell * self._dpr)))
+        if need > self._gen_target * 1.1:
+            self._gen += 1
+            self._gen_target = need
+            if self._rows:
+                self.dataChanged.emit(self.index(0), self.index(len(self._rows) - 1),
+                                      [Qt.ItemDataRole.DecorationRole])
+
+    @property
+    def decode_size(self) -> int:
+        return self._gen_target
+
+    def _on_thumb_loaded(self, asset_id: int, image: QImage, generation: int = 0) -> None:
+        if self._pending.get(asset_id) == generation:
+            del self._pending[asset_id]
+        if generation < self._floor or generation < self._pix_gen.get(asset_id, -1):
+            return  # another session's result, or older than the cached one: never replaces it
         if image.isNull():
+            self._pix_gen[asset_id] = generation  # unreadable: not asked again on every repaint
             return
         row = self._row_of.get(asset_id)
         turns = self._rows[row].rotation if row is not None else 0
         self._pixmaps[asset_id] = turned(QPixmap.fromImage(image), turns)
+        self._pixmaps.move_to_end(asset_id)
+        self._pix_gen[asset_id] = generation
         while len(self._pixmaps) > _PIXMAP_CACHE_SIZE:
-            self._pixmaps.popitem(last=False)
+            dropped, _pm = self._pixmaps.popitem(last=False)
+            self._pix_gen.pop(dropped, None)
         if row is not None:
             idx = self.index(row)
             self.dataChanged.emit(idx, idx, [Qt.ItemDataRole.DecorationRole])
@@ -404,15 +472,8 @@ class AssetListModel(QAbstractListModel):
         return self._pool.waitForDone(msecs)
 
     def set_device_pixel_ratio(self, ratio: float) -> None:
-        """Another screen or scale: decode thumbnails again at that many physical pixels per logical pixel."""
-        ratio = max(1.0, float(ratio))
-        if ratio == self._dpr:
-            return
-        self._dpr = ratio
-        self._pixmaps.clear()
-        self._pending.clear()
-        if self._rows:
-            self.dataChanged.emit(self.index(0), self.index(len(self._rows) - 1), [Qt.ItemDataRole.DecorationRole])
+        """Another screen or scale: thumbnails for that many physical pixels per logical pixel."""
+        self.set_display_size(ratio=ratio)
 
     @property
     def device_pixel_ratio(self) -> float:

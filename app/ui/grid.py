@@ -99,9 +99,14 @@ class ThumbnailDelegate(QStyledItemDelegate):
         pic = self._picture(cell)
         pm = index.data(Qt.ItemDataRole.DecorationRole)
         if pm is not None and not pm.isNull():
-            scaled = pm.scaled(pic.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            x = pic.left() + (pic.width() - scaled.width()) // 2
-            y = pic.top() + (pic.height() - scaled.height()) // 2
+            # Scaled in DEVICE pixels: on a 150 / 200 % screen the card shows the thumbnail's real detail.
+            ratio = p.device().devicePixelRatioF() if p.device() is not None else 1.0
+            scaled = pm.scaled(pic.size() * ratio, Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+            scaled.setDevicePixelRatio(ratio)
+            size = scaled.deviceIndependentSize()
+            x = pic.left() + (pic.width() - round(size.width())) // 2
+            y = pic.top() + (pic.height() - round(size.height())) // 2
             p.setOpacity(0.45 if rec.flag == "reject" else 1.0)
             p.drawPixmap(x, y, scaled)
             p.setOpacity(1.0)

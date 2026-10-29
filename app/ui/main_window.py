@@ -464,6 +464,7 @@ class MainWindow(QMainWindow):
         self.empty_hint.setWordWrap(True)  # long text must never set the window's minimum width
         self.grid = make_grid(self, int(self.settings.value("grid_cell", CELL_DEFAULT)))
         self.grid.setModel(self.model)
+        self.model.set_display_size(cell=int(self.settings.value("grid_cell", CELL_DEFAULT)))
         self.grid.selectionModel().currentChanged.connect(self._on_current_changed)
         self.grid.doubleClicked.connect(lambda _: self.toggle_loupe())
         self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -1847,6 +1848,7 @@ class MainWindow(QMainWindow):
             return
         delegate = self.grid.itemDelegate()
         delegate.cell = size  # type: ignore[attr-defined]
+        self.model.set_display_size(cell=size)  # larger cards: sharper thumbnails (cell × screen ratio)
         self.grid.doItemsLayout()
         self.grid.viewport().update()
 

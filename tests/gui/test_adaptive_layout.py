@@ -148,9 +148,9 @@ def test_dpr_change_reevaluates_mode(qtbot, env: dict, monkeypatch) -> None:  # 
     real = asset_model._ThumbTask
 
     class Recording(real):  # type: ignore[misc, valid-type]
-        def __init__(self, asset_id, path, signals, target=asset_model.THUMB_DISPLAY) -> None:  # noqa: ANN001
+        def __init__(self, asset_id, path, signals, target=asset_model.THUMB_DISPLAY, *rest) -> None:  # noqa: ANN001
             asked.append(target)
-            super().__init__(asset_id, path, signals, target)
+            super().__init__(asset_id, path, signals, target, *rest)
 
     monkeypatch.setattr(asset_model, "_ThumbTask", Recording)
     evaluated: list[bool] = []
@@ -160,11 +160,15 @@ def test_dpr_change_reevaluates_mode(qtbot, env: dict, monkeypatch) -> None:  # 
         def devicePixelRatio(self) -> float:  # noqa: N802 - Qt name
             return 2.0
 
+    w.model.wait_for_thumbnails()
+    rec = w.model.record(w.model.index(0))
+    before = w.model.pixmap(rec)
+    asked.clear()
     w.layout_controller.on_screen_changed(Screen())
     assert evaluated and w.model.device_pixel_ratio == 2.0
-    rec = w.model.record(w.model.index(0))
-    assert w.model.pixmap(rec) is None  # cached thumbnails were dropped: decoded again for the new screen
-    assert asked == [2 * asset_model.THUMB_DISPLAY]
+    cell = w.grid.itemDelegate().cell
+    # The old thumbnail stays on screen while a sharper one (card size × 2) is decoded for the new screen.
+    assert w.model.pixmap(rec) is before and asked == [2 * cell] == [w.model.decode_size]
 
 
 def test_3840x1024_wide_shows_grid_and_detail(qtbot, env: dict) -> None:  # noqa: F811
