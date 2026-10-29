@@ -134,3 +134,96 @@ def test_large_card_is_drawn_sharp_at_dpr_2(qtbot, env: dict) -> None:  # noqa: 
     row = [image.pixelColor(x, y).rgb() for x in range(200, 400)]
     pairs_equal = sum(row[i] == row[i + 1] for i in range(0, len(row) - 1, 2))
     assert pairs_equal < len(row) // 4
+
+
+# ------------------------------------------------------------------ keys
+def _focus_grid(w) -> None:  # noqa: ANN001
+    w.activateWindow()
+    w.grid.setFocus()
+
+
+def test_p_keeps_like_k(qtbot, env: dict) -> None:  # noqa: F811
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    _focus_grid(w)
+    for row, key in ((0, Qt.Key.Key_P), (1, Qt.Key.Key_K)):
+        w.select_row(row)
+        qtbot.keyClick(w.grid, key)
+        assert decisions.get(w.project.conn, w.model.record(w.model.index(row)).id).flag == "keep", key
+
+
+def test_keys_in_search_box_do_not_cull(qtbot, env: dict) -> None:  # noqa: F811
+    """Typing "pX1" + Tab in the search box: the text is typed, no photo is marked, the layout does not change, and
+    Tab moves on to the next field (it does not toggle the details)."""
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.select_row(0)
+    before = [decisions.get(w.project.conn, r.id) for r in w.model.records()]
+    detail = w.detail.isVisible()
+    w.activateWindow()
+    w.search.setFocus()
+    qtbot.keyClicks(w.search, "pX1")
+    assert w.search.text() == "pX1"
+    qtbot.keyClick(w.search, Qt.Key.Key_Tab)
+    qtbot.wait(300)  # search timer
+    assert [decisions.get(w.project.conn, r.id) for r in w.model.records()] == before[:len(w.model.records())]
+    assert w.detail.isVisible() is detail
+    from PySide6.QtWidgets import QApplication
+
+    assert QApplication.focusWidget() is not w.search  # Tab moved focus on
+    w.search.clear()
+    qtbot.wait(300)
+    assert [decisions.get(w.project.conn, r.id) for r in w.model.records()] == before
+
+
+def test_tab_toggles_details_per_mode(qtbot, env: dict) -> None:  # noqa: F811
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    _focus_grid(w)
+    assert w.detail.isVisible()
+    qtbot.keyClick(w.grid, Qt.Key.Key_Tab)  # WIDE: hide
+    assert not w.detail.isVisible()
+    qtbot.keyClick(w.grid, Qt.Key.Key_Tab)
+    assert w.detail.isVisible()
+    _at(qtbot, w, (1920, 484))  # SHORT: Grid Focus ↔ Detail Focus
+    _focus_grid(w)
+    assert w.layout_controller.mode is Mode.SHORT and not w.detail.isVisible()
+    qtbot.keyClick(w.grid, Qt.Key.Key_Tab)
+    assert w.detail.isVisible() and not w.grid.isWrapping()
+    qtbot.keyClick(w.grid, Qt.Key.Key_Tab)
+    assert not w.detail.isVisible() and w.grid.isWrapping()
+    _at(qtbot, w, (768, 800))  # NARROW below 900: Tab opens the sheet, Esc closes it
+    _focus_grid(w)
+    qtbot.keyClick(w.grid, Qt.Key.Key_Tab)
+    assert w.layout_controller.sheet.is_open
+    from PySide6.QtWidgets import QApplication
+
+    qtbot.keyClick(QApplication.focusWidget() or w.grid, Qt.Key.Key_Escape)
+    assert not w.layout_controller.sheet.is_open and not w.detail.isVisible()
+
+
+def test_escape_closes_the_drawer_while_typing_in_it(qtbot, env: dict) -> None:  # noqa: F811
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    _at(qtbot, w, (960, 1000))
+    _focus_grid(w)
+    w.layout_controller.open_drawer("people")
+    w.people_filter.setFocus()
+    qtbot.keyClicks(w.people_filter, "an")
+    assert w.people_filter.text() == "an" and w.layout_controller.side.is_open  # letters typed, nothing culled
+    qtbot.keyClick(w.people_filter, Qt.Key.Key_Escape)
+    assert not w.layout_controller.side.is_open
+
+
+def test_key_hints_and_help_list_the_new_keys(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    from PySide6.QtWidgets import QMessageBox
+
+    from app.ui.main_window import key_hints_html
+
+    assert "P&nbsp;/&nbsp;K" in key_hints_html(False) and "Tab" in key_hints_html(False)
+    assert "P&nbsp;/&nbsp;K" in key_hints_html(True)
+    shown: list[str] = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: shown.append(a[2]))
+    w = _window(qtbot, env)
+    w.show_shortcuts()
+    assert "P / K   Chọn" in shown[0] and "Tab" in shown[0] and "ô tìm kiếm" in shown[0]

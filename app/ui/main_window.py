@@ -30,7 +30,10 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QApplication,
+    QPlainTextEdit,
+    QTextEdit,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -115,15 +118,15 @@ def sessions_dir() -> Path:
 
 
 _KEYS_GRID = [
-    ("Space / Enter", "xem ảnh lớn"), ("← → ↑ ↓", "di chuyển"), ("K", "giữ"), ("X", "loại"), ("U", "bỏ đánh dấu"),
-    ("1–5 / 0", "sao / xoá sao"), ("F", "yêu thích"),
+    ("Space / Enter", "xem ảnh lớn"), ("← → ↑ ↓", "di chuyển"), ("P / K", "chọn"), ("X", "loại"), ("U", "bỏ chọn"),
+    ("1–5 / 0", "sao / xoá sao"), ("F", "yêu thích"), ("Tab", "bảng chi tiết"),
     ("Q / W / R", "chấm nét"), ("Ctrl/Shift + click", "chọn nhiều ảnh"),
     ("Ctrl+A", "chọn tất cả"), ("Ctrl+F", "tìm tên file"), ("Ctrl+E", "xuất ảnh"), ("F1", "tất cả phím tắt"),
 ]
 _KEYS_LOUPE = [
     ("Esc", "về lưới ảnh"), ("← →", "ảnh trước / sau"), ("Z", "100% ↔ vừa khung"), ("E", "phóng tới mắt"),
     ("+ / − / cuộn chuột", "phóng to / nhỏ"), ("nháy đúp", "100% tại chỗ đó"), ("kéo chuột", "di chuyển ảnh"),
-    ("K", "giữ"), ("X", "loại"), ("U", "bỏ đánh dấu"), ("1–5", "sao"), ("F", "yêu thích"),
+    ("P / K", "chọn"), ("X", "loại"), ("U", "bỏ chọn"), ("1–5", "sao"), ("F", "yêu thích"),
     ("Q / W / R", "nét căng / hơi soft / lệch nét"),
 ]
 
@@ -607,8 +610,11 @@ class MainWindow(QMainWindow):
 
     def _build_shortcuts(self) -> None:
         def sc(key: str, fn: object) -> None:
-            QShortcut(QKeySequence(key), self, fn, context=Qt.ShortcutContext.WindowShortcut)
+            # A key without a modifier never acts on photos while the user types (search box, people filter, …).
+            guarded = (lambda: None if typing_in(QApplication.focusWidget()) else fn()) if key not in UNGUARDED else fn
+            QShortcut(QKeySequence(key), self, guarded, context=Qt.ShortcutContext.WindowShortcut)
 
+        sc("P", lambda: self.set_flag("keep"))  # P (pick) and K: Chọn
         sc("K", lambda: self.set_flag("keep"))
         sc("X", lambda: self.set_flag("reject"))
         sc("U", lambda: self.set_flag(None))
@@ -629,6 +635,14 @@ class MainWindow(QMainWindow):
         sc("W", lambda: self.set_focus_label("soft"))
         sc("R", lambda: self.set_focus_label("missed"))
         sc("F1", self.show_shortcuts)
+        # Tab: details on/off (SHORT: Grid Focus ↔ Detail Focus); inside a text field it still moves to the next one.
+        QShortcut(QKeySequence(Qt.Key.Key_Tab), self, self._on_tab, context=Qt.ShortcutContext.WindowShortcut)
+
+    def _on_tab(self) -> None:
+        if typing_in(QApplication.focusWidget()):
+            self.focusNextChild()
+            return
+        self.layout_controller.toggle_detail()
 
     # ---------------------------------------------------------- sessions
     def _set_project(self, project: Project, photo_root: Path) -> None:
@@ -2167,18 +2181,30 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self, "Phím tắt",
             "← / →   ảnh trước / sau (↑ ↓ trong lưới)\n"
-            "Space / Enter   xem lớn ↔ lưới,  Esc   về lưới\n"
+            "Space / Enter   xem lớn ↔ lưới,  Esc   về lưới (hoặc đóng bộ lọc / bảng chi tiết đang mở ra)\n"
             "Z   zoom 100% (ảnh độ phân giải đầy đủ) ↔ vừa khung\n"
             "+ / −   phóng to / thu nhỏ (tới 800%),  cuộn chuột: phóng tại vị trí chuột\n"
             "E   phóng tới mắt của chủ thể chính (xem nét),  nháy đúp: 100% tại chỗ đó\n"
-            "K   Giữ      X   Loại      U   bỏ đánh dấu\n"
+            "P / K   Chọn      X   Loại      U   Bỏ chọn\n"
+            "Tab   hiện / ẩn bảng chi tiết (cửa sổ thấp: lưới ↔ chi tiết)\n"
             "1 – 5   chấm sao,  0   xoá sao\n"
             "F   Yêu thích\n"
             "Q   nét căng,  W   hơi soft,  R   lệch nét / rung (bấm lại để bỏ) — app học độ nét theo máy + ống kính\n"
             "Ctrl+I   nhập thư mục ảnh,  Ctrl+E   xuất ảnh\n"
             "Ctrl+F   tìm tên file,  Ctrl+L   danh sách khách chọn\n\n"
-            "Trong lưới có thể chọn nhiều ảnh (Ctrl/Shift + click) rồi bấm K/X/số để áp dụng cho tất cả.",
+            "Trong lưới có thể đánh dấu nhiều ảnh (ô tick, Ctrl/Shift + click) rồi bấm P/X/số để áp dụng cho tất cả.\n"
+            "Khi đang gõ trong ô tìm kiếm, các phím chữ và số chỉ để gõ — không chấm ảnh.",
         )
+
+
+UNGUARDED = {"Escape", "F1"}  # work even while typing: close a drawer / sheet, open the key list
+
+
+def typing_in(widget: QWidget | None) -> bool:
+    """A text field (or an editable box) has the keyboard: plain keys are for typing, not for culling."""
+    if isinstance(widget, QComboBox):
+        return widget.isEditable()
+    return isinstance(widget, (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox))
 
 
 def strip_text(rec: AssetRecord | None) -> str:

@@ -58,18 +58,28 @@ Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng
 | Phím | Tác dụng |
 |---|---|
 | ← / → (↑ ↓ trong lưới) | ảnh trước / sau |
-| Space / Enter, Esc | xem lớn ↔ lưới, về lưới |
+| Space / Enter, Esc | xem lớn ↔ lưới, về lưới (Esc cũng đóng bộ lọc / bảng chi tiết đang mở ra) |
 | Z | 100% (điểm ảnh gốc) ↔ vừa khung |
 | + / − , cuộn chuột | phóng to tới 800% / thu nhỏ (luôn trên ảnh gốc) |
 | E | phóng tới mắt người chính để xem nét; nháy đúp = 100% tại chỗ đó |
-| K / X / U | giữ / loại / bỏ đánh dấu (áp dụng cho mọi ảnh đang chọn) |
-| Ctrl/Shift + click | chọn nhiều ảnh |
+| P (hoặc K) / X / U | Chọn / Loại / Bỏ chọn (áp dụng cho mọi ảnh đang đánh dấu) |
+| Tab | hiện / ẩn bảng chi tiết (cửa sổ thấp: lưới ↔ chi tiết) |
+| ô tick, Ctrl/Shift + click | đánh dấu nhiều ảnh |
 | 1–5, 0 | chấm sao, xoá sao |
 | F | yêu thích |
 | Q / W / R | chấm nét: nét căng / hơi soft / lệch nét – rung (bấm lại để bỏ); app học độ nét riêng cho từng máy + ống kính |
 | Ctrl+I / Ctrl+E | nhập thư mục / xuất ảnh |
 | Ctrl+F | tìm tên file (nhiều số cách nhau bằng dấu cách: `9645 9650`) |
 | Ctrl+L | danh sách khách chọn: dán tin nhắn của khách, vd `9645, 9657-9660, DSC_9665.jpg` |
+
+Khi đang gõ trong ô tìm kiếm (hoặc ô tìm chủ thể), các phím chữ và số chỉ để gõ — không chấm ảnh.
+
+**Bố cục tự thích ứng với cửa sổ:** màn hình rộng có cột bộ lọc bên trái và bảng chi tiết bên phải.
+Chia đôi màn hình theo chiều dọc: bộ lọc thu thành dải biểu tượng (bấm để mở ra), bảng chi tiết hiện bên phải
+từ 900 px (hẹp hơn thì trượt ra khi bấm **Tab** / **▤ Chi tiết**). Chia đôi theo chiều ngang (cửa sổ thấp):
+lưới chiếm hết chỗ kèm một dòng tóm tắt ảnh, **Tab** để xem chi tiết bên dưới một hàng ảnh. Kéo đổi cỡ cửa sổ
+không làm mất ảnh đang xem, ảnh đang đánh dấu, bộ lọc hay vị trí cuộn. Trên màn hình 150 % / 200 % hoặc khi
+kéo thanh cỡ ảnh lớn, app tự làm ảnh nhỏ nét hơn (đọc ảnh gốc, không sửa).
 
 **Danh sách khách chọn (📋 Khách chọn):** dán tin nhắn khách gửi; app hiểu số, khoảng
 (`9657-9660`, `9657 đến 9660`, `9645-50`) và tên file đầy đủ, báo trước những số không tìm thấy.
@@ -154,17 +164,27 @@ keys sits under the photos (toggle with **⌨ Phím tắt**, **F1** shows all).
 | Key | Action |
 |---|---|
 | ← / → (↑ ↓ in grid) | previous / next photo |
-| Space / Enter, Esc | large view ↔ grid, back to grid |
+| Space / Enter, Esc | large view ↔ grid, back to grid (Esc also closes an open filter drawer / detail sheet) |
 | Z | true 100% (full-resolution pixels) ↔ fit |
 | + / − , mouse wheel | zoom up to 800% / back (always full-resolution pixels) |
 | E | jump to the main person's eyes to check focus; double-click = 100% there |
-| K / X / U | keep / reject / clear (applies to every selected photo) |
-| Ctrl/Shift + click | select several photos |
+| P (or K) / X / U | Chọn (keep) / Loại (reject) / clear (applies to every marked photo) |
+| Tab | show / hide the detail panel (low windows: grid ↔ details) |
+| tick box, Ctrl/Shift + click | mark several photos |
 | 1–5, 0 | star rating, clear rating |
 | F | favourite |
 | Ctrl+I / Ctrl+E | import folder / export |
 | Ctrl+F | search file names (several numbers separated by spaces: `9645 9650`) |
 | Ctrl+L | client pick list: paste the client's message, e.g. `9645, 9657-9660, DSC_9665.jpg` |
+
+While typing in the search box (or the people filter), letter and number keys only type — they never mark photos.
+
+**The layout adapts to the window:** wide screens show the filters on the left and the detail panel on the right.
+A side-by-side Snap half folds the filters into an icon rail (click to slide them in) and keeps the details on
+the right from 900 px (narrower: they slide in with **Tab** / **▤ Chi tiết**). A top/bottom Snap half (low
+window) gives the grid the whole width with a one-line summary; **Tab** shows the details under a single row of
+photos. Resizing keeps the current photo, the marking, the filter and the scroll position. On 150 % / 200 %
+screens or with large cards, sharper thumbnails are made automatically (the photo is only read).
 
 **Client pick lists (📋 Khách chọn):** paste what the client sent; numbers, ranges
 (`9657-9660`, `9657 đến 9660`, `9645-50`) and full file names are understood, and names that match
