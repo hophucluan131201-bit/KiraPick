@@ -334,3 +334,14 @@ def test_initial_active():
   responsiveness; shutdown while a full decode and an export run; full suite with skipped / deselected listed,
   benchmarks, known issues.
 - Stop Batch 3 at once on data corruption, wrong routing, segfault, unsafe shutdown or an uncontrolled memory budget.
+
+## Task 8 requirements (Task 7 V2 APPROVED WITH NOTES)
+
+1. Regression for Compare and part 1. 2. 2–4 photos, Auto / Row / Grid, resize, rotation, true 100 %, active-photo
+culling. 3. Late callbacks on Compare close / reopen, folder switch, DPI change, shutdown. 4. Peak RSS on Windows and
+Linux, 24 MP NEF, 45 MP, 61 MP. 5. Missing metadata / header, very slow source. 6. Cold preview / full loading and
+responsiveness with workers. 7. Shutdown, export and database never closed while a worker depends on the session.
+8. SHORT / TINY, AI line and long text never cut off or covering the photo. 9. Each Windows CI job reported
+separately, skipped / deselected, known issues. 10. No change to AI, Keep / Reject, schema, sources, export.
+After Part 2: design and build Part 3 — Advanced Export (the four agreed feature groups); no overall beta until all
+planned parts are done; no tag / publish without the owner's command.
