@@ -358,6 +358,27 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
+## UI part 2 — Compare mode (in progress, 2026-10-29) — status: Tasks 1–7 tested offscreen; Task 8 not started
+
+Spec `docs/superpowers/specs/2026-10-29-kirapick-compare-design.md` (rev 3), plan
+`docs/superpowers/plans/2026-10-29-kirapick-compare.md`. Batches 1–2 (Tasks 1–6) approved by the external reviewer.
+
+| Task | Status | Evidence |
+|---|---|---|
+| 1 Arrangement (pure) | tested | `tests/unit/test_compare_layout.py` |
+| 2 Tile + viewer pools | tested | `tests/gui/test_compare_tile.py` |
+| 3 Compare view, active hover | tested | `tests/gui/test_compare_view.py` |
+| 4 Window integration (C / G / Esc, reload, scroll) | tested | `tests/gui/test_compare_window.py` |
+| 5 Actions on the active photo only | tested | `tests/gui/test_compare_actions.py` |
+| 6 AI line (I), arrangement settings | tested | `tests/gui/test_compare_overlay.py` |
+| 7 Pools, 200 000 000 px budget, shutdown | tested (offscreen) | `tests/gui/test_compare_lifecycle.py`, `tests/perf/test_compare_memory.py` |
+| 8 Regression, performance, Windows CI | not started | — |
+
+Peak memory, four tiles zoomed to 100 % one after another (Linux VM, real loader): 24 MP NEF +587 MB over base
+(4 frames held, 96.6 Mpx); synthetic 45 MP +1 194 MB (181.8 Mpx held); 61 MP +1 299 MB (three held, the fourth tile
+dropped back to fit); never more than one full decode at a time; after leaving Compare all frames are released
+(allocator-trimmed RSS 184–210 MB).
+
 ## UI part 1 — finish (Task 15, 2026-10-29) — status: tested offscreen (Linux); Windows CI pending; Windows manual blocked
 
 Release checklist, known issues and the owner's Windows manual validation: `docs/beta-release-checklist.md`.
