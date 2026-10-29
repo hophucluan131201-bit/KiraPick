@@ -7,7 +7,9 @@ from html import escape
 from datetime import date
 from collections.abc import Callable
 import logging
+import errno
 import os
+import sqlite3
 import time
 from pathlib import Path
 
@@ -59,6 +61,7 @@ from PySide6.QtWidgets import (
 from app import __version__
 from app.branding import APP_NAME, SETTINGS_IDS, data_dir
 from app.storage import decisions, view
+from app.storage.db import SchemaTooNewError
 from app.storage.view import rotate_point
 from app.storage.project import Project
 from app.storage.sessions import delete_session, open_session, purge_old_sessions
@@ -783,7 +786,15 @@ class MainWindow(QMainWindow):
             # One session per photo folder: switching folders closes the current one.
             if not self._close_session():
                 return None
-            project, restored = open_session(sessions_dir(), root)
+            try:
+                project, restored = open_session(sessions_dir(), root)
+            except SchemaTooNewError:
+                QMessageBox.warning(self, "Mở thư mục ảnh", session_too_new_text())
+                return None
+            except (OSError, sqlite3.Error) as exc:
+                log.warning("session open failed: %s", type(exc).__name__)
+                QMessageBox.warning(self, "Mở thư mục ảnh", session_open_failed_text(exc))
+                return None
             self._set_project(project, root)
             self._restored_note = (
                 f"Đã nhớ từ lần trước: {self._remembered_summary()}." if restored else ""
@@ -2241,6 +2252,22 @@ def quit_anyway_text(left: list[str]) -> str:
                      "danh sách ảnh đã chép (CSV) chưa được ghi. Hãy xuất lại vào một thư mục mới.")
     lines += ["", "Bấm No để chờ thêm."]
     return "\n".join(lines)
+
+def session_too_new_text() -> str:
+    """A folder last opened by a newer KiraPick: its session database is never touched by this one."""
+    return ("Thư mục này đã được mở bằng một phiên bản KiraPick mới hơn, nên bản này không mở được phần đã nhớ "
+            "(lựa chọn, sao, kết quả AI).\n\nHãy cập nhật KiraPick (⚙ Tuỳ chọn → Cập nhật KiraPick).\n"
+            "Ảnh gốc và dữ liệu đã nhớ không bị thay đổi.")
+
+
+def session_open_failed_text(exc: BaseException) -> str:
+    """Opening (or upgrading) a folder's session failed: a full disk gets its own advice."""
+    if (isinstance(exc, OSError) and exc.errno == errno.ENOSPC) or "disk is full" in str(exc).lower():
+        cause = "Ổ đĩa chứa dữ liệu của KiraPick đã đầy. Hãy giải phóng vài GB rồi mở lại thư mục."
+    else:
+        cause = f"Không mở được dữ liệu đã nhớ của thư mục này ({type(exc).__name__}). Hãy thử lại."
+    return cause + "\nẢnh gốc không bị ảnh hưởng."
+
 
 RETRAIN_EVERY = 20  # decisions between two trainings of the taste model
 FOCUS_RETRAIN_EVERY = 5  # Q/W/R labels between two trainings of the sharpness models (small and fast)

@@ -291,6 +291,7 @@ def connect(path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous = NORMAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
+        _backup_before_migration(conn, path)
         migrate(conn)
     except Exception:
         conn.close()
@@ -300,6 +301,27 @@ def connect(path: Path) -> sqlite3.Connection:
 
 def current_version(conn: sqlite3.Connection) -> int:
     return int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+
+def _backup_before_migration(conn: sqlite3.Connection, path: Path) -> None:
+    """Copy a database an older app wrote to ``<name>.v<N>.bak`` before upgrading it, once per old version: an older
+    app refuses the upgraded file, and the copy lets the user go back. A brand-new or current database is left alone."""
+    version = current_version(conn)
+    if not 0 < version < SCHEMA_VERSION:
+        return
+    backup = path.with_name(f"{path.name}.v{version}.bak")
+    if backup.exists():
+        return
+    part = backup.with_name(backup.name + ".part")
+    dest = sqlite3.connect(part)
+    try:
+        conn.backup(dest)  # a consistent snapshot, WAL included
+        dest.close()
+        part.replace(backup)
+    except BaseException:  # e.g. disk full: no half-written copy, and no upgrade without one
+        dest.close()
+        part.unlink(missing_ok=True)
+        raise
 
 
 def migrate(conn: sqlite3.Connection) -> None:

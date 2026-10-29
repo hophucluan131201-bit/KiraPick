@@ -111,3 +111,52 @@ def test_transaction_rolls_back_on_error(project: Project) -> None:
             tx.execute("UPDATE assets SET status = 'ok' WHERE id = 1")
             raise RuntimeError("boom")
     assert project.conn.execute("SELECT status FROM assets WHERE id = 1").fetchone()[0] == "pending"
+
+
+def _old_db(path: Path, version: int) -> None:
+    """A database exactly as an older build left it (migrations are append-only: 2.2.1 wrote v5)."""
+    conn = sqlite3.connect(path, isolation_level=None)
+    for target, sql in db.MIGRATIONS[:version]:
+        conn.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {target};\nCOMMIT;")
+    conn.execute("INSERT INTO project (id, name, created_at) VALUES (1, 'Old', 'then')")
+    conn.execute("INSERT INTO sources (root_path, added_at) VALUES ('/photos', 'now')")
+    for name in ("a.nef", "b.jpg"):
+        conn.execute(
+            """INSERT INTO assets (source_id, relative_path, extension, media_kind, support_level, size, mtime_ns,
+               quick_hash, added_at, updated_at) VALUES (1, ?, '.nef', 'raw', 'verified', 1, 1, ?, 'n', 'n')""",
+            (name, name),
+        )
+    conn.execute("INSERT INTO decisions (asset_id, flag, rating, favorite, updated_at) VALUES (1, 'keep', 4, 1, 'n')")
+    if version >= 6:
+        conn.execute("UPDATE decisions SET focus = 'soft' WHERE asset_id = 1")
+    conn.close()
+
+
+@pytest.mark.parametrize("old", [5, 6])
+def test_old_session_migrates_with_data_and_a_backup(tmp_path: Path, old: int) -> None:
+    """RV2-05: a 2.2.1 (v5) or 2.3 beta (v6) session opens in this build, keeps its data, and the old file is kept as
+    a backup first, so going back to the older app is possible."""
+    path = tmp_path / "project.snorlu.db"
+    _old_db(path, old)
+    conn = db.connect(path)
+    assert db.current_version(conn) == db.SCHEMA_VERSION
+    row = conn.execute("SELECT flag, rating, favorite FROM decisions WHERE asset_id = 1").fetchone()
+    assert tuple(row) == ("keep", 4, 1)
+    if old >= 6:
+        assert conn.execute("SELECT focus FROM decisions WHERE asset_id = 1").fetchone()[0] == "soft"
+    assert conn.execute("SELECT count(*) FROM assets").fetchone()[0] == 2
+    conn.close()
+    backup = tmp_path / f"project.snorlu.db.v{old}.bak"
+    old_conn = sqlite3.connect(backup)
+    assert old_conn.execute("PRAGMA user_version").fetchone()[0] == old
+    assert old_conn.execute("SELECT flag FROM decisions").fetchall() == [("keep",)]
+    old_conn.close()
+    stamp = backup.stat().st_mtime_ns
+    db.connect(path).close()  # already current: no new backup, the old one is not rewritten
+    assert backup.stat().st_mtime_ns == stamp
+    assert sorted(p.name for p in tmp_path.iterdir() if ".bak" in p.name) == [backup.name]
+
+
+def test_new_database_makes_no_backup(tmp_path: Path) -> None:
+    db.connect(tmp_path / "p.db").close()
+    assert not [p for p in tmp_path.iterdir() if ".bak" in p.name]
