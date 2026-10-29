@@ -5,18 +5,38 @@ async full resolution, Xoay xem), zoomed on its own; the tile under the mouse po
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, QPointF, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QAction, QActionGroup, QPixmap
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QMenu, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 from app.ui.asset_model import AssetRecord
-from app.ui.compare_layout import MAX_PHOTOS, Arrangement, Mode, arrange, turned_size
+from app.ui.compare_layout import MAX_PHOTOS, MODES, Arrangement, Mode, arrange, turned_size
 from app.ui.grid import card_texts
+from app.ui.score_style import hard_defect, shown
 from app.ui.layout_modes import DEBOUNCE_MS
 from app.ui.viewer import ImageViewer
 
 PANEL_DELAY_MS = 150  # the detail panel follows the active photo after the pointer rests this long
 REARRANGE_MS = DEBOUNCE_MS  # resizing: re-arrange once the size settled (part 1's debounce)
 GAP = 6
+MODE_LABELS: dict[Mode, str] = {"auto": "Tự động", "row": "Một hàng", "grid": "Lưới 2×2"}
+
+
+def compare_ai_text(rec: AssetRecord) -> str:
+    """The AI line of a tile (I): the same measured values as the grid and the score card, never estimated.
+    "K 78 · G 85 · Mắt hơi mềm"; ⚠ first on a hard defect; G only when the taste score exists."""
+    if rec.score is None:
+        return "chưa phân tích"
+    tech = shown(rec.ranked.tech) if rec.ranked is not None else shown(rec.score.total)
+    if tech is None:
+        return "chưa chấm được"
+    parts = [f"K {tech}"]
+    taste = shown(rec.ranked.taste) if rec.ranked is not None else None
+    if taste is not None:
+        parts.append(f"G {taste}")
+    if rec.score.weaknesses:
+        weak = rec.score.weaknesses[0]
+        parts.append(weak[:1].upper() + weak[1:])
+    return ("⚠ " if hard_defect(rec.score, rec.ranked) else "") + " · ".join(parts)
 
 
 class CompareTile(QWidget):
@@ -135,6 +155,7 @@ class CompareView(QWidget):
     active_changed = Signal(int)
     panel_photo_changed = Signal(int)
     back_requested = Signal()
+    arrangement_chosen = Signal(str)  # the user picked Tự động / Một hàng / Lưới 2×2 (to be saved)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -152,6 +173,21 @@ class CompareView(QWidget):
         bar.setContentsMargins(0, 0, 0, 0)
         bar.addWidget(self.back_button)
         bar.addStretch(1)
+        self.arrange_button = QToolButton()
+        self.arrange_button.setToolTip("Cách xếp ảnh khi so sánh (được nhớ lại)")
+        self.arrange_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.arrange_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        menu = QMenu(self.arrange_button)
+        group = QActionGroup(menu)
+        self._mode_actions: dict[str, QAction] = {}
+        for mode in MODES:
+            action = QAction(MODE_LABELS[mode], menu, checkable=True)
+            action.triggered.connect(lambda _c=False, m=mode: self._choose(m))
+            group.addAction(action)
+            menu.addAction(action)
+            self._mode_actions[mode] = action
+        self.arrange_button.setMenu(menu)
+        bar.addWidget(self.arrange_button)
         self.toolbar = bar
         self.page = QWidget()  # the tiles' area: its own size is what arrange() gets
         self.page.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
@@ -174,6 +210,7 @@ class CompareView(QWidget):
         self._records: list[AssetRecord] = []
         self.active_id: int | None = None
         self._mode: Mode = "auto"
+        self._show_ai = False
         self.arrangement: Arrangement | None = None
         self._panel_timer = QTimer(self)
         self._panel_timer.setSingleShot(True)
@@ -183,6 +220,7 @@ class CompareView(QWidget):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.setInterval(REARRANGE_MS)
         self._resize_timer.timeout.connect(self._rearrange)
+        self.set_arrangement("auto")
 
     # ------------------------------------------------------------ public
     def show_records(self, records: list[AssetRecord], pixmaps: dict[int, QPixmap], active_id: int) -> None:
@@ -193,6 +231,7 @@ class CompareView(QWidget):
         for n, (tile, rec) in enumerate(zip(self.tiles, self._records, strict=False), start=1):
             tile.set_number(n)
             tile.show_record(rec, pixmaps.get(rec.id))
+            tile.set_ai_text(compare_ai_text(rec) if self._show_ai else None)
         self._rearrange()
         for tile in self.tiles[:len(self._records)]:
             tile.show()
@@ -228,13 +267,26 @@ class CompareView(QWidget):
         old = self._records[index]
         self._records[index] = rec
         self.tiles[index].update_record(rec)
+        self.tiles[index].set_ai_text(compare_ai_text(rec) if self._show_ai else None)
         if turned_size(old.width, old.height, old.rotation) != turned_size(rec.width, rec.height, rec.rotation):
             self._rearrange()
 
     def set_arrangement(self, mode: Mode) -> None:
-        self._mode = mode
+        self._mode = mode if mode in MODES else "auto"
+        self._mode_actions[self._mode].setChecked(True)
         if self._records:
             self._rearrange()
+        self._update_arrange_label()
+
+    def set_ai_visible(self, on: bool) -> None:
+        """I: the AI line on every tile (the same measured values as the score card)."""
+        self._show_ai = on
+        for tile, rec in zip(self.tiles, self._records, strict=False):
+            tile.set_ai_text(compare_ai_text(rec) if on else None)
+
+    @property
+    def ai_visible(self) -> bool:
+        return self._show_ai
 
     @property
     def mode(self) -> Mode:
@@ -251,6 +303,14 @@ class CompareView(QWidget):
         return False
 
     # ------------------------------------------------------------ helpers
+    def _choose(self, mode: Mode) -> None:
+        self.set_arrangement(mode)
+        self.arrangement_chosen.emit(mode)
+
+    def _update_arrange_label(self) -> None:
+        small = self.arrangement is not None and self.arrangement.fallback
+        self.arrange_button.setText("Xếp: " + ("Tự động (cửa sổ nhỏ)" if small else MODE_LABELS[self._mode]))
+
     def _on_entered(self, asset_id: int) -> None:
         """Enter: Qt also sends it when a tile appears under a resting pointer; only a moving pointer picks."""
         if self._armed:
@@ -304,3 +364,4 @@ class CompareView(QWidget):
         self.grid.activate()
         for tile, (zoom, point) in kept.items():
             tile.viewer.set_zoom(zoom, point)
+        self._update_arrange_label()

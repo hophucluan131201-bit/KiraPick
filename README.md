@@ -77,7 +77,9 @@ Khi đang gõ trong ô tìm kiếm (hoặc ô tìm chủ thể), các phím ch�
 
 **So sánh (C):** đánh dấu 2–4 ảnh rồi bấm C (hoặc ⧉ So sánh). Ảnh dưới con trỏ chuột là ảnh đang chọn (viền
 xanh): P / X / U / 1–5 / F / Q / W / R chỉ tác động lên ảnh đó, không tự sang ảnh khác. Mỗi ảnh phóng to riêng.
-Esc hoặc G về lưới, giữ nguyên ảnh đang xem và các dấu đánh dấu.
+I bật / tắt dòng điểm AI trên mọi ảnh (K · G, ⚠, điểm yếu chính; ảnh chưa phân tích ghi "chưa phân tích"); nút
+"Xếp" chọn Tự động / Một hàng / Lưới 2×2 (được nhớ). Esc hoặc G về lưới, giữ nguyên ảnh đang xem, các dấu đánh dấu và vị
+trí cuộn.
 
 **Bố cục tự thích ứng với cửa sổ:** màn hình rộng có cột bộ lọc bên trái và bảng chi tiết bên phải.
 Chia đôi màn hình theo chiều dọc: bộ lọc thu thành dải biểu tượng (bấm để mở ra), bảng chi tiết hiện bên phải
@@ -187,7 +189,9 @@ While typing in the search box (or the people filter), letter and number keys on
 
 **Compare (C):** mark 2–4 photos and press C (or ⧉ So sánh). The photo under the mouse pointer is the active one
 (blue frame): P / X / U / 1–5 / F / Q / W / R act on it only, with no auto-advance. Each photo zooms on its own.
-Esc or G returns to the grid with the current photo and the marking unchanged.
+I shows / hides the AI line on every photo (K · G, ⚠, main weakness; "chưa phân tích" without analysis); the
+"Xếp" button picks Auto / One row / 2×2 grid (remembered). Esc or G returns to the grid with the current photo, the
+marking and the scroll position unchanged.
 
 **The layout adapts to the window:** wide screens show the filters on the left and the detail panel on the right.
 A side-by-side Snap half folds the filters into an icon rail (click to slide them in) and keeps the details on

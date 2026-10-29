@@ -505,6 +505,10 @@ class MainWindow(QMainWindow):
         self.compare = CompareView()
         self.compare.back_requested.connect(self.leave_compare)
         self.compare.panel_photo_changed.connect(self._on_compare_panel)
+        self.compare.set_arrangement(str(self.settings.value(COMPARE_ARRANGEMENT_KEY, "auto")))  # type: ignore[arg-type]
+        self.compare.set_ai_visible(self.settings.value(COMPARE_AI_KEY, False, bool))
+        self.compare.arrangement_chosen.connect(lambda mode: self.settings.setValue(COMPARE_ARRANGEMENT_KEY, mode))
+        self._compare_scroll = 0
         self.center.addWidget(self.compare)  # 3 = COMPARE_PAGE
 
         # Small cheat sheet under the photos; its content follows the current view.
@@ -646,6 +650,7 @@ class MainWindow(QMainWindow):
         sc("Return", self.toggle_loupe)
         sc("Escape", lambda: self.layout_controller.close_floating() or self.leave_compare() or self.show_loupe(False))
         sc("C", self.show_compare)
+        sc("I", self.toggle_compare_ai)
         sc("G", lambda: self.leave_compare() or self.show_loupe(False))
         sc("Z", self.toggle_zoom)
         sc("+", lambda: self.zoom_step(1))
@@ -1616,6 +1621,9 @@ class MainWindow(QMainWindow):
             rec = self.model.records_by_id([asset_id]).get(asset_id)
             if rec is not None:
                 self._show_inspector(rec)
+                if asset_id not in {r.id for r in self.compare.records()}:
+                    self.status.setText("Bảng chi tiết đang hiện ảnh ngoài nhóm so sánh — phím tắt vẫn áp dụng cho "
+                                        "ảnh có viền xanh; rê chuột lên một ảnh để quay lại.")
             return
         idx = self.model.index_of(asset_id)
         if idx.isValid():
@@ -1852,6 +1860,7 @@ class MainWindow(QMainWindow):
             return False
         current = self.current_record()
         active = initial_active([r.id for r in marked], current.id if current else None)
+        self._compare_scroll = self.grid.verticalScrollBar().value()
         self.center.setCurrentIndex(COMPARE_PAGE)
         self.compare.show_records(marked, {r.id: pm for r in marked if (pm := self.model.pixmap(r)) is not None},
                                   active)
@@ -1864,8 +1873,7 @@ class MainWindow(QMainWindow):
         self.compare.clear()
         self.center.setCurrentIndex(1)
         self._update_empty_state()
-        if self.grid.currentIndex().isValid():
-            self.grid.scrollTo(self.grid.currentIndex())
+        self.grid.verticalScrollBar().setValue(self._compare_scroll)  # exactly where the grid was (no scrollTo)
         self.grid.setFocus()
         self._show_inspector(self.view_record())
         return True
@@ -1877,6 +1885,14 @@ class MainWindow(QMainWindow):
             self.status.setText("Bảng chi tiết chưa kịp đổi sang ảnh đang chọn — bấm lại.")
             return False
         return True
+
+    def toggle_compare_ai(self) -> None:
+        """I (Compare only): the AI line on every tile, remembered."""
+        if not self.in_compare():
+            return
+        on = not self.compare.ai_visible
+        self.compare.set_ai_visible(on)
+        self.settings.setValue(COMPARE_AI_KEY, on)
 
     def view_record(self) -> AssetRecord | None:
         """The photo shown for E / Z / zoom / the panel: the active photo in Compare, else the current photo."""
@@ -2364,6 +2380,7 @@ def strip_text(rec: AssetRecord | None) -> str:
 
 
 COMPARE_PAGE = 3  # centre pages: 0 empty hint, 1 grid, 2 loupe, 3 Compare
+COMPARE_ARRANGEMENT_KEY, COMPARE_AI_KEY = "compare/arrangement", "compare/show_ai"
 SWITCH_WAIT_MS = 10000  # switching folder: how long to wait for workers before refusing
 CLOSE_WAIT_MS = 3000  # closing: blocking wait; afterwards a non-blocking one (GUI timer)
 HUNG_AFTER_S = 15.0  # closing: ask whether to quit at once after this long
