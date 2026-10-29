@@ -9,7 +9,7 @@ No release marker is pushed until the owner gives the release command.
 | # | Item | Status | Evidence / what is missing |
 |---|---|---|---|
 | B1 | Full test suite on Linux (offscreen), 3 runs | done | `docs/IMPLEMENTATION_STATUS.md` → Task 15 |
-| B2 | Windows CI job `perf` — read EACH notice, the job itself is non-blocking (RV14-01): `suite`, `gui-windows` (real `windows` platform, Windows fonts), `snap-dpi 1 / 1.25 / 1.5 / 2`, `perf`, `stress` | pending | record the notice lines of the run here; a green job is not evidence |
+| B2 | Windows CI job `perf` — read EACH notice, the job itself is non-blocking (RV14-01): `suite`, `gui-windows` (real `windows` platform, Segoe UI), `snap-dpi 1 / 1.25 / 1.5 / 2`, `perf`, `stress` | **run 6 (`d6afca4`): all five pass. perf failed in runs 3–5 (K2)** | runs 3–6: suite 500 passed / 150 skipped (models and RAW samples absent in CI); GUI on the real platform 62 passed / 7 skipped (sizes larger than the runner's 1920×1040 desktop); Snap/DPI all fitting sizes pass, no cut-off button with Segoe UI 9 pt; stress 0 of 6 failed. perf failed in runs 3, 4, 5: one P/X press of 188 ms (run 3 only, 159 ms outside the measured parts, not seen again in 3 runs with the finer breakdown: the decision transaction is 7–13 ms on Windows, no WAL checkpoint) and long-session GC pauses of 147 / 115 ms (runs 4, 5); run 6 passed (worst GC 10.7 ms) |
 | B3 | Windows manual validation on the owner's laptop (section 3) | blocked | needs the owner's PC; nothing in this container runs a real Windows GUI |
 | B4 | Version for the beta (`app/__init__.py` still says 2.2.1): a pre-release suffix (e.g. 2.3.0b1) so the build is published as a pre-release | pending | at release time, with the owner's command |
 | B5 | Beta release notes: the v7 session upgrade, the `.v5.bak` / `.v6.bak` copy, what 2.2.1 shows for an upgraded folder, how to go back (section 2, K1) | pending | `packaging/notes/RELEASE_NOTES.md` at release time |
@@ -20,13 +20,17 @@ No release marker is pushed until the owner gives the release command.
 | # | Issue | Impact | Mitigation / next step |
 |---|---|---|---|
 | K1 | A folder opened by this beta is upgraded to session schema v7. KiraPick 2.2.1 then refuses it with its generic "Lỗi không mong muốn … SchemaTooNewError … update the app" box (English text; 2.2.1 cannot be changed). Checked with the real 2.2.1 code: refused, file unchanged byte for byte. | Going back to 2.2.1 loses that folder's remembered choices in 2.2.1 only | Before the upgrade the beta keeps `project.snorlu.db.v5.bak` in the session folder. To go back: close KiraPick, in the session folder delete `project.snorlu.db`, `-wal`, `-shm`, rename the `.v5.bak` to `project.snorlu.db` (changes made in the beta are lost). Release notes must say this. |
-| K2 | One GUI-thread GC run of 79–85 ms in 2 of 4 Windows CI runs (VM) | A rare one-off pause | RV14-03: no `gc.freeze()` without evidence. The app now logs a GC summary line (`GUI-thread GC: … worst … ms`, numbers only) to `kirapick.log` on quit — the owner can send it after a real culling session. |
+| K2 | **Target missed on Windows VMs:** a full GUI-thread GC run in a 10,000-photo long session took 74, 147, 115 ms (CI runs 2, 4, 5; 12 ms in run 3; target 100 ms) | A pause of ~0.1 s now and then while culling a very large session | RV14-03: no `gc.freeze()` in the app without the owner-PC numbers and a decision. Evidence so far: the test-only experiment (`gc.collect(); gc.freeze()` once the session is open) in CI run 6: worst full-session GC 0.11 ms vs 10.7 ms without in the same run (75–147 ms in earlier runs); the cost of that one `gc.collect()` at open and the memory kept by frozen cycles are not measured yet. Owner-PC numbers: the app's `GUI-thread GC: … worst … ms` log line. Decision needed before the beta |
 | K3 | Performance numbers come from a Linux VM and a GitHub Windows VM, not the owner's laptop; the AI ran on CPU here (no GPU in the container) | The real laptop may differ (faster CPU/GPU, slower disk?) | Section 3 step 8 |
 | K4 | A third-of-screen Snap at 150 % (426 px) is below the 560 px minimum window: Windows shows the window 560 px wide, overlapping the next slot | Cosmetic | Accepted (TINY layout); minimum chosen in Task 12 |
 | K5 | Closing or switching folders during an export stops it after the current file (Task 11); the user is now asked first. Exporting again into the same folder copies only what is missing | — | Tested with 34 real RAW files (Task 15) |
 | K6 | No real camera JPEG folder from the owner: JPEG numbers use the full-size JPEGs embedded in RAW samples | Unknown for very large JPEGs | Optional: a JPEG shoot in step 8 |
 | K7 | Disk full: opening a folder explains it; a failed HD thumbnail leaves no file and keeps the small thumbnail; a full disk DURING an import or the AI analysis was not tested | Import / analysis would report the error and stop | Accept for the beta; test when a full-disk VM is available |
 | K8 | `test_real_raw_*`, RV2-04 pair test and RAW HD numbers skip in CI (RAW samples are git-ignored, some are not redistributable) | Covered on Linux only | — |
+
+Not an issue (checked on the real `windows` platform): the detail tabs need 349 px with full titles in Segoe UI
+(368 px panel in WIDE), so full titles show; Qt's offscreen platform on Windows has no Windows fonts ("Sans Serif"
+fallback, text ~1.7–2× wider), so font-dependent tests skip there and run on the real platform.
 
 ## 3. Windows manual validation (owner, in Vietnamese)
 

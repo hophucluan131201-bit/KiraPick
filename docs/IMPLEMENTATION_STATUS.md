@@ -373,7 +373,7 @@ Release checklist, known issues and the owner's Windows manual validation: `docs
 | Broken / unsupported RAW files (fake NEF, empty CR3, 10 stripped rare-format samples) | **tested** | same file: 7 ok, 12 errors, import and large HD cards unaffected |
 | Snap sizes 100 / 125 / 150 % (13 sizes): expected layout mode, no button text cut off | **tested offscreen, also at QT_SCALE_FACTOR 1.25 / 2** | `tests/gui/test_snap_sizes.py`; on Windows CI with the real `windows` platform at 1 / 1.25 / 1.5 / 2 (pending) |
 | GC pauses on the owner's PC (RV14-03) | **implemented** (measurement only) | a `GUI-thread GC: … worst … ms` line in `kirapick.log` on quit; no `gc.freeze()` |
-| Windows CI: full suite, GUI smoke on the real `windows` platform, Snap/DPI, perf, stress — one notice each (RV14-01) | **pending** | `.github/workflows/build-windows.yml`, job `perf` |
+| Windows CI: full suite, GUI smoke on the real `windows` platform, Snap/DPI, perf, stress — one notice each (RV14-01) | **tested** (runs 2–6; all pass in run 6) | suite 500 passed / 150 skipped; real platform 62 passed; Snap at scale 1–2 no cut-off button (Segoe UI 9 pt); stress 0/6; perf failed in runs 3–5 on single GC pauses 74–147 ms and one 188 ms press (`docs/beta-release-checklist.md` B2, K2). Offscreen on Windows has no Windows fonts: font-dependent tests skip there (`tests/gui/platform_checks.py`) |
 
 Real files (Linux VM, 4 vCPU, offscreen; owner NEFs + public / contributed samples, 34 RAW files, 13 brands,
 803 MB; numbers only): import 0.44–0.58 s; first paint of the visible cards at 140 px / 200 % (20 HD files made)
