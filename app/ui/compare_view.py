@@ -13,7 +13,8 @@ from app.ui.compare_layout import MAX_PHOTOS, MODES, Arrangement, Mode, arrange,
 from app.ui.grid import card_texts
 from app.ui.score_style import hard_defect, shown
 from app.ui.layout_modes import DEBOUNCE_MS
-from app.ui.viewer import ImageViewer
+from app.ingest.preview import header_size
+from app.ui.viewer import ImageViewer, wait_pools
 
 PANEL_DELAY_MS = 150  # the detail panel follows the active photo after the pointer rests this long
 REARRANGE_MS = DEBOUNCE_MS  # resizing: re-arrange once the size settled (part 1's debounce)
@@ -271,8 +272,7 @@ class CompareView(QWidget):
 
     def wait_idle(self, msecs: int = 30000) -> bool:
         """Both decode pools idle (the shutdown contract waits on this before the session closes)."""
-        done = self.preview_pool.waitForDone(msecs)
-        return self.full_pool.waitForDone(msecs) and done
+        return wait_pools([self.preview_pool, self.full_pool], msecs)  # one deadline for both
 
     def stop_pending(self) -> None:
         """Drop queued decodes (a running one finishes; its result is ignored by token)."""
@@ -373,6 +373,10 @@ class CompareView(QWidget):
         rec = tile._record
         if rec is not None and rec.width and rec.height:
             return int(rec.width) * int(rec.height)
+        if rec is not None:  # not recorded: the file's header gives it without decoding pixels
+            size = header_size(rec.path)
+            if size is not None:
+                return int(size[0]) * int(size[1])
         w, h = tile.viewer.pixmap_size()
         full_long = tile.viewer._full_long
         if w and h and full_long:
@@ -398,9 +402,21 @@ class CompareView(QWidget):
         return True
 
     def _on_full_loaded(self, tile: CompareTile, size: tuple[int, int]) -> None:
+        """The decoded size counts, not the expected one. A frame that cannot fit — over the whole budget on its
+        own (size unknown before), or no other frame left to drop — is not kept: back to the preview, same zoom."""
         self._reserved.pop(tile, None)
-        self._held[tile] = int(size[0]) * int(size[1])  # the decoded size counts, not the expected one
-        self._make_room(0, keep=tile)
+        pixels = int(size[0]) * int(size[1])
+        if pixels > FULL_BUDGET_PIXELS:
+            self._give_back(tile, OVERSIZED_NOTE)
+            return
+        self._held[tile] = pixels
+        if not self._make_room(0, keep=tile):
+            self._give_back(tile, DROPPED_NOTE)
+
+    def _give_back(self, tile: CompareTile, note: str) -> None:
+        self._release(tile)
+        tile.viewer.drop_full(keep_zoom=True)
+        tile.set_note(note)
 
     def _release(self, tile: CompareTile) -> None:
         self._reserved.pop(tile, None)

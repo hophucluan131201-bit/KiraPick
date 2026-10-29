@@ -290,3 +290,100 @@ def test_loupe_closing_a_session_frees_its_full_frames(qtbot) -> None:  # noqa: 
     v._full_cache[Path("x.jpg")] = (None, "raster")  # type: ignore[assignment]
     v.show_photo(None)
     assert not v._full_cache
+
+
+# ------------------------------------------------------------------ review CR-P2-B3A-01 / RV-P2-B3A-01 / RV-P2-B3A-02
+def test_unknown_size_frame_over_budget_after_decode(qtbot, photos, fake, monkeypatch) -> None:  # noqa: ANN001
+    """CR-P2-B3A-01: no recorded size and no readable header → nothing to reserve; the decoded frame alone is over
+    the budget → not kept: the tile goes back to the preview (still zoomed), says why, and nothing stays counted or
+    cached."""
+    monkeypatch.setattr(cv, "FULL_BUDGET_PIXELS", 200_000)
+    monkeypatch.setattr(cv, "header_size", lambda _path: None)
+    view, recs = _view(qtbot, photos[:2], [(0, 0), (300, 200)])
+    _zoom(qtbot, view, recs[1].id)  # another tile holds a frame: it must not be dropped for a hopeless one
+    fake.sizes = {photos[0].name: (600, 400)}  # 240 000 > 200 000 on its own
+    _zoom(qtbot, view, recs[0].id)
+    tile = view.tile(recs[0].id)
+    assert not tile.viewer.is_full_resolution_shown() and not tile.viewer._full_cache
+    assert tile.viewer.zoom == 1.0 and OVERSIZED in tile.header.text()
+    assert view.full_pixels() == 60_000 and view.tile(recs[1].id).viewer.is_full_resolution_shown()
+
+
+def test_decoded_frame_that_fits_alone_drops_others(qtbot, photos, fake, monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(cv, "FULL_BUDGET_PIXELS", 200_000)
+    monkeypatch.setattr(cv, "header_size", lambda _path: None)
+    view, recs = _view(qtbot, photos[:3], [(300, 200), (300, 200), (0, 0)])
+    for r in recs[:2]:
+        _zoom(qtbot, view, r.id)
+    fake.sizes = {photos[2].name: (400, 300)}  # unknown before, 120 000 decoded: fits after dropping one tile
+    _zoom(qtbot, view, recs[2].id)
+    assert view.tile(recs[2].id).viewer.is_full_resolution_shown()
+    assert view.tile(1).viewer.zoom is None and view.full_pixels() == 60_000 + 120_000
+
+
+def test_unknown_size_read_from_the_header_avoids_the_decode(qtbot, photos, fake, monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(cv, "header_size", lambda _path: (20000, 12000))
+    view, recs = _view(qtbot, photos[:2], [(0, 0), (300, 200)])
+    _zoom(qtbot, view, recs[0].id)
+    assert photos[0].name not in fake.started and view.full_pixels() == 0
+    assert OVERSIZED in view.tile(recs[0].id).header.text()
+
+
+def test_header_size_reads_only_the_header(tmp_path: Path, public_nef: Path) -> None:  # noqa: ANN001
+    from app.ingest.preview import header_size
+
+    jpg = _photo(tmp_path / "h.jpg", 1, size=(1234, 567))
+    assert header_size(jpg) == (1234, 567)
+    w, h = header_size(public_nef)
+    assert w * h > 4_000_000  # the sensor image, not the embedded preview
+    bad = tmp_path / "bad.nef"
+    bad.write_bytes(b"nothing")
+    assert header_size(bad) is None
+
+
+def test_old_decode_after_drop_and_re_request_is_not_taken(qtbot, photos, monkeypatch) -> None:  # noqa: ANN001
+    """RV-P2-B3A-01: drop a tile while its decode runs, zoom it again (same photo, same token): the old result is
+    not taken for the new request; the new one is."""
+    calls: list[threading.Event] = []
+    sizes = iter([(400, 300), (300, 200)])
+
+    def loader(path: Path, **_kw):  # noqa: ANN003, ANN202
+        gate = threading.Event()
+        calls.append(gate)
+        gate.wait(20)
+        w, h = next(sizes)
+        return SimpleNamespace(image=Image.new("RGB", (w, h)), source=PreviewSource.DEMOSAIC_FULL)
+
+    monkeypatch.setattr(viewer_module, "load_full_resolution", loader)
+    view, recs = _view(qtbot, photos[:2], [(300, 200), (300, 200)])
+    tile = view.tile(recs[0].id)
+    _zoom(qtbot, view, recs[0].id, wait=False)
+    qtbot.waitUntil(lambda: len(calls) == 1, timeout=5000)
+    view._release(tile)
+    tile.viewer.drop_full()
+    _zoom(qtbot, view, recs[0].id, wait=False)  # a new request for the same photo, the old decode still running
+    calls[0].set()  # the OLD decode (400 × 300) arrives
+    qtbot.waitUntil(lambda: len(calls) == 2, timeout=5000)
+    QApplication.processEvents()
+    assert not tile.viewer.is_full_resolution_shown() and view.full_pixels() == 60_000  # still the reservation
+    calls[1].set()
+    assert view.wait_idle(10000)
+    QApplication.processEvents()
+    assert tile.viewer.pixmap_size() == (300, 200) and view.full_pixels() == 60_000
+
+
+def test_wait_idle_has_one_deadline_for_both_pools(qtbot, photos, fake) -> None:  # noqa: ANN001
+    """RV-P2-B3A-02: both pools busy → wait_idle(300) gives up after about 300 ms, not 2 × 300."""
+    import time
+
+    from tests.gui.test_shutdown_timeout import _hold
+
+    view, _recs = _view(qtbot, photos[:2], [(300, 200), (300, 200)])
+    gate, events = threading.Event(), []
+    _hold(view.preview_pool, gate, events, "preview")
+    _hold(view.full_pool, gate, events, "full")
+    t0 = time.monotonic()
+    assert view.wait_idle(300) is False
+    assert time.monotonic() - t0 < 0.45
+    gate.set()
+    assert view.wait_idle(5000)

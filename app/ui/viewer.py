@@ -39,13 +39,13 @@ class Quality(str, Enum):
 
 
 class _Signals(QObject):
-    done = Signal(int, str, QImage, str, str)  # token, quality, image, source, error
+    done = Signal(int, int, str, QImage, str, str)  # token, full request id, quality, image, source, error
 
 
 class _LoadTask(QRunnable):
-    def __init__(self, token: int, path: Path, quality: Quality, signals: _Signals) -> None:
+    def __init__(self, token: int, path: Path, quality: Quality, signals: _Signals, request: int = 0) -> None:
         super().__init__()
-        self.token, self.path, self.quality, self.signals = token, path, quality, signals
+        self.token, self.path, self.quality, self.signals, self.request = token, path, quality, signals, request
 
     def run(self) -> None:
         try:
@@ -53,11 +53,11 @@ class _LoadTask(QRunnable):
                 loaded = load_full_resolution(self.path)
             else:
                 loaded = load_image(self.path, max_long_side=PREVIEW_LONG_SIDE, min_long_side=PREVIEW_LONG_SIDE)
-            self.signals.done.emit(self.token, self.quality.value, pil_to_qimage(loaded.image), loaded.source.value, "")
+            self.signals.done.emit(self.token, self.request, self.quality.value, pil_to_qimage(loaded.image), loaded.source.value, "")
         except ImageReadError as exc:
-            self.signals.done.emit(self.token, self.quality.value, QImage(), "", f"{exc.reason}: {exc.detail}")
+            self.signals.done.emit(self.token, self.request, self.quality.value, QImage(), "", f"{exc.reason}: {exc.detail}")
         except Exception as exc:  # noqa: BLE001 - never crash the UI on a bad file
-            self.signals.done.emit(self.token, self.quality.value, QImage(), "", f"internal_error: {type(exc).__name__}")
+            self.signals.done.emit(self.token, self.request, self.quality.value, QImage(), "", f"internal_error: {type(exc).__name__}")
 
 
 class ImageViewer(QGraphicsView):
@@ -97,7 +97,8 @@ class ImageViewer(QGraphicsView):
         self._full_cache_size = max(1, full_cache)
         # Asked before a full-resolution decode is queued (Compare's memory budget); False = stay on the preview.
         self.full_allowed: Callable[[], bool] | None = None
-        self._full_wanted = False  # a full decode of the photo shown is queued or running
+        self._full_request = 0  # id of the full decode queued / running for the photo shown (0 = none)
+        self._requests = 0
         self.gate = Gate()  # the window shares its own: closed while a session is being released
         self._signals = _Signals(self)  # destroyed by the viewer, on the GUI thread (app.ui.shutdown)
         self._signals.done.connect(self._on_loaded)
@@ -124,7 +125,7 @@ class ImageViewer(QGraphicsView):
         """``placeholder`` is already turned (the grid's thumbnail); loaded images are turned by ``rotation``
         quarter turns clockwise here (Xoay xem: display only)."""
         self._token += 1
-        self._full_wanted = False
+        self._full_request = 0
         self._rotation = rotation % 4
         self._base: QPixmap | None = None  # the loaded image as in the file (not turned)
         self._focus = None  # a new photo: no requested point yet
@@ -207,26 +208,27 @@ class ImageViewer(QGraphicsView):
         pm = self._item.pixmap()
         return pm.width(), pm.height()
 
-    def drop_full(self) -> None:
-        """Give the full-resolution frame back (Compare's budget): back to fit on a preview-sized copy of it; a
-        decode still running is not taken when it arrives."""
-        self._full_wanted = False
+    def drop_full(self, *, keep_zoom: bool = False) -> None:
+        """Give the full-resolution frame back (Compare's budget): a preview-sized copy of it is shown, back to fit
+        (or at the same zoom on that copy with ``keep_zoom``); a decode still running is not taken when it arrives."""
+        self._full_request = 0
         self._full_cache.clear()
-        self.zoom = None
-        self._focus = None
+        if not keep_zoom:
+            self.zoom = None
+            self._focus = None
         base = getattr(self, "_base", None)
         if self._shown_full and base is not None and not base.isNull():
             self._base = base.scaled(PREVIEW_LONG_SIDE, PREVIEW_LONG_SIDE, Qt.AspectRatioMode.KeepAspectRatio,
                                      Qt.TransformationMode.SmoothTransformation)
             self._shown_full = False
-            self._set_pixmap(turned(self._base, self._rotation), keep_view=False)
-        else:
+            self._set_pixmap(turned(self._base, self._rotation), keep_view=keep_zoom)
+        elif self.zoom is None:
             self._fit()
         self._emit_zoom()
 
     def wait_idle(self, msecs: int = 30000) -> bool:
-        done = self._pool.waitForDone(msecs)
-        return (self._full_pool is self._pool or self._full_pool.waitForDone(msecs)) and done
+        """Both pools idle within ONE deadline of ``msecs`` (not ``msecs`` per pool)."""
+        return wait_pools([self._pool, self._full_pool], msecs)
 
     def stop_pending(self) -> None:
         """Drop loads not started yet (a running decode cannot be interrupted; it finishes). On shared pools this
@@ -246,22 +248,24 @@ class ImageViewer(QGraphicsView):
             self.full_frame_loaded.emit((pm.width(), pm.height()))
             return
         if quality is Quality.FULL:
-            if self._full_wanted:
+            if self._full_request:
                 return  # already queued or decoding: one decode per photo, however many zoom steps
             if not self.gate.open or (self.full_allowed is not None and not self.full_allowed()):
                 return  # closing, or over Compare's memory budget: the preview stays (the tile says why)
-            self._full_wanted = True
+            self._requests += 1
+            self._full_request = self._requests
         if self.gate.open:
             pool = self._full_pool if quality is Quality.FULL else self._pool
-            pool.start(_LoadTask(self._token, self._path, quality, self._signals))
+            request = self._full_request if quality is Quality.FULL else 0
+            pool.start(_LoadTask(self._token, self._path, quality, self._signals, request))
 
-    def _on_loaded(self, token: int, quality: str, image: QImage, source: str, error: str) -> None:
+    def _on_loaded(self, token: int, request: int, quality: str, image: QImage, source: str, error: str) -> None:
         if token != self._token:
             return  # user already moved to another photo
         if quality == Quality.FULL.value:
-            if not self._full_wanted:
-                return  # dropped meanwhile (Compare's budget): the late frame is not taken
-            self._full_wanted = False
+            if request != self._full_request:
+                return  # not the decode asked for now (dropped meanwhile, or an older request): not taken
+            self._full_request = 0
         if error:
             if quality == Quality.FULL.value:
                 self.full_load_failed.emit()
@@ -394,6 +398,18 @@ class ImageViewer(QGraphicsView):
             painter.drawText(self.viewport().rect(), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
                              "Không đọc được ảnh này\n" + self._message)
             painter.restore()
+
+
+def wait_pools(pools: list[QThreadPool], msecs: int) -> bool:
+    """Wait for these pools (each once) with one shared deadline; True when all are idle."""
+    import time
+
+    deadline = time.monotonic() + msecs / 1000
+    done = True
+    for pool in dict.fromkeys(pools):  # the same pool twice is waited once
+        left = max(0, int((deadline - time.monotonic()) * 1000))
+        done = pool.waitForDone(left) and done
+    return done
 
 
 def _source_vi(source: str) -> str:

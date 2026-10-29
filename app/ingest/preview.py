@@ -188,3 +188,20 @@ def load_full_resolution(path: Path, *, allow_embedded: bool = True) -> LoadedIm
             return candidate
     raw_info, image = _demosaic_checked(path, False, embedded)
     return LoadedImage(image, PreviewSource.DEMOSAIC_FULL, image.size, raw_info.full_size)
+
+
+def header_size(path: Path) -> tuple[int, int] | None:
+    """(width, height) of the full-resolution photo read from the file's header only (no pixel decode): the JPEG /
+    TIFF / PNG header for rasters, LibRaw's size fields for RAW files. None when it cannot be read."""
+    info = format_for(path)
+    if info is None:
+        return None
+    try:
+        if info.kind is MediaKind.RASTER:
+            with Image.open(path) as im:  # lazy: only the header is parsed
+                return im.size
+        with raw_decode.open_raw(path) as raw:  # opens and identifies; the sensor data is not unpacked
+            sizes = raw.sizes
+            return (int(sizes.width), int(sizes.height)) if sizes.width and sizes.height else None
+    except Exception:  # noqa: BLE001 - unreadable header: the size is checked when the frame arrives
+        return None
