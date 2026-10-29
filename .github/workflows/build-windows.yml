@@ -139,16 +139,31 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           KIRAPICK_PERF_OUT: perf.jsonl
+        run: python -m pytest -q -m perf tests/perf
+      - name: Performance results (GitHub shows 10 notices per step, so two steps)
+        if: always()
+        shell: pwsh
         run: |
-          python -m pytest -q -m perf tests/perf
-          if (Test-Path perf.jsonl) { Get-Content perf.jsonl | ForEach-Object { Write-Host "::notice title=perf::$_" } }
+          if (Test-Path perf.jsonl) { Get-Content perf.jsonl | Select-Object -First 10 | ForEach-Object { Write-Host "::notice title=perf::$_" } }
+      - name: Performance results (continued)
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path perf.jsonl) { Get-Content perf.jsonl | Select-Object -Skip 10 | ForEach-Object { Write-Host "::notice title=perf::$_" } }
       - name: Shutdown and worker stress (not reproduced in N runs is not proof)
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
+          $failed = 0  # every run counts (a loop would otherwise report only its last run)
           python -X faulthandler -m pytest -q -m stress tests/gui/test_worker_lifecycle.py
-          for ($i = 1; $i -le 5; $i++) { python -X faulthandler -m pytest -q tests/gui/test_shutdown_timeout.py tests/gui/test_shutdown_callbacks.py tests/unit/test_shutdown.py }
+          if ($LASTEXITCODE -ne 0) { $failed++ }
+          for ($i = 1; $i -le 5; $i++) {
+            python -X faulthandler -m pytest -q tests/gui/test_shutdown_timeout.py tests/gui/test_shutdown_callbacks.py tests/unit/test_shutdown.py
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          Write-Host "::notice title=stress::failed runs: $failed of 6"
+          exit $failed
       - uses: actions/upload-artifact@v4
         if: always()
         with:
