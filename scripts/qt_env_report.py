@@ -7,6 +7,21 @@ import json
 import sys
 
 
+def _detail_tabs() -> dict[str, int]:
+    """Width the detail panel's tab bar asks for with each title set (the panel is about 368 px wide in WIDE)."""
+    from PySide6.QtWidgets import QTabWidget, QWidget
+
+    from app.ui.detail_panel import TABS, TABS_ICONS, TABS_SHORT
+
+    out = {}
+    for name, titles in (("full", TABS), ("short", TABS_SHORT), ("icons", TABS_ICONS)):
+        tabs = QTabWidget()
+        for t in titles:
+            tabs.addTab(QWidget(), t)
+        out[name] = tabs.tabBar().sizeHint().width()
+    return out
+
+
 def main() -> int:
     from PySide6.QtGui import QFontMetrics
     from PySide6.QtWidgets import QApplication
@@ -28,6 +43,7 @@ def main() -> int:
                     for s in app.screens()],
         "font": f"{font.family()} {font.pointSizeF()} pt / {fm.height()} px high",
         "advance_px": {t: fm.horizontalAdvance(t) for t in samples},
+        "detail_tabs_px": _detail_tabs(),
     }
     print(json.dumps(report))  # ASCII: a Windows console may not encode the Vietnamese samples
     return 0
