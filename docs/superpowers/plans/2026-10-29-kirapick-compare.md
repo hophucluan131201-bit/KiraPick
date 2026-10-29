@@ -320,3 +320,17 @@ def test_initial_active():
   the action target stays the active tile.
 - RV-P2-B2A-03 (Task 7): both Compare pools in the shutdown contract; no session resource released while a worker runs.
 - Task 6 must: shortcuts (I) never fire while typing in a text field.
+
+## Batch 3 requirements (Batch 2 APPROVED WITH NOTES)
+
+- Task 7: both Compare pools in shutdown / settle; no database close or QObject destruction while a worker depends on
+  the session; close Compare and reopen it with other photos while old callbacks are pending; exact-pixel budget
+  (200 000 000); tests for reservation cleanup, double reservation, a frame larger than expected, a single frame over
+  the budget; peak RAM while decoding 24–61 MP (not only the cache size afterwards); GC guard and the part 1 shutdown
+  architecture unchanged unless proven necessary.
+- Task 8: GUI smoke and regression for 2–4 photos; Snap WIDE / MEDIUM / NARROW / SHORT / TINY at 100–200 %; fast
+  hover → X / P before the panel updates; grid state, marking, scroll, active photo, zoom, rotation; a long AI line
+  never overflows or covers the photo's important area; cold-cache RAW / NEF, preview / full loading, memory,
+  responsiveness; shutdown while a full decode and an export run; full suite with skipped / deselected listed,
+  benchmarks, known issues.
+- Stop Batch 3 at once on data corruption, wrong routing, segfault, unsafe shutdown or an uncontrolled memory budget.
