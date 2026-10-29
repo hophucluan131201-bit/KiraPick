@@ -299,3 +299,15 @@ def test_initial_active():
 - [ ] **Step 3: Full suite** `.venv/bin/python -m pytest -q` three times — Expected: all pass each time.
 - [ ] **Step 4: Windows CI** — push with `[perf]` (never a release marker); read each notice (`suite`, `gui-windows`, `snap-dpi`, `perf`, `stress`), record them in `docs/beta-release-checklist.md` B2; screenshots WIDE / NARROW / SHORT / TINY.
 - [ ] **Step 5: Commit** `"Compare: performance, Windows CI and docs (part 2 task 8)"`; report to the owner in Vietnamese; release-candidate validation follows only after approval and the owner's command.
+
+## Review notes after Batch 1 (Tasks 1–3 APPROVED WITH NOTES)
+
+- RV-P2-B1-01 (Tasks 4/5): GUI test moving the real mouse (`QTest.mouseMove` on the window) across the child
+  ImageViewer viewports, not only `QEnterEvent` on the tile; the active target changes at once.
+- RV-P2-B1-02 (Task 7): open / close Compare repeatedly while full-resolution workers run; stale callbacks ignored,
+  reservations released.
+- RV-P2-B1-03 (Task 4): a reload with the same compared set refreshes records / chips / scores only — zoom, pan and
+  the active photo are kept.
+- RV-P2-B1-04 (Task 8): layout inside the real MainWindow, especially SHORT / TINY, and scroll bars while zoomed.
+- Batch 2 musts: rapid hover A → B → C then X before 150 ms → only C changes (Task 5); detail-panel button while the
+  panel lags → refused (Task 5); actions from the bottom bar and its compact "⋯" menu (Task 5).
