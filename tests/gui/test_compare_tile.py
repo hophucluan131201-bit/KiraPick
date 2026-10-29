@@ -32,9 +32,9 @@ class _RecordingPool(QThreadPool):
 
 
 def _record(path: Path, asset_id: int = 1, **kw) -> AssetRecord:  # noqa: ANN003
+    fields = {"width": 3000, "height": 2000, **kw}
     return AssetRecord(id=asset_id, source_id=1, path=path, relative_path=path.name, extension=path.suffix,
-                       status="ok", error=None, thumb_file=None, capture_time=None, width=3000, height=2000,
-                       camera=None, lens=None, **kw)
+                       status="ok", error=None, thumb_file=None, capture_time=None, camera=None, lens=None, **fields)
 
 
 @pytest.fixture

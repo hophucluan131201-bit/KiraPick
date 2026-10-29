@@ -737,6 +737,7 @@ class MainWindow(QMainWindow):
             shutdown.Work("tạo ảnh nhỏ", self.model.wait_for_thumbnails, self.model.stop_pending),
             shutdown.Work("biểu đồ sáng", self.detail.score_card.histogram.wait,
                           self.detail.score_card.histogram.stop_pending),
+            shutdown.Work("đọc ảnh để so sánh", self.compare.wait_idle, self.compare.stop_pending),
         ]
         threads = [("nhập ảnh", self.import_thread), ("phân tích AI", self.analyze_thread),
                    *(("phân tích AI", t) for t in self._retiring)]

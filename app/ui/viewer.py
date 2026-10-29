@@ -11,6 +11,7 @@ physical screen pixel.
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
 
@@ -62,6 +63,8 @@ class _LoadTask(QRunnable):
 class ImageViewer(QGraphicsView):
     status_changed = Signal(str)  # human-readable description of what is shown
     back_requested = Signal()  # the "back to grid" button was pressed
+    full_frame_loaded = Signal(object)  # (width, height) of the full-resolution image now held (Compare's budget)
+    full_load_failed = Signal()  # the full-resolution load of the photo shown failed
 
     def __init__(self, parent: QWidget | None = None, *, pool: QThreadPool | None = None,
                  full_pool: QThreadPool | None = None, full_cache: int = _FULL_CACHE) -> None:
@@ -92,6 +95,9 @@ class ImageViewer(QGraphicsView):
         self._pool = pool
         self._full_pool = full_pool or pool
         self._full_cache_size = max(1, full_cache)
+        # Asked before a full-resolution decode is queued (Compare's memory budget); False = stay on the preview.
+        self.full_allowed: Callable[[], bool] | None = None
+        self._full_wanted = False  # a full decode of the photo shown is queued or running
         self.gate = Gate()  # the window shares its own: closed while a session is being released
         self._signals = _Signals(self)  # destroyed by the viewer, on the GUI thread (app.ui.shutdown)
         self._signals.done.connect(self._on_loaded)
@@ -118,6 +124,7 @@ class ImageViewer(QGraphicsView):
         """``placeholder`` is already turned (the grid's thumbnail); loaded images are turned by ``rotation``
         quarter turns clockwise here (Xoay xem: display only)."""
         self._token += 1
+        self._full_wanted = False
         self._rotation = rotation % 4
         self._base: QPixmap | None = None  # the loaded image as in the file (not turned)
         self._focus = None  # a new photo: no requested point yet
@@ -125,7 +132,9 @@ class ImageViewer(QGraphicsView):
         self._message = ""
         self._shown_full = False
         self._full_long = full_long_side
-        if path is None:
+        if path is None:  # nothing shown (Compare closed, session closed): full frames are given back too
+            self._full_cache.clear()
+            self._shown_full = False
             self._set_pixmap(QPixmap())
             return
         if placeholder is not None and not placeholder.isNull():
@@ -198,6 +207,23 @@ class ImageViewer(QGraphicsView):
         pm = self._item.pixmap()
         return pm.width(), pm.height()
 
+    def drop_full(self) -> None:
+        """Give the full-resolution frame back (Compare's budget): back to fit on a preview-sized copy of it; a
+        decode still running is not taken when it arrives."""
+        self._full_wanted = False
+        self._full_cache.clear()
+        self.zoom = None
+        self._focus = None
+        base = getattr(self, "_base", None)
+        if self._shown_full and base is not None and not base.isNull():
+            self._base = base.scaled(PREVIEW_LONG_SIDE, PREVIEW_LONG_SIDE, Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation)
+            self._shown_full = False
+            self._set_pixmap(turned(self._base, self._rotation), keep_view=False)
+        else:
+            self._fit()
+        self._emit_zoom()
+
     def wait_idle(self, msecs: int = 30000) -> bool:
         done = self._pool.waitForDone(msecs)
         return (self._full_pool is self._pool or self._full_pool.waitForDone(msecs)) and done
@@ -217,7 +243,14 @@ class ImageViewer(QGraphicsView):
             pm, source = self._full_cache[self._path]
             self._full_cache.move_to_end(self._path)
             self._show_full(pm, source)
+            self.full_frame_loaded.emit((pm.width(), pm.height()))
             return
+        if quality is Quality.FULL:
+            if self._full_wanted:
+                return  # already queued or decoding: one decode per photo, however many zoom steps
+            if not self.gate.open or (self.full_allowed is not None and not self.full_allowed()):
+                return  # closing, or over Compare's memory budget: the preview stays (the tile says why)
+            self._full_wanted = True
         if self.gate.open:
             pool = self._full_pool if quality is Quality.FULL else self._pool
             pool.start(_LoadTask(self._token, self._path, quality, self._signals))
@@ -225,8 +258,13 @@ class ImageViewer(QGraphicsView):
     def _on_loaded(self, token: int, quality: str, image: QImage, source: str, error: str) -> None:
         if token != self._token:
             return  # user already moved to another photo
+        if quality == Quality.FULL.value:
+            if not self._full_wanted:
+                return  # dropped meanwhile (Compare's budget): the late frame is not taken
+            self._full_wanted = False
         if error:
             if quality == Quality.FULL.value:
+                self.full_load_failed.emit()
                 self.status_changed.emit(f"Không tải được ảnh gốc để phóng to: {error} (đang phóng ảnh xem trước)")
             else:
                 self._message = error
@@ -241,6 +279,7 @@ class ImageViewer(QGraphicsView):
             while len(self._full_cache) > self._full_cache_size:
                 self._full_cache.popitem(last=False)
             self._show_full(pm, source)
+            self.full_frame_loaded.emit((pm.width(), pm.height()))
         elif not self._shown_full:
             self._base = pm
             self.source_label = source

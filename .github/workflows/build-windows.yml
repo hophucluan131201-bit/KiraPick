@@ -210,10 +210,10 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           $failed = 0  # every run counts (a loop would otherwise report only its last run)
-          python -X faulthandler -m pytest -q -m stress tests/gui/test_worker_lifecycle.py
+          python -X faulthandler -m pytest -q -m stress tests/gui/test_worker_lifecycle.py tests/gui/test_compare_lifecycle.py
           if ($LASTEXITCODE -ne 0) { $failed++ }
           for ($i = 1; $i -le 5; $i++) {
-            python -X faulthandler -m pytest -q tests/gui/test_shutdown_timeout.py tests/gui/test_shutdown_callbacks.py tests/unit/test_shutdown.py
+            python -X faulthandler -m pytest -q tests/gui/test_shutdown_timeout.py tests/gui/test_shutdown_callbacks.py tests/unit/test_shutdown.py tests/gui/test_compare_lifecycle.py
             if ($LASTEXITCODE -ne 0) { $failed++ }
           }
           Write-Host "::notice title=stress::failed runs: $failed of 6"

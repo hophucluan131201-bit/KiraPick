@@ -18,6 +18,9 @@ from app.ui.viewer import ImageViewer
 PANEL_DELAY_MS = 150  # the detail panel follows the active photo after the pointer rests this long
 REARRANGE_MS = DEBOUNCE_MS  # resizing: re-arrange once the size settled (part 1's debounce)
 GAP = 6
+FULL_BUDGET_PIXELS = 200_000_000  # full-resolution frames held or reserved by all tiles (≈ 800 MB at 4 B / pixel)
+DROPPED_NOTE = "đã trả về vừa khung để đủ bộ nhớ"
+OVERSIZED_NOTE = "Ảnh quá lớn để mở độ phân giải đầy đủ khi so sánh — mở ở Xem lớn để soi 100 %"
 MODE_LABELS: dict[Mode, str] = {"auto": "Tự động", "row": "Một hàng", "grid": "Lưới 2×2"}
 
 
@@ -202,9 +205,16 @@ class CompareView(QWidget):
         layout.addWidget(self.page, 1)
         self.tiles: tuple[CompareTile, ...] = tuple(
             CompareTile(self.page, pool=self.preview_pool, full_pool=self.full_pool) for _ in range(MAX_PHOTOS))
+        self._held: dict[CompareTile, int] = {}  # full frames shown, exact pixels (width × height)
+        self._reserved: dict[CompareTile, int] = {}  # full decodes queued or running, expected pixels
+        self._recent: dict[CompareTile, int] = {}  # last time each tile was active or zoomed (least recent drops)
+        self._clock = 0
         for tile in self.tiles:
             tile.hovered.connect(self._on_entered)
             tile.pointer_moved.connect(self._on_moved)
+            tile.viewer.full_allowed = lambda t=tile: self._allow_full(t)
+            tile.viewer.full_frame_loaded.connect(lambda size, t=tile: self._on_full_loaded(t, size))
+            tile.viewer.full_load_failed.connect(lambda t=tile: self._release(t))
             tile.hide()
         self._armed = False  # True once the pointer really moved after Compare opened
         self._records: list[AssetRecord] = []
@@ -249,9 +259,25 @@ class CompareView(QWidget):
             tile.viewer.show_photo(None)
         self.preview_pool.clear()
         self.full_pool.clear()
+        self._held.clear()
+        self._reserved.clear()  # a decode still running is ignored by its viewer (new token) when it arrives
         self._records = []
         self.active_id = None
         self.arrangement = None
+
+    def full_pixels(self) -> int:
+        """Full-resolution pixels held or reserved by the tiles (exact)."""
+        return sum(self._held.values()) + sum(self._reserved.values())
+
+    def wait_idle(self, msecs: int = 30000) -> bool:
+        """Both decode pools idle (the shutdown contract waits on this before the session closes)."""
+        done = self.preview_pool.waitForDone(msecs)
+        return self.full_pool.waitForDone(msecs) and done
+
+    def stop_pending(self) -> None:
+        """Drop queued decodes (a running one finishes; its result is ignored by token)."""
+        self.preview_pool.clear()
+        self.full_pool.clear()
 
     def tile(self, asset_id: int) -> CompareTile | None:
         return next((t for t in self.tiles if t.asset_id == asset_id and t.isVisibleTo(self)), None)
@@ -329,11 +355,67 @@ class CompareView(QWidget):
         self.active_id = asset_id
         for tile in self.tiles:
             tile.set_active(tile.asset_id == asset_id and tile.asset_id is not None)
+            if tile.asset_id == asset_id:
+                self._touch(tile)
         self.active_changed.emit(asset_id)
 
     def _emit_panel(self) -> None:
         if self.active_id is not None:
             self.panel_photo_changed.emit(self.active_id)
+
+    # ------------------------------------------------------------ memory budget
+    def _touch(self, tile: CompareTile) -> None:
+        self._clock += 1
+        self._recent[tile] = self._clock
+
+    def _expected(self, tile: CompareTile) -> int:
+        """Pixels the tile's full decode will hold: the photo's recorded size, else the preview scaled up."""
+        rec = tile._record
+        if rec is not None and rec.width and rec.height:
+            return int(rec.width) * int(rec.height)
+        w, h = tile.viewer.pixmap_size()
+        full_long = tile.viewer._full_long
+        if w and h and full_long:
+            k = full_long / max(w, h)
+            return int(round(w * k) * round(h * k))
+        return 0  # unknown: counted exactly when the frame arrives
+
+    def _allow_full(self, tile: CompareTile) -> bool:
+        """Asked by a tile's viewer before queueing a full decode: reserve its pixels, making room by dropping the
+        least recently active tiles; a single frame larger than the whole budget is never decoded here."""
+        if tile in self._held or tile in self._reserved:
+            return True
+        need = self._expected(tile)
+        if need > FULL_BUDGET_PIXELS:
+            tile.set_note(OVERSIZED_NOTE)
+            return False
+        if not self._make_room(need, keep=tile):
+            tile.set_note(DROPPED_NOTE)
+            return False
+        self._reserved[tile] = need
+        self._touch(tile)
+        tile.set_note("")
+        return True
+
+    def _on_full_loaded(self, tile: CompareTile, size: tuple[int, int]) -> None:
+        self._reserved.pop(tile, None)
+        self._held[tile] = int(size[0]) * int(size[1])  # the decoded size counts, not the expected one
+        self._make_room(0, keep=tile)
+
+    def _release(self, tile: CompareTile) -> None:
+        self._reserved.pop(tile, None)
+        self._held.pop(tile, None)
+
+    def _make_room(self, need: int, *, keep: CompareTile) -> bool:
+        while self.full_pixels() + need > FULL_BUDGET_PIXELS:
+            others = [t for t in (*self._held, *self._reserved) if t is not keep]
+            if not others:
+                return False
+            victim = min(others, key=lambda t: self._recent.get(t, 0))
+            self._release(victim)
+            victim.viewer.drop_full()
+            victim.set_note(DROPPED_NOTE)
+        return True
 
     def _rearrange(self) -> None:
         """Place the tiles from arrange() on the page's own size; zoomed tiles keep their level and centre point."""
