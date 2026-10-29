@@ -337,6 +337,15 @@ with `[perf]` / "run_perf" (`.github/workflows/build-windows.yml`, job `perf`, n
 
 ¹ 5 isolated runs: worst 17.3–25.5 ms; once 52.9 ms when the whole perf suite ran in one process (1 of 7 runs).
 
+**Windows (GitHub CI, windows-2022, Python 3.12, Qt offscreen, 4 runs, `[perf]`)** — 10,000 photos, last run after the
+learning-store fix: open → first paint 398 ms; filter 153 / 335 ms; sort 362 / 356 ms; scroll median / worst
+11.6 / 19.1 ms (340 px at 200 %: 12.7 / 21.7 ms); P / X median / worst 29.9 / 45.1 ms (p95 32.7); mode change median /
+worst 35 / 68 ms; thumbnail memory 267 MB; folder switch 52 ms, close 54 ms; long session 2 GC runs, worst 12 ms;
+stress 0 failed runs of 6. Run 2 (before the fix) had single P / X presses of 124 ms and 190 ms: the slowest-press
+breakdown (run 3) showed the learning-store write at 22–25 ms (SQLite defaults: rollback journal, a full disk flush
+per commit). Fixed by opening that store like the session databases (WAL, `synchronous = NORMAL`): 0.37 ms in run 4.
+A single 79–85 ms GUI-thread GC run was seen in 2 of 4 Windows runs (not inside a measured press in run 3).
+
 10,000 photos, other measures: thumbnail memory at 200 % with 340 px cards **267 MB** (217 thumbnails; it was
 **739 MB / 1.9 GB RSS** before the byte budget added in this task, target 300 MB); folder switch with thumbnails and a
 histogram queued 40 ms, close 8 ms; long session (2,000 P/X + browsing, 25 s): 1 GUI-thread GC run of 11–16 ms,
