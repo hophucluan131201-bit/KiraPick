@@ -9,7 +9,7 @@ No release marker is pushed until the owner gives the release command.
 | Decision | Status |
 |---|---|
 | Code review of UI part 1 (Tasks 1–15) | **passed** — Task 15 APPROVED WITH NOTES (implementation only) |
-| Code review of UI part 2 — Compare (Tasks 1–8) | **pending** — Tasks 1–7 approved; Task 8 final review package sent |
+| Code review of UI part 2 — Compare (Tasks 1–8) | **pending** — Tasks 1–7 approved; Task 8 REQUEST CHANGES (CR-P2-FINAL-01/02) answered in `review_p2_final_v2` |
 | Part 3 — Advanced Export | **not started** — designed and built after part 2 is approved; no beta before it (review) |
 | Release ready (beta may be published) | **NO** — open: B3, B4, B5, B6, K2. Next phase: release-candidate validation, nothing published |
 
@@ -35,7 +35,9 @@ Rules for the release-candidate phase (review):
 B2 for part 2, run 40961471146 (`2db7d62`): suite 3 failed / 641 passed (elided-header asserts in
 `test_compare_lifecycle.py`, offscreen fonts); gui-windows 39 failed / 124 passed (Compare hover tests on the real
 platform — open, stop rule); snap-dpi pass; perf pass (P/X in Compare median 29.7 ms, worst 95.9 ms); stress 5 of 6
-failed (same lifecycle asserts; log not readable from the container). The `gui-windows` step also runs the Compare GUI files on the real `windows` platform (real mouse
+failed (same lifecycle asserts; log not readable from the container). After the V2 fixes, run 40970869908
+(`adf5dbd`): suite 660 passed / 160 skipped, gui-windows 185 passed / 8 skipped, snap-dpi pass, perf pass (P/X in
+Compare median 16.4 ms, worst 26.8 ms), stress 0 of 6. The `gui-windows` step also runs the Compare GUI files on the real `windows` platform (real mouse
 moves for the hover tests), `perf` includes `test_compare_perf.py` / `test_compare_memory.py` (Windows RSS from
 `K32GetProcessMemoryInfo`), `stress` includes `test_compare_lifecycle.py`.
 
@@ -52,6 +54,8 @@ moves for the hover tests), `perf` includes `test_compare_perf.py` / `test_compa
 | K7 | Disk full: opening a folder explains it; a failed HD thumbnail leaves no file and keeps the small thumbnail; a full disk DURING an import or the AI analysis was not tested | Import / analysis would report the error and stop | Accept for the beta; test when a full-disk VM is available |
 | K9 | Compare: four 61 MP photos at 100 % use ~1.5 GB more RAM at the peak; the fourth tile goes back to its preview with a note (200 Mpx budget). Measured on Linux and in Windows CI only | Fine with the owner's 32 GB; an 8 GB PC with other apps open may page | Budget fixed in the spec; owner step 10 |
 | K10 | Compare: the active photo follows the mouse only (owner decision); a pen / touch screen without hover cannot change it except by tapping into a tile | Touch-only use is awkward | Not in scope for part 2 |
+| K11 | Transparent PNGs show their transparent areas filled (the loader flattens to RGB since before part 2; `app.ingest.preview._to_rgb`) | Cosmetic, photo culling uses camera JPEG / RAW | Not changed in part 2 |
+| K12 | Destroying a viewer while its pool still decodes would wait for the decode while Python holds the GIL (deadlock) — seen only in a diagnostic script that deleted windows | None in the app: the window, Compare and folder switches wait for the pools first (shutdown contract) | Keep the shutdown contract; never delete a viewer with work running |
 | K8 | `test_real_raw_*`, RV2-04 pair test and RAW HD numbers skip in CI (RAW samples are git-ignored, some are not redistributable) | Covered on Linux only | — |
 
 Not an issue (checked on the real `windows` platform): the detail tabs need 349 px with full titles in Segoe UI
