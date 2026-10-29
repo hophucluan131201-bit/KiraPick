@@ -227,3 +227,61 @@ def test_key_hints_and_help_list_the_new_keys(qtbot, env: dict, monkeypatch) -> 
     w = _window(qtbot, env)
     w.show_shortcuts()
     assert "P / K   Chọn" in shown[0] and "Tab" in shown[0] and "ô tìm kiếm" in shown[0]
+
+
+def test_slider_in_short_detail_focus_reaches_the_decoder(qtbot, env: dict) -> None:  # noqa: F811
+    """Review CR13-01: the card size chosen with the slider during SHORT Detail Focus reaches every place that
+    keeps it — QSettings, the delegate, the layout controller AND the thumbnail decoder — once the grid wraps
+    again; switching focus back and forth keeps it; the photos are only read."""
+    from PySide6.QtCore import QSettings
+
+    before = {p.name: _sha(p) for p in env["photos"].glob("*.jpg")}
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.model.set_device_pixel_ratio(2.0)
+    w.top_bar.size_slider.setValue(240)
+    _at(qtbot, w, (1920, 484))  # SHORT
+    lc = w.layout_controller
+    lc.toggle_detail()  # Detail Focus: one row of small cards
+    assert not w.grid.isWrapping()
+    w.top_bar.size_slider.setValue(340)  # the user drags the slider meanwhile
+    assert int(QSettings(env["ini"], QSettings.Format.IniFormat).value("grid_cell")) == 340
+    lc.toggle_detail()  # back to Grid Focus
+    assert w.grid.isWrapping()
+    rect = w.grid.visualRect(w.model.index(0))
+    assert (rect.width(), rect.height()) == (340, 340 + 40)
+    assert w.grid.itemDelegate().cell == 340 and w.model.decode_size >= 680
+    rec = w.model.record(w.model.index(0))
+    w.model.pixmap(rec)
+    w.model.wait_for_thumbnails(10000)
+    qtbot.waitUntil(lambda: _long_side(w.model.pixmap(rec)) >= 680, timeout=5000)  # upgraded
+    for _ in range(2):  # back and forth: the user's size is kept
+        lc.toggle_detail()
+        lc.toggle_detail()
+        assert w.grid.itemDelegate().cell == 340 and w.model.decode_size >= 680
+        assert w.grid.visualRect(w.model.index(0)).width() == 340
+    assert {p.name: _sha(p) for p in env["photos"].glob("*.jpg")} == before
+
+
+def test_decode_size_follows_smaller_cards_and_new_sessions(qtbot, env: dict, tmp_path: Path) -> None:  # noqa: F811
+    """Review RV13-01: after large cards on a 2× screen, smaller cards lower the decode size again, so a new session
+    does not make HD thumbnails it does not need."""
+    from tests.gui.test_main_window import _photo
+
+    other = tmp_path / "Buổi khác"
+    for i in range(3):
+        _photo(other / f"IMG_{i:04d}.jpg", 60 + i)
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.model.set_device_pixel_ratio(2.0)
+    w.set_grid_cell(340)
+    assert w.model.decode_size == 680
+    w.set_grid_cell(140)
+    assert w.model.decode_size == 280  # no new decode for cached ones (they are larger), new ones at 280
+    _import(qtbot, w, other)
+    for r in range(w.model.rowCount()):
+        w.model.pixmap(w.model.record(w.model.index(r)))
+    w.model.wait_for_thumbnails(10000)
+    assert not (w.project.cache_dir / asset_model.HD_DIR).exists()  # 280 px: the import thumbnail is enough
+    w.set_grid_cell(340)  # larger again: a new generation, sharper decodes
+    assert w.model.decode_size == 680

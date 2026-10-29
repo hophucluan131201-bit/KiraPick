@@ -232,6 +232,10 @@ class LayoutController(QObject):
         else:
             if self._cell is not None:
                 delegate.cell = self._cell  # type: ignore[attr-defined]
+                # The size the user chose (possibly with the slider during Detail Focus) reaches the decoder too.
+                set_size = getattr(self.model, "set_display_size", None)
+                if set_size is not None:
+                    set_size(cell=self._cell)
                 self._cell = None
             self.grid.setWrapping(True)
             self.grid_area.setMaximumHeight(QT_MAX)

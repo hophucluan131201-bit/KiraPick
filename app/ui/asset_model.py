@@ -420,16 +420,19 @@ class AssetListModel(QAbstractListModel):
         return pm  # possibly an older, softer one until the new decode arrives
 
     def set_display_size(self, cell: int | None = None, ratio: float | None = None) -> None:
-        """The card size (logical px) or the screen's pixel ratio changed. A NEW generation starts only when the
-        cards need clearly more pixels than the current one decodes (smaller cards reuse what is cached)."""
+        """The card size (logical px) or the screen's pixel ratio changed. New decodes are made at what the cards need
+        now (also smaller: a new session after large cards makes no HD thumbnails it does not need — review RV13-01).
+        A NEW generation (sharper re-decodes) starts only when they need clearly more pixels than before; cached
+        larger pixmaps are reused as they are."""
         if cell is not None:
             self._cell = cell
         if ratio is not None:
             self._dpr = max(1.0, float(ratio))
         need = min(HD_LONG_SIDE, max(THUMB_DISPLAY, round(self._cell * self._dpr)))
-        if need > self._gen_target * 1.1:
+        grows = need > self._gen_target * 1.1
+        self._gen_target = need
+        if grows:
             self._gen += 1
-            self._gen_target = need
             if self._rows:
                 self.dataChanged.emit(self.index(0), self.index(len(self._rows) - 1),
                                       [Qt.ItemDataRole.DecorationRole])
