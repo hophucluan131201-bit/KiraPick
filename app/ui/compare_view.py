@@ -23,12 +23,14 @@ class CompareTile(QWidget):
     """One compared photo: a header line (number, name, Chọn / Loại, stars, ♥, note), the viewer, the AI line."""
 
     hovered = Signal(int)  # asset id, as soon as the pointer enters (the action target; no delay)
+    pointer_moved = Signal(int)  # asset id, the pointer moved over this tile (a real move, not a window change)
 
     def __init__(self, parent: QWidget | None = None, *, pool: QThreadPool | None = None,
                  full_pool: QThreadPool | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("compareTile")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)  # the active frame is a stylesheet border
+        self.setMouseTracking(True)
         self.asset_id: int | None = None
         self._record: AssetRecord | None = None
         self._number = 0
@@ -42,6 +44,7 @@ class CompareTile(QWidget):
         self.viewer.back_button.hide()  # Compare has its own way back
         # A tile is resized whenever the page or the arrangement changes: the photo point at its centre stays.
         self.viewer.setResizeAnchor(ImageViewer.ViewportAnchor.AnchorViewCenter)
+        self.viewer.viewport().installEventFilter(self)  # mouse moves over the photo (the viewport tracks them)
         self.ai_label = QLabel(self.viewer)
         self.ai_label.setObjectName("compareAi")
         self.ai_label.hide()
@@ -94,6 +97,16 @@ class CompareTile(QWidget):
         super().enterEvent(event)  # type: ignore[arg-type]
         if self.asset_id is not None:
             self.hovered.emit(self.asset_id)
+
+    def mouseMoveEvent(self, event: object) -> None:  # noqa: N802 - Qt override
+        super().mouseMoveEvent(event)  # type: ignore[arg-type]
+        if self.asset_id is not None:
+            self.pointer_moved.emit(self.asset_id)
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt override
+        if event.type() == QEvent.Type.MouseMove and self.asset_id is not None:
+            self.pointer_moved.emit(self.asset_id)
+        return False
 
     def resizeEvent(self, event: object) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)  # type: ignore[arg-type]
@@ -154,8 +167,10 @@ class CompareView(QWidget):
         self.tiles: tuple[CompareTile, ...] = tuple(
             CompareTile(self.page, pool=self.preview_pool, full_pool=self.full_pool) for _ in range(MAX_PHOTOS))
         for tile in self.tiles:
-            tile.hovered.connect(self._on_hovered)
+            tile.hovered.connect(self._on_entered)
+            tile.pointer_moved.connect(self._on_moved)
             tile.hide()
+        self._armed = False  # True once the pointer really moved after Compare opened
         self._records: list[AssetRecord] = []
         self.active_id: int | None = None
         self._mode: Mode = "auto"
@@ -173,6 +188,7 @@ class CompareView(QWidget):
     def show_records(self, records: list[AssetRecord], pixmaps: dict[int, QPixmap], active_id: int) -> None:
         """Show these 2–4 photos (tile order = list order); ``active_id`` starts as the active photo."""
         self.clear()
+        self._armed = False  # a pointer resting over a tile when Compare opens does not pick it (spec: initial rule)
         self._records = list(records)
         for n, (tile, rec) in enumerate(zip(self.tiles, self._records, strict=False), start=1):
             tile.set_number(n)
@@ -235,6 +251,15 @@ class CompareView(QWidget):
         return False
 
     # ------------------------------------------------------------ helpers
+    def _on_entered(self, asset_id: int) -> None:
+        """Enter: Qt also sends it when a tile appears under a resting pointer; only a moving pointer picks."""
+        if self._armed:
+            self._on_hovered(asset_id)
+
+    def _on_moved(self, asset_id: int) -> None:
+        self._armed = True
+        self._on_hovered(asset_id)
+
     def _on_hovered(self, asset_id: int) -> None:
         if asset_id != self.active_id:
             self._set_active(asset_id)

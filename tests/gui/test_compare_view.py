@@ -10,8 +10,9 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QEvent, QPointF  # noqa: E402
+from PySide6.QtCore import QEvent, QPoint, QPointF  # noqa: E402
 from PySide6.QtGui import QEnterEvent  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QWidget  # noqa: E402
 
 from app.ui import compare_view as cv  # noqa: E402
@@ -37,9 +38,10 @@ def _view(qtbot, photos: list[Path], n: int = 3, size=(1600, 900), active: int |
 
 
 def _enter(view: CompareView, asset_id: int) -> None:
-    tile = view.tile(asset_id)
-    pos = QPointF(5, 5)
-    QApplication.sendEvent(tile, QEnterEvent(pos, pos, tile.mapToGlobal(pos)))
+    """The real pointer onto the tile's photo (from outside the tiles first, so it is a real move)."""
+    QTest.mouseMove(view.back_button, view.back_button.rect().center())
+    viewport = view.tile(asset_id).viewer.viewport()
+    QTest.mouseMove(viewport, viewport.rect().center())
 
 
 def _leave(view: CompareView) -> None:
@@ -67,8 +69,10 @@ def test_active_changes_immediately_on_enter(qtbot, photos) -> None:  # noqa: AN
 def test_quick_hover_emits_panel_once(qtbot, photos) -> None:  # noqa: ANN001
     view, _recs = _view(qtbot, photos)
     active, panel = _signals(view)
-    for asset_id in (1, 2, 3):
-        _enter(view, asset_id)
+    QTest.mouseMove(view.back_button, view.back_button.rect().center())
+    for asset_id in (1, 2, 3):  # one sweep across the tiles
+        viewport = view.tile(asset_id).viewer.viewport()
+        QTest.mouseMove(viewport, viewport.rect().center())
         qtbot.wait(15)
     assert active == [2, 3]  # 1 was already active
     qtbot.wait(PANEL_DELAY_MS + 60)
@@ -198,3 +202,23 @@ def test_back_button_requests_back(qtbot, photos) -> None:  # noqa: ANN001
     view.back_requested.connect(lambda: hits.append(1))
     view.back_button.click()
     assert hits == [1]
+
+
+def test_resting_pointer_does_not_pick_a_tile_when_compare_opens(qtbot, photos) -> None:  # noqa: ANN001
+    """Qt sends Enter to a tile that appears under a resting pointer: the initial active photo stays (spec) until
+    the pointer really moves."""
+    view = CompareView()
+    qtbot.addWidget(view)
+    view.resize(1600, 900)
+    view.show()
+    qtbot.waitExposed(view)
+    recs = [_record(p, asset_id=i + 1) for i, p in enumerate(photos[:3])]
+    view.show_records(recs, {}, 2)
+    QApplication.processEvents()
+    tile = view.tile(3)
+    pos = QPointF(5, 5)
+    QApplication.sendEvent(tile, QEnterEvent(pos, pos, tile.mapToGlobal(pos)))  # appeared under the pointer
+    assert view.active_id == 2
+    viewport = tile.viewer.viewport()
+    QTest.mouseMove(viewport, viewport.rect().center() + QPoint(3, 3))  # now the user moves
+    assert view.active_id == 3

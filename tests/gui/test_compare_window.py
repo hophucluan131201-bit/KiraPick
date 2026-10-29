@@ -103,6 +103,7 @@ def test_real_mouse_over_the_viewers_changes_the_target_at_once(qtbot, env: dict
     sent to the tile."""
     w, ids = _opened(qtbot, env, [0, 1, 2], current=0)
     QApplication.processEvents()
+    QTest.mouseMove(w.compare.back_button, w.compare.back_button.rect().center())  # start outside the tiles
     for asset_id in (ids[2], ids[1], ids[0], ids[2]):
         viewport = w.compare.tile(asset_id).viewer.viewport()
         QTest.mouseMove(viewport, viewport.rect().center())

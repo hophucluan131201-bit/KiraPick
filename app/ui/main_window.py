@@ -561,11 +561,11 @@ class MainWindow(QMainWindow):
         for tile in self.compare.tiles:
             tile.viewer.gate = self._gate
         self.model.modelReset.connect(self._refresh_compare)
-        self.detail.keep_clicked.connect(lambda: self.set_flag("keep"))
-        self.detail.reject_clicked.connect(lambda: self.set_flag("reject"))
-        self.detail.clear_clicked.connect(lambda: self.set_flag(None))
-        self.detail.rating_clicked.connect(self.set_rating)
-        self.detail.favorite_clicked.connect(self.toggle_favorite)
+        self.detail.keep_clicked.connect(lambda: self._panel_may_act() and self.set_flag("keep"))
+        self.detail.reject_clicked.connect(lambda: self._panel_may_act() and self.set_flag("reject"))
+        self.detail.clear_clicked.connect(lambda: self._panel_may_act() and self.set_flag(None))
+        self.detail.rating_clicked.connect(lambda n: self._panel_may_act() and self.set_rating(n))
+        self.detail.favorite_clicked.connect(lambda: self._panel_may_act() and self.toggle_favorite())
         self.detail.neighbour_clicked.connect(self.go_to_asset)
         self.detail.open_loupe.connect(lambda: self.show_loupe(True))
         self.detail.people_menu_requested.connect(lambda pos: self._people_menu_for_current(pos))
@@ -1287,7 +1287,7 @@ class MainWindow(QMainWindow):
         if self.project is not None:
             self._fill_people()
             self.reload_preserving_view()
-            self._show_inspector(self.current_record())
+            self._show_inspector(self.view_record())
 
     def renumber_people(self, ask: bool = True) -> int:
         """Chủ thể 1, 2, 3 … without gaps, in shooting order (names are kept)."""
@@ -1464,7 +1464,7 @@ class MainWindow(QMainWindow):
     def _after_people_change(self) -> None:
         self._fill_people()
         self.reload_preserving_view()
-        self._show_inspector(self.current_record())
+        self._show_inspector(self.view_record())
 
     def _people_context_menu(self, pos: object) -> None:
         ids = self._selected_subjects()
@@ -1498,7 +1498,9 @@ class MainWindow(QMainWindow):
 
     def _people_menu_for_current(self, global_pos: object) -> None:
         """Chủ thể tab of the detail panel: acts on the photo shown there only, whatever is marked in the grid."""
-        rec = self.current_record()
+        if not self._panel_may_act():
+            return
+        rec = self.view_record()
         if rec is not None:
             self._people_menu_at(global_pos, [rec.id])
 
@@ -1609,7 +1611,12 @@ class MainWindow(QMainWindow):
         self.strip.setText(strip_text(rec))
 
     def go_to_asset(self, asset_id: int) -> None:
-        """Make this photo the current one (Ảnh tương tự)."""
+        """Make this photo the current one (Ảnh tương tự). In Compare: show it in the panel only."""
+        if self.in_compare():
+            rec = self.model.records_by_id([asset_id]).get(asset_id)
+            if rec is not None:
+                self._show_inspector(rec)
+            return
         idx = self.model.index_of(asset_id)
         if idx.isValid():
             self.select_row(idx.row())
@@ -1800,8 +1807,8 @@ class MainWindow(QMainWindow):
         if self.project is None:
             self.bottom_bar.set_counts(Counts(0, 0, 0, 0, 0, 0), include_pairs, 0)
             return
-        self.bottom_bar.set_counts(counts(self.project.conn, include_pairs), include_pairs,
-                                   len(self.selected_records()))
+        marked = 0 if self.in_compare() else len(self.selected_records())  # Compare: keys act on one photo
+        self.bottom_bar.set_counts(counts(self.project.conn, include_pairs), include_pairs, marked)
 
     def _update_empty_state(self) -> None:
         if self.in_compare():
@@ -1860,7 +1867,15 @@ class MainWindow(QMainWindow):
         if self.grid.currentIndex().isValid():
             self.grid.scrollTo(self.grid.currentIndex())
         self.grid.setFocus()
-        self._show_inspector(self.current_record())
+        self._show_inspector(self.view_record())
+        return True
+
+    def _panel_may_act(self) -> bool:
+        """Panel buttons act on the photo the panel shows; in Compare that must be the active photo (the panel
+        follows 150 ms later): otherwise refuse rather than change another photo."""
+        if self.in_compare() and self.detail.shown_id != self.compare.active_id:
+            self.status.setText("Bảng chi tiết chưa kịp đổi sang ảnh đang chọn — bấm lại.")
+            return False
         return True
 
     def view_record(self) -> AssetRecord | None:
@@ -1874,12 +1889,14 @@ class MainWindow(QMainWindow):
         if rec is not None and self.in_compare():
             self._show_inspector(rec)
 
-    def _refresh_compare(self) -> None:
-        """After a reload: the compared photos are re-read by id (whatever the filter); zoom, pan and the active
-        photo stay. A photo gone from the session closes Compare."""
+    def _refresh_compare(self, changed: list[int] | None = None) -> None:
+        """After a reload (or an action on ``changed`` photos): the compared photos are re-read by id whatever the
+        filter; zoom, pan and the active photo stay. A photo gone from the session closes Compare."""
         if not self.in_compare():
             return
-        ids = [r.id for r in self.compare.records()]
+        ids = [r.id for r in self.compare.records() if changed is None or r.id in changed]
+        if not ids:
+            return
         fresh = self.model.records_by_id(ids)
         if len(fresh) != len(ids):
             self.leave_compare()
@@ -1907,23 +1924,33 @@ class MainWindow(QMainWindow):
             self.grid.scrollTo(self.grid.currentIndex())
             self.grid.setFocus()
 
-    def toggle_zoom(self) -> None:
+    def _zoom_viewer(self) -> ImageViewer | None:
+        """The viewer Z / + / − / E act on: the active tile in Compare, else the loupe (opened if needed)."""
+        if self.in_compare():
+            tile = self.compare.tile(self.compare.active_id) if self.compare.active_id is not None else None
+            return tile.viewer if tile is not None else None
         if self.center.currentIndex() != 2:
             self.show_loupe(True)
-        self.viewer.toggle_zoom()
+        return self.viewer
+
+    def toggle_zoom(self) -> None:
+        viewer = self._zoom_viewer()
+        if viewer is not None:
+            viewer.toggle_zoom()
 
     def zoom_step(self, direction: int) -> None:
-        if self.center.currentIndex() != 2:
-            self.show_loupe(True)
-        (self.viewer.zoom_in if direction > 0 else self.viewer.zoom_out)()
+        viewer = self._zoom_viewer()
+        if viewer is not None:
+            (viewer.zoom_in if direction > 0 else viewer.zoom_out)()
 
     def zoom_to_eyes(self) -> None:
         """E: jump close to the eyes of the photo's main person (to judge focus)."""
-        rec = self.current_record()
+        rec = self.view_record()
         if rec is None or self.project is None:
             return
-        if self.center.currentIndex() != 2:
-            self.show_loupe(True)
+        viewer = self._zoom_viewer()
+        if viewer is None:
+            return
         row = self.project.conn.execute(
             """SELECT face_box FROM occurrences WHERE asset_id = ? AND face_box IS NOT NULL
                ORDER BY is_main DESC, prominence DESC LIMIT 1""", (rec.id,)).fetchone()
@@ -1934,11 +1961,15 @@ class MainWindow(QMainWindow):
         face_px = h * max(rec.width or 0, rec.height or 0)  # upper estimate of the face height in photo pixels
         level = 2.0 if 0 < face_px < 900 else 1.0  # small faces: 200%, big close-ups: 100% is enough
         cx, cy = rotate_point(x + w / 2, y + h * 0.42, rec.rotation)  # face boxes are in file coordinates
-        self.viewer.set_zoom(level, QPointF(cx, cy))
+        viewer.set_zoom(level, QPointF(cx, cy))
 
     # --------------------------------------------------------- culling
-    def _targets(self) -> list[AssetRecord]:
-        """Photos a K/X/U/stars key applies to: every selected photo (grid or filmstrip), else the current one."""
+    def _action_records(self) -> list[AssetRecord]:
+        """The ONE source of the photos a culling action changes (keys, bottom bar, ⋯ menu, panel buttons).
+        Compare: exactly the active photo. Elsewhere: every marked photo (grid or filmstrip), else the current one."""
+        if self.in_compare():
+            rec = self.view_record()
+            return [rec] if rec is not None else []
         selected = self.selected_records()
         current = self.current_record()
         if len(selected) > 1:
@@ -1950,13 +1981,14 @@ class MainWindow(QMainWindow):
         the AI measurements and exported copies never change."""
         if self.project is None:
             return
-        targets = self._targets()
+        targets = self._action_records()
         if not targets:
             return
         with self.project.transaction() as conn:
             turns = {rec.id: view.rotate(conn, rec.id) for rec in targets}
         for asset_id, t in turns.items():
             self.model.set_rotation(asset_id, t)
+        self._refresh_compare(list(turns))
         current = self.current_record()
         if current is not None and current.id in turns and self.center.currentIndex() == 2:
             if not self.viewer.set_rotation(current.rotation):  # nothing loaded yet: show it again, turned
@@ -1993,7 +2025,7 @@ class MainWindow(QMainWindow):
     def _apply(self, fn: object, *, advance: bool = False) -> None:
         if self.project is None:
             return
-        targets = self._targets()
+        targets = self._action_records()
         if not targets:
             return
         self._apply_to(targets, fn)
@@ -2010,7 +2042,8 @@ class MainWindow(QMainWindow):
         self._learn_taste(targets)
         for rec in targets:
             self.model.refresh_record(rec.id)
-        self._show_inspector(self.current_record())
+        self._refresh_compare([r.id for r in targets])
+        self._show_inspector(self.view_record())
         self._update_counts()
         self.refresh_steps()
 
@@ -2067,7 +2100,7 @@ class MainWindow(QMainWindow):
         self.model.set_ranker(self.taste.ranker(self.taste_weight()))
         if self.project is not None:
             self.reload_preserving_view()
-            self._show_inspector(self.current_record())
+            self._show_inspector(self.view_record())
 
     def ask_taste_weight(self) -> None:
         value, ok = QInputDialog.getInt(
@@ -2108,7 +2141,7 @@ class MainWindow(QMainWindow):
         if self.project is not None and (was_ready or self.taste.ready):
             self.reload_preserving_view()
         if self.project is not None:
-            self._show_inspector(self.current_record())
+            self._show_inspector(self.view_record())
 
     def _learn_client_picks(self, collection_id: int) -> None:
         """Client picks teach a little (they show the client's taste, not always the best photo)."""
@@ -2132,7 +2165,7 @@ class MainWindow(QMainWindow):
         """Q / W / R: the user's sharpness label (pressing the same key again clears it); teaches the focus model."""
         if self.project is None:
             return
-        targets = self._targets()
+        targets = self._action_records()
         if not targets:
             return
         new = None if all(r.focus == label for r in targets) else label
@@ -2153,7 +2186,8 @@ class MainWindow(QMainWindow):
             self.teacher.focus_labeled(key, camera, group_key(session, (rec.capture_time or "")[:10]), new, features)
         for rec in targets:
             self.model.refresh_record(rec.id)
-        self._show_inspector(self.current_record())
+        self._refresh_compare([r.id for r in targets])
+        self._show_inspector(self.view_record())
         if new is not None and unmeasured:
             self.status.setText(f"{unmeasured} ảnh chưa được 📊 Phân tích nên chưa dùng để học độ nét "
                                 "(nhãn vẫn được lưu).")
@@ -2189,13 +2223,13 @@ class MainWindow(QMainWindow):
         log.info("focus models: %d cameras, %d ready", len(statuses), sum(st.ready for st in statuses.values()))
         if self.project is not None and changed:
             self.reload_preserving_view()
-            self._show_inspector(self.current_record())
+            self._show_inspector(self.view_record())
 
     def set_rating(self, rating: int) -> None:
         self._apply(lambda conn, rec: decisions.set_rating(conn, rec.id, rating))
 
     def toggle_favorite(self) -> None:
-        targets = self._targets()
+        targets = self._action_records()
         new = not all(r.favorite for r in targets) if targets else True
         self._apply(lambda conn, rec: decisions.set_favorite(conn, rec.id, new))
 
