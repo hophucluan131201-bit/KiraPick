@@ -1843,6 +1843,8 @@ class MainWindow(QMainWindow):
     def set_grid_cell(self, size: int) -> None:
         """Thumbnail size slider: card size of the grid (remembered)."""
         self.settings.setValue("grid_cell", size)
+        if self.layout_controller.set_cell(size):  # SHORT Detail Focus: applied when the grid wraps again
+            return
         delegate = self.grid.itemDelegate()
         delegate.cell = size  # type: ignore[attr-defined]
         self.grid.doItemsLayout()

@@ -36,6 +36,7 @@ from app.ui.overlay import Placement, Scrim
 FOOTER = 40  # grid card caption (app.ui.grid.FOOTER)
 SHORT_KEY, NARROW_KEY = "layout/short_focus", "layout/narrow_detail_visible"
 QT_MAX = 16777215
+DETAIL_MIN_H, DETAIL_MIN_H_SHORT = 160, 100
 
 
 class LayoutController(QObject):
@@ -63,7 +64,8 @@ class LayoutController(QObject):
         narrow = settings.value(NARROW_KEY, None)
         if narrow is not None:
             self._choice[Mode.NARROW] = str(narrow).lower() in ("true", "1")
-        self._cell: int | None = None  # grid cell before SHORT Detail Focus shrank it
+        self._cell: int | None = None  # the user's grid cell while SHORT Detail Focus shrinks it (None otherwise)
+        self._compact: bool | None = None
         self._timer = QTimer(self, singleShot=True, interval=DEBOUNCE_MS)
         self._timer.timeout.connect(self.evaluate)
         window.setMinimumSize(*MIN_WINDOW)
@@ -81,6 +83,41 @@ class LayoutController(QObject):
         docked = detail_docked(mode, width, self.docked)
         if mode is not self.mode or docked != self.docked:
             self.apply(mode, docked)
+        else:
+            self._within_mode(width)
+
+    def _within_mode(self, width: int) -> None:
+        """Same mode, new size: what depends on the size itself (review CR12-01 / CR12-02) — the compact bars
+        (by width) and, in SHORT Detail Focus, the height of the one-row grid and its cards. The Tab choice, the
+        current photo, the scroll position and the user's card size are kept."""
+        self._set_compact(self._compact_for(width))
+        if self.mode is Mode.SHORT and self._cell is not None:  # Detail Focus
+            top = self._top_index()
+            self._one_row(True)
+            self._restore_top(top)
+
+    def _compact_for(self, width: int) -> bool:
+        return self.mode is Mode.TINY or width < NARROW_W  # by width: a wide SHORT strip has room for full bars
+
+    def _set_compact(self, compact: bool) -> None:
+        if compact == self._compact:
+            return
+        self._compact = compact
+        self.top_bar.set_compact(compact)  # type: ignore[attr-defined]
+        self.bottom_bar.set_compact(compact)  # type: ignore[attr-defined]
+
+    @property
+    def compact(self) -> bool | None:
+        return self._compact
+
+    def set_cell(self, size: int) -> bool:
+        """The card-size slider while SHORT Detail Focus shrinks the cards: remember the user's size for when the
+        grid wraps again (True: handled here, the delegate keeps the one-row size meanwhile)."""
+        if self._cell is None:
+            return False
+        self._cell = size
+        self._one_row(True)
+        return True
 
     def apply(self, mode: Mode, docked: bool | None = None) -> None:
         width = client_size(self.window)[0]
@@ -93,19 +130,21 @@ class LayoutController(QObject):
         self.sheet.close()
         self.splitter.setOrientation(Qt.Orientation.Vertical if mode is Mode.SHORT else Qt.Orientation.Horizontal)
         self.detail.set_horizontal(mode is Mode.SHORT)  # type: ignore[attr-defined]
+        # Below the grid (SHORT) the panel is laid out in a row and needs less height than beside it.
+        self.detail_slot.setMinimumHeight(DETAIL_MIN_H_SHORT if mode is Mode.SHORT else DETAIL_MIN_H)
         side_docked = mode in (Mode.WIDE, Mode.MEDIUM)
         self.side_slot.setVisible(side_docked)
         (self.side.dock if side_docked else self.side.float)()
         self.rail.setVisible(mode is Mode.NARROW)
         self.drawer_button.setVisible(not side_docked)
-        compact = mode is Mode.TINY or width < NARROW_W  # by width: a wide SHORT strip has room for full bars
         room = getattr(self.window, "set_key_hints_room", None)
         if room is not None:
             room(mode not in (Mode.SHORT, Mode.TINY))
-        self.top_bar.set_compact(compact)  # type: ignore[attr-defined]
-        self.bottom_bar.set_compact(compact)  # type: ignore[attr-defined]
+        self._set_compact(self._compact_for(width))
         self._show_detail(self.detail_visible())
         self._restore_sizes()
+        if self._cell is not None:  # SHORT Detail Focus sizes its row itself (after the saved sizes)
+            self._one_row(True)
         self._restore_top(top)
 
     def detail_visible(self) -> bool:
@@ -185,7 +224,11 @@ class LayoutController(QObject):
             delegate.cell = cell  # type: ignore[attr-defined]
             self.grid.setWrapping(False)
             self.grid.setFlow(QListView.Flow.LeftToRight)
-            self.grid_area.setMaximumHeight(row + self._chrome())
+            height = row + self.grid.horizontalScrollBar().sizeHint().height() + self._chrome()
+            self.grid_area.setMaximumHeight(height)
+            total = self.splitter.height()
+            if total > height:  # the row gets exactly its height (cards never cut), the details the rest
+                self.splitter.setSizes([0, height, total - height])
         else:
             if self._cell is not None:
                 delegate.cell = self._cell  # type: ignore[attr-defined]

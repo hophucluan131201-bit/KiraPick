@@ -29,6 +29,7 @@ TABS_ICONS = ("✨ AI", "ℹ", "⧉", "👤")  # narrowest panel
 BURST_ROW = 72  # one fixed row height in "Ảnh tương tự", with or without the thumbnail yet
 TOP_MAX_W = 300  # SHORT (horizontal) layout: preview and buttons column
 PREVIEW_MIN_H = 80
+PREVIEW_HIDE_H = 40  # SHORT layout: below this the preview is hidden (title, stars, buttons and tabs stay)
 QWIDGETSIZE_MAX = 16777215
 _PLACEHOLDER: QIcon | None = None
 
@@ -234,10 +235,13 @@ class DetailPanel(QWidget):
         spacing = max(0, self.top.layout().spacing())
         rest = (self.title.sizeHint().height() + self.star_buttons[0].sizeHint().height()
                 + self.keep_button.sizeHint().height() + 3 * spacing)  # title, stars and buttons
-        if getattr(self, "_horizontal", False):
+        if getattr(self, "_horizontal", False):  # SHORT: very low windows hide the preview, never the buttons
             h = self.height() - rest - 12
-        else:
-            h = min(int(self.width() * 0.66), int(self.height() * 0.35))
+            self.preview.setVisible(h >= PREVIEW_HIDE_H)
+            self.preview.setFixedHeight(max(PREVIEW_HIDE_H, h))
+            return
+        self.preview.setVisible(True)
+        h = min(int(self.width() * 0.66), int(self.height() * 0.35))
         self.preview.setFixedHeight(max(PREVIEW_MIN_H, h))
     def _fit_tabs(self) -> None:
         """Tab titles never need scroll arrows: short titles (full ones in tooltips) when the panel is narrow."""

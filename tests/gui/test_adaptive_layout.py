@@ -313,3 +313,83 @@ def test_mode_change_while_workers_run(qtbot, env: dict) -> None:  # noqa: F811
     gate.set()
     assert w.viewer.wait_idle(5000)
     assert w.close() is True
+
+
+def test_compact_bars_follow_width_within_short(qtbot, env: dict) -> None:  # noqa: F811
+    """Review CR12-01: compact bars depend on the width, also when the mode stays SHORT."""
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    _at(qtbot, w, (1000, 500))
+    lc = w.layout_controller
+    lc.toggle_detail()  # Detail Focus, must survive the resizes
+    for size, compact in (((1000, 500), True), ((1200, 500), False), ((1000, 500), True)):
+        _at(qtbot, w, size)
+        assert lc.mode is Mode.SHORT and lc.detail_visible() and not w.grid.isWrapping(), size
+        assert w.top_bar._compact is compact and w.bottom_bar._compact is compact, size
+        assert w.bottom_bar.more_button.isVisible() is compact and w.bottom_bar.rejected.isVisible() is not compact
+    assert lc.compact is True
+
+
+def test_short_detail_focus_follows_height(qtbot, env: dict, tmp_path: Path) -> None:  # noqa: F811
+    """Review CR12-02: resizing within SHORT Detail Focus recomputes the row, the grid limit and the card size;
+    Detail Focus, the current photo, the scroll position and the user's card size are kept."""
+    many = tmp_path / "Nhiều ảnh"
+    for i in range(30):
+        _photo(many / f"IMG_{i:04d}.jpg", 200 + i, taken=f"2026:10:25 18:00:{i:02d}")
+    w = _window(qtbot, env)
+    _import(qtbot, w, many)
+    user_cell = w.grid.itemDelegate().cell
+    w.select_row(20)
+    _at(qtbot, w, (1920, 500))
+    lc = w.layout_controller
+    lc.toggle_detail()
+    qtbot.wait(50)
+    cells, limits = [], []
+    for size in ((1920, 500), (1920, 400), (1920, 540), (2400, 700)):  # all SHORT
+        _at(qtbot, w, size)
+        cell = w.grid.itemDelegate().cell
+        assert lc.mode is Mode.SHORT and lc.detail_visible() and not w.grid.isWrapping(), size
+        assert cell == max(96, min(user_cell, int(w.body.height() * 0.4) - 40 - 8)), size
+        assert w.grid_area.maximumHeight() < w.body.height(), size  # the details keep the rest
+        assert w.grid.viewport().height() >= cell + 40, size  # a whole card row is visible, never cut
+        assert w.current_record().name == "IMG_0020.jpg"
+        assert w.grid.viewport().rect().intersects(w.grid.visualRect(w.grid.currentIndex())), size
+        cells.append(cell)
+        limits.append(w.grid_area.maximumHeight())
+    assert len(set(limits)) > 1 and cells[1] <= cells[0] <= cells[3]  # follows the height (not frozen)
+    w.set_grid_cell(user_cell + 20)  # the slider during Detail Focus: remembered, the row keeps fitting
+    assert w.grid.itemDelegate().cell == cells[-1]
+    lc.toggle_detail()  # back to Grid Focus: the user's size comes back
+    assert w.grid.isWrapping() and w.grid.itemDelegate().cell == user_cell + 20
+
+
+@pytest.mark.parametrize("start, target", [((960, 1000), (1600, 1000)), ((580, 400), (960, 1000)),
+                                           ((580, 400), (1600, 1000)), ((960, 1000), (580, 400))])
+def test_open_overlays_survive_mode_changes(qtbot, env: dict, start: tuple[int, int],  # noqa: F811
+                                            target: tuple[int, int]) -> None:
+    """Review CR12-04: a drawer or sheet open during a mode change leaves no scrim, panel or focus behind."""
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    lc = w.layout_controller
+    for kind in ("drawer", "sheet"):
+        _at(qtbot, w, start)
+        w.activateWindow()
+        w.grid.setFocus()
+        if kind == "drawer":
+            lc.open_drawer("filters")
+            assert lc.side.is_open
+        else:
+            if lc.docked:
+                continue  # 960 px: the details are docked, there is no sheet to open
+            lc.toggle_detail()
+            assert lc.sheet.is_open
+        assert lc.scrim.isVisible()
+        _at(qtbot, w, target)
+        assert not lc.side.is_open and not lc.sheet.is_open and not lc.scrim.isVisible(), (kind, target)
+        assert w.sidebar.isVisible() is lc.side.docked  # docked → shown in place; floating → closed
+        assert w.detail.isVisible() is (lc.docked and lc.detail_visible())
+        focus = QApplication.focusWidget()
+        assert focus is not None and focus.isVisible(), (kind, target)  # never left on a hidden panel
+        if lc.docked and lc.detail_visible():
+            lc.toggle_detail()  # back to the default for the next round
+            lc.toggle_detail()
