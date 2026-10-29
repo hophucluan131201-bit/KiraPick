@@ -136,6 +136,16 @@ jobs:
       - name: Install
         shell: pwsh
         run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt "pytest>=8,<10" "pytest-qt>=4.4,<5"
+      - name: Screen and fonts (a bigger desktop for the real-platform steps; what Qt sees)
+        if: always()
+        shell: pwsh
+        run: |
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop } catch { Write-Host "resolution not changed: $_" }
+          foreach ($p in "offscreen", "windows") {
+            $env:QT_QPA_PLATFORM = $p
+            $line = (python scripts/qt_env_report.py 2>$null | Select-Object -Last 1)
+            Write-Host "::notice title=qt $p::$line"
+          }
       - name: Full test suite (offscreen)
         if: always()
         shell: pwsh

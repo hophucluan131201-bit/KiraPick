@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -44,7 +45,10 @@ def test_registry_reports_missing_and_tampered_files(tmp_path: Path) -> None:
     reg = ModelRegistry(tmp_path, load_manifest(manifest))
     assert reg.status("a").state is ModelState.READY
     assert reg.status("b").state is ModelState.MISSING
+    before = good.stat().st_mtime_ns
     good.write_bytes(b"model-bytEs")  # same size, different content
+    os.utime(good, ns=(before + 2_000_000_000, before + 2_000_000_000))  # a later write (Windows may keep the mtime
+    # of two writes in the same clock tick; the cache is keyed on size + mtime, like a real replaced file)
     assert reg.status("a").state is ModelState.CORRUPT
     with pytest.raises(ModelUnavailableError):
         reg.require("a")
