@@ -185,11 +185,37 @@ def main() -> int:
     events.clear()
     vp = view.tile(2).viewer.viewport()
     QTest.mouseMove(vp, vp.rect().center())
-    record("S5_qtest_with_cursor_parked", "immediately")
     settle(250)
     record("S5_qtest_with_cursor_parked", "after 250 ms")
-    out.close()
     view.close()
+
+    # S6: as the tests do — a new top-level CompareView per test, shown where the platform puts it (no move), 25 times.
+    app.removeEventFilter(spy)
+    runs = []
+    for n in range(25):
+        v = CompareView()
+        v.resize(1600, 900)
+        v.show()
+        QTest.qWait(150)  # shown and placed by the platform
+        v.show_records([_record(p, asset_id=i + 1) for i, p in enumerate(photos)], {}, 1)
+        QApplication.processEvents()
+        QTest.mouseMove(v.back_button, v.back_button.rect().center())
+        target = v.tile(2).viewer.viewport()
+        goal = target.mapToGlobal(target.rect().center())
+        QTest.mouseMove(target, target.rect().center())
+        QApplication.processEvents()
+        frame = v.frameGeometry()
+        runs.append(f"{n}:win@{frame.x()},{frame.y()} goal@{goal.x()},{goal.y()} cur@{QCursor.pos().x()},"
+                    f"{QCursor.pos().y()} active={v.active_id}")
+        v.wait_idle(10000)  # never destroy a view whose pools still decode (the pool waits while Python holds the GIL)
+        v.close()
+        v.deleteLater()
+        QApplication.processEvents()
+    avail = QGuiApplication.primaryScreen().availableGeometry() if QGuiApplication.primaryScreen() else None
+    out.write(json.dumps({"scenario": "S6_new_window_per_test", "available": [avail.x(), avail.y(), avail.width(),
+                          avail.height()] if avail else None, "runs": runs}, ensure_ascii=False) + "\n")
+    print("S6", runs[0], runs[-1])
+    out.close()
     return 0
 
 
