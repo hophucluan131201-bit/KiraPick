@@ -154,9 +154,8 @@ jobs:
         run: |
           python -X faulthandler -m pytest -q -p no:cacheprovider *>&1 | Tee-Object -FilePath suite.log
           $code = $LASTEXITCODE
-          $summary = (Get-Content suite.log | Where-Object { $_ -match "(passed|failed|error)" } | Select-Object -Last 1)
-          $failures = (Get-Content suite.log | Where-Object { $_ -match "^(FAILED|ERROR) " } | Select-Object -First 8) -join " | "
-          Write-Host "::notice title=suite::exit $code; $summary $failures"
+          . scripts/ci_report.ps1
+          Report-Pytest -Log suite.log -Title suite -Code $code
           exit $code
       - name: GUI smoke on the real Windows platform (Windows fonts, real windows)
         if: always()
@@ -169,9 +168,19 @@ jobs:
             tests/gui/test_compare_actions.py tests/gui/test_compare_overlay.py tests/gui/test_compare_final.py `
             tests/gui/test_qt_image.py *>&1 | Tee-Object -FilePath gui.log
           $code = $LASTEXITCODE
-          $summary = (Get-Content gui.log | Where-Object { $_ -match "(passed|failed|error)" } | Select-Object -Last 1)
-          $failures = (Get-Content gui.log | Where-Object { $_ -match "^(FAILED|ERROR) " } | Select-Object -First 8) -join " | "
-          Write-Host "::notice title=gui-windows::exit $code; $summary $failures"
+          . scripts/ci_report.ps1
+          Report-Pytest -Log gui.log -Title gui-windows -Code $code
+          exit $code
+      - name: Compare hover diagnostic (real Windows platform; CR-P2-FINAL-01)
+        if: always()
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: windows
+        run: |
+          python -X faulthandler scripts/diag_compare_hover.py --out diag.jsonl *>&1 | Tee-Object -FilePath diag.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { Write-Host "::notice title=diag exit::exit $code; $((Get-Content diag.log | Select-Object -Last 15) -join ' | ')" }
+          if (Test-Path diag.jsonl) { Get-Content diag.jsonl | Select-Object -First 10 | ForEach-Object { Write-Host "::notice title=diag::$_" } }
           exit $code
       - name: Snap sizes and per-monitor DPI scale (real Windows platform)
         if: always()
@@ -196,28 +205,29 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           KIRAPICK_PERF_OUT: perf.jsonl
         run: python -m pytest -q -m perf tests/perf
-      - name: Performance results (GitHub shows 10 notices per step, so two steps)
+      - name: Performance results (4 results per notice; a job keeps only 50 notices)
         if: always()
         shell: pwsh
         run: |
-          if (Test-Path perf.jsonl) { Get-Content perf.jsonl | Select-Object -First 10 | ForEach-Object { Write-Host "::notice title=perf::$_" } }
-      - name: Performance results (continued)
-        if: always()
-        shell: pwsh
-        run: |
-          if (Test-Path perf.jsonl) { Get-Content perf.jsonl | Select-Object -Skip 10 | ForEach-Object { Write-Host "::notice title=perf::$_" } }
+          if (Test-Path perf.jsonl) {
+            $all = @(Get-Content perf.jsonl)
+            for ($i = 0; $i -lt $all.Count; $i += 4) { Write-Host "::notice title=perf::$(($all[$i..([Math]::Min($i + 3, $all.Count - 1))]) -join ' || ')" }
+          }
       - name: Shutdown and worker stress (not reproduced in N runs is not proof)
         if: always()
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
+          . scripts/ci_report.ps1
           $failed = 0  # every run counts (a loop would otherwise report only its last run)
-          python -X faulthandler -m pytest -q -m stress tests/gui/test_worker_lifecycle.py tests/gui/test_compare_lifecycle.py
-          if ($LASTEXITCODE -ne 0) { $failed++ }
+          python -X faulthandler -m pytest -q -p no:cacheprovider -m stress tests/gui/test_worker_lifecycle.py tests/gui/test_compare_lifecycle.py *>&1 | Tee-Object -FilePath stress0.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { $failed++; Report-Pytest -Log stress0.log -Title "stress run 0" -Code $code }
           for ($i = 1; $i -le 5; $i++) {
-            python -X faulthandler -m pytest -q tests/gui/test_shutdown_timeout.py tests/gui/test_shutdown_callbacks.py tests/unit/test_shutdown.py tests/gui/test_compare_lifecycle.py
-            if ($LASTEXITCODE -ne 0) { $failed++ }
+            python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_shutdown_timeout.py tests/gui/test_shutdown_callbacks.py tests/unit/test_shutdown.py tests/gui/test_compare_lifecycle.py *>&1 | Tee-Object -FilePath "stress$i.log"
+            $code = $LASTEXITCODE
+            if ($code -ne 0) { $failed++; Report-Pytest -Log "stress$i.log" -Title "stress run $i" -Code $code }
           }
           Write-Host "::notice title=stress::failed runs: $failed of 6"
           exit $failed
@@ -229,4 +239,6 @@ jobs:
             perf.jsonl
             suite.log
             gui.log
+            diag.jsonl
+            stress*.log
           retention-days: 30
