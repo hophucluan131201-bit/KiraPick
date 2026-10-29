@@ -84,3 +84,133 @@ def test_dpi_change_keeps_true_100_percent(qtbot, env: dict, monkeypatch) -> Non
         monkeypatch.setattr(tile.viewer, "devicePixelRatioF", lambda: 2.0)
     w.layout_controller.on_screen_changed(w.screen())
     assert v.zoom == 1.0 and v.transform().m11() == pytest.approx(0.5)
+
+
+# ------------------------------------------------------------------ slow sources, late callbacks, shutdown
+class _SlowPreview:
+    """load_image that takes `delay` seconds (a slow network drive / USB card reader)."""
+
+    def __init__(self, delay: float) -> None:
+        self.delay, self.real = delay, viewer_module.load_image
+
+    def __call__(self, *a, **k):  # noqa: ANN002, ANN003, ANN204
+        time.sleep(self.delay)
+        return self.real(*a, **k)
+
+
+def _probe_block(qtbot, action, ms: int) -> int:  # noqa: ANN001
+    """Largest gap of a 10 ms timer while `action` runs and `ms` pass: how long the Qt thread was blocked."""
+    clock, worst, last = QElapsedTimer(), [0], [0]
+    timer = QTimer()
+    timer.setInterval(10)
+
+    def tick() -> None:
+        now = clock.elapsed()
+        worst[0] = max(worst[0], now - last[0])
+        last[0] = now
+
+    timer.timeout.connect(tick)
+    clock.start()
+    timer.start()
+    action()
+    qtbot.wait(ms)
+    timer.stop()
+    return worst[0]
+
+
+def test_slow_source_keeps_the_window_responsive_and_actions_work(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    monkeypatch.setattr(viewer_module, "load_image", _SlowPreview(0.8))
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.select_row(0)
+    ids = _mark(w, [0, 1, 2], current=0)
+    block = _probe_block(qtbot, lambda: _key(qtbot, w, Qt.Key.Key_C), 300)
+    assert w.in_compare() and block < 150  # previews still loading: the window never waits for them
+    vp = w.compare.tile(ids[2]).viewer.viewport()
+    QTest.mouseMove(w.compare.back_button, w.compare.back_button.rect().center())
+    QTest.mouseMove(vp, vp.rect().center())
+    _key(qtbot, w, Qt.Key.Key_X)
+    assert decisions.get(w.project.conn, ids[2]).flag == "reject"
+    assert decisions.get(w.project.conn, ids[0]).flag is None
+    assert w.compare.wait_idle(20000)
+
+
+def test_late_previews_after_leave_switch_and_dpi_change(qtbot, env: dict, tmp_path: Path, monkeypatch) -> None:  # noqa: F811
+    """Previews still loading when Compare closes, reopens on other photos, the DPI changes, the folder switches:
+    nothing late lands on the wrong tile, nothing crashes, the database closes after the pools are idle."""
+    monkeypatch.setattr(viewer_module, "load_image", _SlowPreview(0.3))
+    w, ids = _opened(qtbot, env, [0, 1], current=0)
+    _key(qtbot, w, Qt.Key.Key_Escape)  # previews still decoding
+    others = _mark(w, [3, 4, 5], current=3)
+    _key(qtbot, w, Qt.Key.Key_C)
+    w.layout_controller.on_screen_changed(w.screen())
+    assert w.compare.wait_idle(20000)
+    QApplication.processEvents()
+    for asset_id in others:
+        tile = w.compare.tile(asset_id)
+        assert tile is not None and tile.viewer._path == next(r.path for r in w.compare.records() if r.id == asset_id)
+    assert all(w.compare.tile(i) is None for i in ids)
+    events: list[str] = []
+    project = _watch_db(w, events, monkeypatch)
+    other = tmp_path / "other"
+    _photo(other / "IMG_0001.jpg", 98)
+    assert w.start_import(other) is not None  # previews loading again? the switch waits for the pools
+    qtbot.waitUntil(lambda: w.import_thread is None, timeout=20000)
+    assert events == ["db closed"] and not _db_open(project) and not w.in_compare()
+
+
+def test_close_with_full_decode_and_export_running(qtbot, env: dict, tmp_path: Path, monkeypatch) -> None:  # noqa: F811
+    """Closing while a Compare full decode AND an export run: the user is asked about the export, both are waited for,
+    the database closes last."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from tests.gui.test_shutdown_callbacks import _held_export
+
+    monkeypatch.setattr(mw, "CLOSE_WAIT_MS", 50)
+    fake = FakeFull()
+    fake.gate = threading.Event()
+    monkeypatch.setattr(viewer_module, "load_full_resolution", fake)
+    w, ids = _opened(qtbot, env, [0, 1], current=0)
+    events: list[str] = []
+    project = _watch_db(w, events, monkeypatch)
+    w.compare._set_active(ids[0])
+    w.compare.tile(ids[0]).viewer.set_zoom(1.0)
+    qtbot.waitUntil(lambda: fake.running == 1, timeout=5000)
+    gate, dialog = _held_export(qtbot, w, tmp_path / "out", monkeypatch)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    assert w.close() is False and _db_open(project)
+    gate.set()
+    qtbot.wait(200)
+    assert _db_open(project)  # the decode still runs
+    fake.gate.set()
+    qtbot.waitUntil(lambda: not w.isVisible(), timeout=10000)
+    assert events == ["db closed"] and fake.running == 0
+
+
+@pytest.mark.parametrize("size", [(1920, 1040), (1536, 824), (1280, 680), (960, 1040), (640, 680), (1920, 484),
+                                  (640, 340), (560, 300)])
+def test_snap_sizes_with_compare_open(qtbot, env: dict, size) -> None:  # noqa: ANN001, F811
+    """WIDE / MEDIUM / NARROW / SHORT / TINY with four photos compared and the AI line on: no cut-off button, every
+    photo shown at ≥ 160 px long side or the arrangement falls back, the AI line inside its tile."""
+    from tests.gui.platform_checks import skip_unless_fits, skip_without_real_fonts
+    from tests.gui.test_snap_sizes import clipped_buttons
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    skip_unless_fits(w, size)
+    w.resize(*size)
+    QApplication.processEvents()
+    w.layout_controller.evaluate()
+    w.select_row(0)
+    _mark(w, [0, 1, 2, 3], current=0)
+    _key(qtbot, w, Qt.Key.Key_C)
+    _key(qtbot, w, Qt.Key.Key_I)
+    qtbot.wait(250)
+    view = w.compare
+    a = view.arrangement
+    assert a is not None and len(a.cells) == 4
+    for r in view.records():
+        tile = view.tile(r.id)
+        assert tile.ai_label.geometry().right() <= tile.viewer.width()
+    skip_without_real_fonts()
+    assert clipped_buttons(w) == []
