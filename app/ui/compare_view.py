@@ -59,6 +59,8 @@ class CompareTile(QWidget):
         self._record: AssetRecord | None = None
         self._number = 0
         self._note = ""
+        self._header_text = ""
+        self._ai_text: str | None = None
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)  # sizes come from arrange()
         self.header = QLabel()
         self.header.setObjectName("compareHeader")
@@ -110,11 +112,10 @@ class CompareTile(QWidget):
         self._refresh_header()
 
     def set_ai_text(self, text: str | None) -> None:
+        self._ai_text = text
         self.ai_label.setVisible(text is not None)
-        if text is not None:
-            self.ai_label.setText(text)
-            self.ai_label.adjustSize()
-            self._place_ai()
+        self.ai_label.setToolTip(text or "")
+        self._place_ai()
 
     # ------------------------------------------------------------ Qt
     def enterEvent(self, event: object) -> None:  # noqa: N802 - Qt override
@@ -134,11 +135,26 @@ class CompareTile(QWidget):
 
     def resizeEvent(self, event: object) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)  # type: ignore[arg-type]
+        self._fit_header()
         self._place_ai()
 
     # ------------------------------------------------------------ helpers
     def _place_ai(self) -> None:
-        self.ai_label.move(8, max(0, self.viewer.height() - self.ai_label.height() - 8))
+        """One line at the bottom-left of the photo, elided to the photo's width (full text in the tooltip): it
+        never runs past the tile nor over the middle of the photo."""
+        if self._ai_text is None:
+            return
+        label = self.ai_label
+        room = max(0, self.viewer.width() - 16 - 16)  # margins and the label's own padding
+        label.setText(label.fontMetrics().elidedText(self._ai_text, Qt.TextElideMode.ElideRight, room))
+        label.adjustSize()
+        label.resize(min(label.width(), max(0, self.viewer.width() - 16)), label.height())
+        label.move(8, max(0, self.viewer.height() - label.height() - 8))
+
+    def _fit_header(self) -> None:
+        width = max(0, self.header.width() - 12)  # the label's padding
+        self.header.setText(self.header.fontMetrics().elidedText(self._header_text, Qt.TextElideMode.ElideRight,
+                                                                 width))
 
     def _refresh_header(self) -> None:
         rec = self._record
@@ -148,7 +164,9 @@ class CompareTile(QWidget):
         _badge, chip = card_texts(rec)
         parts = [str(self._number) if self._number else "", rec.name, chip or "",
                  "★" * rec.rating, "♥" if rec.favorite else "", self._note]
-        self.header.setText("   ".join(p for p in parts if p))
+        self._header_text = "   ".join(p for p in parts if p)
+        self.header.setToolTip(self._header_text)
+        self._fit_header()
 
 
 class CompareView(QWidget):
@@ -284,6 +302,15 @@ class CompareView(QWidget):
 
     def records(self) -> list[AssetRecord]:
         return list(self._records)
+
+    def refresh_zoom(self) -> None:
+        """The screen's pixel ratio changed: zoomed tiles re-apply their level (true 100 %) on the same point."""
+        for tile in self.tiles:
+            v = tile.viewer
+            w, h = v.pixmap_size()
+            if tile.isVisible() and v.zoom is not None and w and h:
+                c = v.mapToScene(v.viewport().rect().center())
+                v.set_zoom(v.zoom, QPointF(c.x() / w, c.y() / h))
 
     def update_record(self, rec: AssetRecord) -> None:
         """A compared photo changed (decision, stars, ♥, Xoay xem): its tile updates; a turned size re-arranges."""

@@ -194,6 +194,9 @@ class LayoutController(QObject):
         set_ratio = getattr(self.model, "set_device_pixel_ratio", None)
         if set_ratio is not None:
             set_ratio(ratio)
+        compare = getattr(self.window, "compare", None)
+        if compare is not None:  # zoomed Compare tiles: 100 % is per physical pixel of the new screen
+            compare.refresh_zoom()
         self.evaluate()
 
     # ------------------------------------------------------------- helpers
