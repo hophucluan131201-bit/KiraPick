@@ -306,7 +306,8 @@ folders; works with no destination / no external source; clipboard content.
 6.8 **GUI** (offscreen + the real `windows` platform in CI): the three groups independent; preview counts; manual
 confirm; buttons disabled while scanning; TINY / SHORT sizes; closing / switching folders during scan and during copy
 (shutdown contract); bottom-bar size follows the format.
-6.9 **Performance** — 10 000-photo session: plan imported (≤ 300 ms for 1 000 photos), external scan of a 5 000-file
+6.9 **Performance** — 10 000-photo session: imported planning on the GUI thread ≤ 100 ms for 1 000 photos (else it
+moves to the plan thread, §5), external scan of a 5 000-file
 tree, EXIF reads only for candidates; no Qt-thread block > 100 ms during scan / plan.
 6.10 **Owner manual check** (Windows laptop, real card): checklist section 3 gets an "Xuất nâng cao" step.
 
