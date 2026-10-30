@@ -235,3 +235,31 @@ def test_no_dialog_or_new_download_from_results_while_closing(qtbot, env: dict, 
     w._gate.open = True
     w._on_import_failed("boom")
     assert shown == ["critical"]  # normal behaviour otherwise
+
+
+def test_search_typed_just_before_closing_never_reads_the_closed_database(qtbot, env: dict) -> None:  # noqa: F811
+    """Windows CI run 40974269686: text typed in the search box starts a 200 ms timer; closing the window before it
+    fired made it reload from the closed database (sqlite3.ProgrammingError in the Qt event loop)."""
+    from PySide6.QtTest import QTest
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    w.search.setFocus()
+    QTest.keyClicks(w.search, "dsc")
+    assert w.close()
+    qtbot.wait(400)  # past the search delay: pytest-qt fails the test on any exception raised meanwhile
+
+
+def test_search_typed_just_before_a_folder_switch(qtbot, env: dict, tmp_path) -> None:  # noqa: ANN001, F811
+    from PySide6.QtTest import QTest
+
+    from tests.gui.test_main_window import _photo
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    QTest.keyClicks(w.search, "dsc")
+    other = tmp_path / "khac"
+    _photo(other / "IMG_0001.jpg", 3)
+    _import(qtbot, w, other)
+    qtbot.wait(400)
+    assert w.model.rowCount() == 1 and w.search.text() == ""

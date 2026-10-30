@@ -717,6 +717,7 @@ class MainWindow(QMainWindow):
             self._on_current_changed(self.grid.currentIndex(), QModelIndex())  # show again what was dropped
             return False
         self._marking_timer.stop()
+        self._search_timer.stop()  # the box is cleared for the next folder anyway
         self.detail.score_card.histogram.clear_cache()
         self.model.set_project(None)
         if self.project is not None:
@@ -1070,6 +1071,7 @@ class MainWindow(QMainWindow):
             return
         self._shutdown_timer.stop()
         self._marking_timer.stop()  # it would read the database after it is closed
+        self._search_timer.stop()  # text typed just before closing: same
         if self.project is not None:
             self.project.close()
             self.project = None  # a late signal must find no session, not a closed one

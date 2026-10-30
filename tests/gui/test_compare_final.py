@@ -27,7 +27,7 @@ from tests.gui.test_compare_window import _mark, _opened  # noqa: E402
 from tests.gui.test_main_window import _import, _key, _window, env  # noqa: E402, F401 - fixture
 from tests.gui.test_shutdown_timeout import _db_open, _watch_db  # noqa: E402
 from tests.integration.test_import_job import _photo  # noqa: E402
-from tests.gui.pointer import move_pointer  # noqa: E402
+from tests.gui.pointer import move_pointer, park_pointer  # noqa: E402, F401 - autouse fixture
 
 LONG = ("mắt hơi mềm vì tiêu cự dài và tốc độ chụp thấp so với chuyển động của người mẫu, tóc che một phần mắt trái, "
         "ánh sáng nền cháy ở góc trên")
@@ -272,3 +272,14 @@ def test_real_raw_in_compare_reload_switch_and_close(qtbot, env: dict, tmp_path:
     assert events == ["db closed"] and not _db_open(project) and not w.in_compare()
     w.close()
     assert {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in files} == sha
+
+
+def test_close_right_after_a_hover_never_reads_the_closed_database(qtbot, env: dict) -> None:  # noqa: F811
+    """The panel follows the active photo 150 ms later: closing the window in between must not let that timer read
+    the closed database (pytest-qt fails the test on any exception raised in the event loop)."""
+    w, ids = _opened(qtbot, env, [0, 1, 2], current=0)
+    move_pointer(w.compare.back_button)
+    move_pointer(w.compare.tile(ids[2]).viewer.viewport())
+    assert w.compare.active_id == ids[2]
+    assert w.close()
+    qtbot.wait(400)

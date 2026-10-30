@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import pytest
 from PySide6.QtCore import QDeadlineTimer, QEvent, QObject, QPoint
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -91,3 +92,17 @@ def _move(widget: QWidget, pos: QPoint, step: Callable[[QPoint], None], timeout_
         return seen.moved
     finally:
         app.removeEventFilter(seen)
+
+
+@pytest.fixture(autouse=True)
+def park_pointer() -> None:
+    """Each test opens its window with the pointer elsewhere (bottom-left corner of the screen, outside the test
+    windows), as when a user opens the app. On the real Windows platform a top-level window created under a pointer
+    resting exactly on the spot a test then moves to got Enter but no MouseMove at all (CI runs 40972150316 and
+    40974269686, event log in test_resting_pointer_does_not_pick_a_tile_when_compare_opens); Compare itself never
+    creates a window (it is a page of the main window), where real moves are routed (scripts/diag_compare_hover.py)."""
+    screen = QGuiApplication.primaryScreen()
+    if screen is not None and QGuiApplication.platformName() != "offscreen":
+        area = screen.availableGeometry()
+        QCursor.setPos(QPoint(area.left() + 2, area.bottom() - 2))
+        QTest.qWait(30)

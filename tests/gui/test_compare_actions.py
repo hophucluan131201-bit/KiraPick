@@ -14,7 +14,7 @@ from app.storage import decisions
 from app.ui.compare_view import PANEL_DELAY_MS
 from tests.gui.test_compare_window import _mark
 from tests.gui.test_main_window import _import, _key, _window, env  # noqa: F401 - fixture
-from tests.gui.pointer import move_os_cursor, move_pointer
+from tests.gui.pointer import move_os_cursor, move_pointer, park_pointer  # noqa: F401 - autouse fixture
 
 _TABLES = ("decisions", "view_rotation", "occurrences")
 REFUSED = "Bảng chi tiết chưa kịp đổi sang ảnh đang chọn — bấm lại."

@@ -19,6 +19,7 @@ from app.ui.score_style import EYES_CLOSED
 from tests.gui.test_compare_tile import _record
 from tests.gui.test_compare_window import _mark, _opened
 from tests.gui.test_main_window import _import, _key, _photo, _window, env  # noqa: F401 - fixture
+from tests.gui.pointer import park_pointer  # noqa: F401 - autouse fixture
 
 
 def _scored(path: Path, *, eyes: float = 90.0, taste: float | None = 85.2, weak: list[str] | None = None):  # noqa: ANN202
