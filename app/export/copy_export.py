@@ -37,8 +37,17 @@ from app.export.layout import (
     photo_subjects,
     subject_folders,
 )
-from app.export.photos import Photo, PhotoFile, load_photos
-from app.export.sources import MANIFEST_DIR, SourceSpec  # export lists live in MANIFEST_DIR, not between photos
+from app.export.photos import Photo, load_photos
+from app.export.hashing import HashCache
+from app.export.sources import (  # export lists live in MANIFEST_DIR, not between the photos
+    MANIFEST_DIR,
+    ExternalIndex,
+    Match,
+    SourceIdentity,
+    SourceSpec,
+    check_external_root,
+    match_file,
+)
 from app.ingest.fingerprint import full_sha256, quick_fingerprint
 from app.storage.project import Project
 
@@ -60,14 +69,6 @@ class IssueStatus(str, Enum):
     CONTENT_DIFFERS = "content_differs"
     AMBIGUOUS = "ambiguous"
     PATH_TOO_LONG = "path_too_long"
-
-
-@dataclass(frozen=True, slots=True)
-class SourceIdentity:
-    """A source file as it was when planned; checked again before it is copied."""
-    size: int
-    mtime_ns: int
-    sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +105,7 @@ class ExportPlan:
     issues: list[ExportIssue] = field(default_factory=list)
     photos: dict[int, Photo] = field(default_factory=dict)
     layout_stats: LayoutStats | None = None  # Layout.SUBJECTS only
+    options: dict[str, str] = field(default_factory=dict)  # source / format / layout, for the manifest
 
     @property
     def items(self) -> list[ExportOp]:
@@ -251,6 +253,20 @@ def _choose_stem(
 
 
 _KIND_LABEL = {"raw": "RAW", "jpeg": "JPEG"}
+_KINDS = ("raw", "jpeg")  # a photo's files from another folder, RAW first (as the grid shows a pair)
+_MATCH_ISSUE = {"missing": IssueStatus.MISSING, "not_matched": IssueStatus.NOT_MATCHED,
+                "content_differs": IssueStatus.CONTENT_DIFFERS, "ambiguous": IssueStatus.AMBIGUOUS}
+
+
+@dataclass(frozen=True, slots=True)
+class _Source:
+    """One file to copy for a photo, wherever it comes from."""
+    asset_id: int  # the matching reference (spec §12 RV-P3-B-03)
+    kind: str
+    path: Path
+    relative: str  # relative to its own root (imported folder or the other folder)
+    identity: SourceIdentity
+    match: str
 
 
 def plan_export(
@@ -262,19 +278,39 @@ def plan_export(
     fmt: ExportFormat = ExportFormat.RAW_JPEG,
     layout: Layout = Layout.SINGLE,
     confirmations: dict[tuple[int, str], Path] | None = None,
+    hashes: HashCache | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> ExportPlan:
     """What an export would copy, and what it cannot (Part 3 spec §3.5). Disk access: ``stat`` of the sources and of
-    existing targets, and the quick fingerprint of a target that may already hold the file."""
+    existing targets, the quick fingerprint of a target that may already hold the file; in External mode also the
+    content proof (full SHA-256, through ``hashes``) and the capture time of the other folder's candidates."""
     source = source or SourceSpec()
-    if source.mode != "imported":
-        raise ExportError("xuất từ nguồn khác chưa có trong bản này")
     dest = _validate_destination(project, destination)
-    plan = ExportPlan(dest, [])
+    external = source.mode == "external"
+    options = {"source": source.mode, "format": fmt.value, "layout": layout.value}
+    if external:
+        if source.root is None or source.index is None:
+            raise ExportError("chưa quét thư mục nguồn — hãy chọn lại thư mục nguồn")
+        root = check_external_root(source.root, session_folder=project.folder, destination=dest)
+        if root != source.index.root:
+            raise ExportError("kết quả quét không thuộc thư mục nguồn đã chọn — hãy quét lại")
+        options["source_folder"] = root.name  # the folder's name only, never its full path
+    plan = ExportPlan(dest, [], options=options)
     conn = project.conn
     taken: set[str] = set()
     seen: set[int] = set()
-    wanted = wanted_kinds(fmt, external=False)
-    photos = load_photos(conn, asset_ids)
+    wanted = wanted_kinds(fmt, external=external)
+    photos = []
+    for photo in load_photos(conn, asset_ids):
+        if photo.photo_id in seen:
+            continue  # a file of a photo already planned (a pair's JPEG selected with its RAW)
+        seen.update(f.asset_id for f in photo.files)
+        photos.append(photo)
+    found: dict[int, list[_Source]] = {}
+    if external:
+        assert source.index is not None
+        found = _resolve_external(conn, plan, photos, source.index, fmt, wanted, confirmations or {},
+                                  hashes or HashCache(), should_cancel)
     names: dict[int, str] = {}
     members: dict[int, tuple[int, ...]] = {}
     if layout is Layout.SUBJECTS:
@@ -282,9 +318,6 @@ def plan_export(
         plan.layout_stats = LayoutStats(analysed=analysed(conn))
         members = photo_subjects(conn, photos)
     for photo in photos:
-        if photo.photo_id in seen:
-            continue  # a file of a photo already planned (a pair's JPEG selected with its RAW)
-        seen.update(f.asset_id for f in photo.files)
         plan.photos[photo.photo_id] = photo
         folders = [""]
         if plan.layout_stats is not None:
@@ -292,27 +325,97 @@ def plan_export(
             for folder in folders:
                 assigned = plan.layout_stats.assigned_per_folder
                 assigned[folder] = assigned.get(folder, 0) + 1
-        files = [f for f in photo.files if f.kind in wanted]
-        if not files:
-            for kind in sorted(wanted - {"other"}):
-                plan.issues.append(ExportIssue(photo.photo_id, photo.stem, kind, IssueStatus.MISSING_FORMAT,
-                                               f"Thiếu {_KIND_LABEL[kind]}"))
-            continue
-        present = []
-        for f in files:
-            if not f.path.is_file() or f.path.is_symlink():
-                plan.issues.append(ExportIssue(photo.photo_id, photo.stem, f.kind, IssueStatus.MISSING,
-                                               "không còn trên ổ đĩa", f.relative_path))
-                continue
-            present.append(f)
-        if present:
+        sources = found.get(photo.photo_id, []) if external else _imported_sources(plan, photo, wanted)
+        if sources:
             for folder in folders:
                 before = len(plan.operations)
-                _plan_folder(plan, photo, present, folder, taken)
+                _plan_folder(plan, photo, sources, folder, taken)
                 if plan.layout_stats is not None and len(plan.operations) > before:
                     exportable = plan.layout_stats.exportable_per_folder
                     exportable[folder] = exportable.get(folder, 0) + 1
     return plan
+
+
+def _imported_sources(plan: ExportPlan, photo: Photo, wanted: frozenset[str]) -> list[_Source]:
+    """The photo's own files of the wanted kinds that are still on disk (Imported mode)."""
+    files = [f for f in photo.files if f.kind in wanted]
+    if not files:
+        for kind in sorted(wanted - {"other"}):
+            plan.issues.append(ExportIssue(photo.photo_id, photo.stem, kind, IssueStatus.MISSING_FORMAT,
+                                           f"Thiếu {_KIND_LABEL[kind]}"))
+        return []
+    out = []
+    for f in files:
+        if not f.path.is_file() or f.path.is_symlink():
+            plan.issues.append(ExportIssue(photo.photo_id, photo.stem, f.kind, IssueStatus.MISSING,
+                                           "không còn trên ổ đĩa", f.relative_path))
+            continue
+        st = f.path.stat()
+        out.append(_Source(f.asset_id, f.kind, f.path, f.relative_path, SourceIdentity(st.st_size, st.st_mtime_ns),
+                           "imported"))
+    return out
+
+
+def _recorded_hashes(conn: sqlite3.Connection, photos: list[Photo], hashes: HashCache) -> dict[int, str]:
+    """``assets.sha256`` where the import recorded one: seeds the cache while the file is unchanged."""
+    files = {f.asset_id: f for p in photos for f in p.files}
+    out: dict[int, str] = {}
+    ids = list(files)
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        for aid, sha, size, mtime_ns in conn.execute(
+                f"SELECT id, sha256, size, mtime_ns FROM assets WHERE sha256 IS NOT NULL AND id IN "
+                f"({','.join('?' * len(chunk))})", chunk):
+            out[aid] = sha
+            hashes.seed(files[aid].path, size, mtime_ns, sha)
+    return out
+
+
+def _resolve_external(conn: sqlite3.Connection, plan: ExportPlan, photos: list[Photo], index: ExternalIndex,
+                      fmt: ExportFormat, wanted: frozenset[str], confirmations: dict[tuple[int, str], Path],
+                      hashes: HashCache, should_cancel: Callable[[], bool] | None) -> dict[int, list[_Source]]:
+    """Each photo's wanted files on the other folder (External mode: nothing comes from the imported folders)."""
+    recorded = _recorded_hashes(conn, photos, hashes)
+    matches: dict[int, dict[str, Match]] = {}
+    for photo in photos:
+        if fmt is ExportFormat.RAW_JPEG and not {f.kind for f in photo.files} & set(_KINDS):
+            plan.issues.append(ExportIssue(photo.photo_id, photo.stem, None, IssueStatus.MISSING_FORMAT,
+                                           "định dạng này chỉ lấy được từ thư mục đã nhập"))
+            continue
+        matches[photo.photo_id] = {
+            kind: match_file(photo, kind, index, hashes=hashes, confirmed=confirmations.get((photo.photo_id, kind)),
+                             recorded_sha=recorded, should_cancel=should_cancel)
+            for kind in _KINDS if kind in wanted}
+    # A capture-time match is evidence for one photo only: a file that is the only valid candidate of several
+    # photos (same name, same camera, within 2 s) is not copied for any of them without the user's choice.
+    claims: dict[Path, list[tuple[int, str]]] = {}
+    for photo_id, by_kind in matches.items():
+        for kind, m in by_kind.items():
+            if m.method == "time" and m.file is not None:
+                claims.setdefault(m.file, []).append((photo_id, kind))
+    for owners in claims.values():
+        if len(owners) > 1:
+            for photo_id, kind in owners:
+                m = matches[photo_id][kind]
+                matches[photo_id][kind] = Match("ambiguous", None, None, m.candidates, 0, None, m.reference_asset_id,
+                                                "file này khớp với nhiều ảnh")
+    out: dict[int, list[_Source]] = {}
+    for photo in photos:
+        by_kind = matches.get(photo.photo_id)
+        if by_kind is None:
+            continue
+        matched = [k for k, m in by_kind.items() if m.status == "matched"]
+        for kind, m in by_kind.items():
+            if m.status == "matched":
+                continue
+            detail = f"{_KIND_LABEL[kind]} không có tại nguồn được chọn" if m.status == "missing" and matched \
+                else m.detail
+            plan.issues.append(ExportIssue(photo.photo_id, photo.stem, kind, _MATCH_ISSUE[m.status], detail, None,
+                                           m.candidates))
+        out[photo.photo_id] = [
+            _Source(m.reference_asset_id, k, m.source.path, m.source.relative, m.identity, m.method)
+            for k in matched if (m := by_kind[k]).source is not None and m.identity is not None and m.method]
+    return out
 
 
 def _subject_folders_of(conn: sqlite3.Connection, stats: LayoutStats, photo: Photo,
@@ -330,23 +433,22 @@ def _subject_folders_of(conn: sqlite3.Connection, stats: LayoutStats, photo: Pho
     return subjects
 
 
-def _plan_folder(plan: ExportPlan, photo: Photo, files: list[PhotoFile], folder: str, taken: set[str]) -> None:
+def _plan_folder(plan: ExportPlan, photo: Photo, sources: list[_Source], folder: str, taken: set[str]) -> None:
     """The files of one photo into one folder, under one stem (a pair stays a pair)."""
-    stem = PurePosixPath(files[0].relative_path).stem
-    suffixes = [PurePosixPath(f.relative_path).suffix for f in files]
-    free, present = _choose_stem(plan.destination, folder, stem, [(sfx, f.path) for sfx, f in zip(suffixes, files)],
-                                 taken)
-    for i, (f, suffix) in enumerate(zip(files, suffixes)):
+    stem = PurePosixPath(sources[0].relative).stem
+    suffixes = [PurePosixPath(s.relative).suffix for s in sources]
+    free, present = _choose_stem(plan.destination, folder, stem,
+                                 [(sfx, s.path) for sfx, s in zip(suffixes, sources)], taken)
+    for i, (s, suffix) in enumerate(zip(sources, suffixes)):
         rel = str(PurePosixPath(folder, free + suffix)) if folder else free + suffix
         taken.add(rel.casefold())
         if len(str(plan.destination / rel)) > MAX_PATH_CHARS:
-            plan.issues.append(ExportIssue(photo.photo_id, photo.stem, f.kind, IssueStatus.PATH_TOO_LONG,
-                                           f"đường dẫn quá dài (> {MAX_PATH_CHARS} ký tự): {rel}", f.relative_path))
+            plan.issues.append(ExportIssue(photo.photo_id, photo.stem, s.kind, IssueStatus.PATH_TOO_LONG,
+                                           f"đường dẫn quá dài (> {MAX_PATH_CHARS} ký tự): {rel}", s.relative))
             continue
-        st = f.path.stat()
         plan.operations.append(ExportOp(
-            photo.photo_id, f.asset_id, f.kind, f.path, f.relative_path, folder, rel, st.st_size, "imported",
-            SourceIdentity(st.st_size, st.st_mtime_ns), maybe_present=i in present,
+            photo.photo_id, s.asset_id, s.kind, s.path, s.relative, folder, rel, s.identity.size, s.match, s.identity,
+            maybe_present=i in present,
         ))
 
 
