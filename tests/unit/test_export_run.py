@@ -344,8 +344,9 @@ def test_free_space_rechecked_before_extra_copy(fx, monkeypatch: pytest.MonkeyPa
     before = tree_digest(fx.dest)
     monkeypatch.setattr(copy_export, "free_space", lambda _p: 700_000)  # less than the pair (800 000)
     result = run_export(plan)
-    assert result.statuses == {"DSC_0001.NEF": "failed", "DSC_0001.JPG": "failed"}
-    assert set(result.failed.values()) == {copy_export.NO_SPACE}
+    assert result.statuses == {"DSC_0001.NEF": "already_present", "DSC_0001.JPG": "failed"}  # spec §12 step 5
+    assert result.failed == {"DSC_0001.JPG": copy_export.NO_SPACE}
+    assert result.notes == {"DSC_0001.NEF": copy_export.NOTE_INCOMPLETE, "DSC_0001.JPG": copy_export.NOTE_INCOMPLETE}
     photos = {p: d for p, d in tree_digest(fx.dest).items() if copy_export.MANIFEST_DIR not in p}
     assert photos == before  # nothing written, nothing overwritten or removed (only the export list was added)
 

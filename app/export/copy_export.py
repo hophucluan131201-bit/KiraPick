@@ -759,17 +759,28 @@ def _run_group(run: _Run, group: list[ExportOp]) -> None:
             for op in to_write:
                 run.set(op, OpStatus.FAILED, NO_SPACE)
         elif not _write(run, [(op, op.dest_relative) for op in to_write]):
-            _relocate(run, live)  # a planned name was taken after the preview: the whole group moves
-            _note_relocated(run, live, present)
+            _relocate_group(run, live, present)  # a planned name was taken after the preview: the whole group moves
             return
-        for op in live:
-            if op.dest_relative in present:
-                run.result.already_present.append(op.dest_relative)
-                run.result.hashes[op.dest_relative] = present[op.dest_relative]
-                run.set(op, OpStatus.ALREADY_PRESENT)
+        _mark_present(run, live, present)
         return
-    _relocate(run, live)  # an existing file of the same name differs: the whole group gets one new stem
-    _note_relocated(run, live, present)
+    _relocate_group(run, live, present)  # an existing file of the same name differs: the whole group gets a new stem
+
+
+def _mark_present(run: _Run, ops: list[ExportOp], present: dict[str, str]) -> None:
+    for op in ops:
+        if op.dest_relative in present:
+            run.result.failed.pop(op.dest_relative, None)
+            run.result.errors.pop(op.dest_relative, None)
+            run.result.already_present.append(op.dest_relative)
+            run.result.hashes[op.dest_relative] = present[op.dest_relative]
+            run.set(op, OpStatus.ALREADY_PRESENT)
+
+
+def _relocate_group(run: _Run, ops: list[ExportOp], present: dict[str, str]) -> None:
+    _relocate(run, ops)
+    if not any(run.result.statuses.get(op.dest_relative) == OpStatus.COPIED.value for op in ops):
+        _mark_present(run, ops, present)  # nothing new written: the verified files stay what they are
+    _note_relocated(run, ops, present)
 
 
 def _note_relocated(run: _Run, ops: list[ExportOp], present: dict[str, str]) -> None:

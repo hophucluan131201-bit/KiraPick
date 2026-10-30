@@ -358,11 +358,11 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
-## Part 3 — Advanced Export (2026-10-30) — status: Batch A (Tasks 1–4) implemented and tested offscreen; waits for Checkpoint A review
+## Part 3 — Advanced Export (2026-10-30) — status: Batch A approved (Checkpoint A v2); Batch B (Tasks 5–8) implemented and tested offscreen; waits for Checkpoint B review
 
-Spec `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 3, approved with notes), plan
-`docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md` (rev 3). Batch B (external source, copy safety,
-names) and Batch C (dialog, threads, end-to-end) not started.
+Spec `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 4: §12 for RV-P3-B-01…03), plan
+`docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md` (rev 4). Batch C (dialog with the three groups and the
+names tab, plan thread, end-to-end, Windows CI) not started. Not released: no tag, no installer, no build, no publish.
 
 | Task | Status | Evidence |
 |---|---|---|
@@ -370,7 +370,14 @@ names) and Batch C (dialog, threads, end-to-end) not started.
 | 2 Photos and formats | tested | `tests/unit/test_export_photos.py` |
 | 3 Planner: operations, issues, formats; ② Định dạng in the dialog; bottom-bar size by format | tested | `tests/unit/test_export_plan.py`, updated stats / bottom-bar / export GUI tests |
 | 4 One folder per subject | tested | `tests/unit/test_export_layout.py` |
-| 5–11 | not started | Batch B / C after Checkpoint A |
+| 5 Read-only scan of another folder; SHA-256 + per-dialog cache | tested (Windows junction test runs on Windows CI only) | `tests/unit/test_export_scan.py`, `tests/unit/test_export_hashing.py` |
+| 6 Matching on another folder (content / capture time / manual), External mode in the planner | tested (synthetic EXIF files; no real card) | `tests/unit/test_export_match.py` |
+| 7 Revalidated, verified copies; pair copy groups; free space per group; manifest v2; cancel / retry / card ejected | tested | `tests/unit/test_export_run.py` (mutation-checked) |
+| 8 Names of the kept photos | tested | `tests/unit/test_export_names.py` |
+| 9–11 | not started | Batch C after Checkpoint B |
+
+Not yet reachable from the UI: the External source and the names list (Batch C, Task 10). The dialog shows the
+estimate / worst-case bytes and the new finish lines.
 
 ## UI part 2 — Compare mode (2026-10-29) — status: CODE REVIEW COMPLETE (Part 2 APPROVED WITH NOTES, 2026-10-30); pending the owner's Windows acceptance and the final beta release validation
 
