@@ -66,6 +66,8 @@ from app.ui.jobs import ExportPlanThread, ExportThread, PlanRequest
 from app.ui.shutdown import Gate
 
 _PREVIEW_ROWS = 300
+MAX_PICKERS = 50  # candidate pickers built at once (widgets are slow); the next ones appear once these are decided
+IMPORTED_SYNC_LIMIT = 1000  # more photos than this: the imported-folder plan runs in the plan thread too (spec §5)
 FORMAT_KEY = "export/format"
 SOURCE_KEY = "export/source"
 LAYOUT_KEY = "export/layout"
@@ -319,7 +321,7 @@ class ExportDialog(QDialog):
         self.names_count = QLabel()
         nbox.addWidget(self.names_count)
         self.names_with_ext = QCheckBox("Kèm đuôi file (.NEF, .JPG …)")
-        self.names_with_ext.toggled.connect(lambda _on: self._refresh_names())
+        self.names_with_ext.toggled.connect(lambda _on: self._refresh_names(self._names_ids))
         nbox.addWidget(self.names_with_ext)
         self.names_warning = QLabel()
         self.names_warning.setWordWrap(True)
@@ -335,6 +337,9 @@ class ExportDialog(QDialog):
         nbox.addWidget(self.names_status)
         self.tabs.addTab(self.names_tab, "📋 Tên ảnh đã Chọn")
         self._names: list[str] = []
+        self._names_ids: list[int] = []
+        self._names_dirty = True  # computed when the tab is shown (database only, but 10 000 photos take ~0.3 s)
+        self.tabs.currentChanged.connect(lambda _i: self._names_if_shown())
 
         self.buttons = QDialogButtonBox()
         self.retry_button = self.buttons.addButton("Thử lại các file chưa chép", QDialogButtonBox.ButtonRole.ActionRole)
@@ -443,7 +448,9 @@ class ExportDialog(QDialog):
         self._set_scanning(False)
         self._clear_preview()
         ids = self._ids()
-        self._refresh_names(ids)
+        if ids != self._names_ids:
+            self._names_ids, self._names_dirty = ids, True
+            self._names_if_shown()
         dest_text = self.dest.text().strip()
         if not ids:
             self._set_summary("Không có ảnh nào khớp lựa chọn này.", error=True)
@@ -465,6 +472,10 @@ class ExportDialog(QDialog):
             self._start_plan(PlanRequest(tuple(ids), Path(dest_text), SourceSpec("external", root, index),
                                          self.export_format, self.export_layout, dict(self.confirmations)), root)
             return
+        if len(ids) > IMPORTED_SYNC_LIMIT:  # measured: 10 000 photos plan in ~0.9 s — not on the GUI thread
+            self._start_plan(PlanRequest(tuple(ids), Path(dest_text), SourceSpec(), self.export_format,
+                                         self.export_layout), None)
+            return
         try:
             plan = plan_export(self.project, ids, Path(dest_text), fmt=self.export_format, layout=self.export_layout)
         except ExportError as exc:
@@ -472,7 +483,7 @@ class ExportDialog(QDialog):
             return
         self._show_plan(plan)
 
-    def _start_plan(self, request: PlanRequest, root: Path) -> None:
+    def _start_plan(self, request: PlanRequest, root: Path | None) -> None:
         if not self.gate.open:  # the session is being released: no new work
             return
         thread = ExportPlanThread(self.project.folder, request, self._generation, self._hashes)
@@ -482,7 +493,8 @@ class ExportDialog(QDialog):
         thread.finished.connect(self._on_plan_thread_finished)
         self._plan_threads.append(thread)
         self._pending_root = root
-        self._set_scanning(True, "Đang quét thư mục nguồn…" if request.source.index is None
+        external = request.source.mode == "external"
+        self._set_scanning(True, "" if not external else "Đang quét thư mục nguồn…" if request.source.index is None
                            else "Đang so khớp file…")
         self._set_summary("Đang chuẩn bị bản xem trước…", error=False, ready=False)
         thread.start()
@@ -512,7 +524,8 @@ class ExportDialog(QDialog):
     def _on_planned(self, generation: int, plan: ExportPlan, index: ExternalIndex | None) -> None:
         if generation != self._generation:
             return  # a result for an older choice (spec §5)
-        self._index, self._index_root = index, self._pending_root
+        if index is not None:
+            self._index, self._index_root = index, self._pending_root
         self._set_scanning(False)
         if index is not None:
             self.scan_status.setText(f"Đã quét {index.files:,} file".replace(",", " "))
@@ -611,10 +624,10 @@ class ExportDialog(QDialog):
         return out
 
     def _fill_plan_table(self, plan: ExportPlan) -> None:
-        self.plan_table.setRowCount(0)
-        for op in plan.operations[:_PREVIEW_ROWS]:
-            r = self.plan_table.rowCount()
-            self.plan_table.insertRow(r)
+        self.plan_table.setUpdatesEnabled(False)
+        shown = plan.operations[:_PREVIEW_ROWS]
+        self.plan_table.setRowCount(len(shown))
+        for r, op in enumerate(shown):
             photo = plan.photos.get(op.photo_id)
             self.plan_table.setItem(r, 0, QTableWidgetItem(f"{photo.stem if photo else ''} · {_KIND_LABELS[op.kind]}"))
             src = QTableWidgetItem(op.source_relative + (f" ({MATCH_LABELS[op.match]})" if MATCH_LABELS[op.match]
@@ -629,18 +642,22 @@ class ExportDialog(QDialog):
                     dest_item.setForeground(Qt.GlobalColor.yellow)  # renamed to avoid overwriting
                     dest_item.setToolTip("Đã có file trùng tên ở đích → đặt tên mới, không ghi đè")
             self.plan_table.setItem(r, 2, dest_item)
+        self.plan_table.setUpdatesEnabled(True)
         self.preview_tabs.setTabText(0, f"Sẽ chép ({len(plan.operations)})")
 
     def _fill_issue_table(self, plan: ExportPlan) -> None:
-        self.issue_table.setRowCount(0)
-        self._issue_rows = list(plan.issues[:_PREVIEW_ROWS])
+        self.issue_table.setUpdatesEnabled(False)
+        unsure = [i for i in plan.issues if i.status is IssueStatus.AMBIGUOUS]  # the ones the user can act on first
+        self._issue_rows = (unsure + [i for i in plan.issues if i.status is not IssueStatus.AMBIGUOUS])[:_PREVIEW_ROWS]
+        self.issue_table.setRowCount(len(self._issue_rows))
+        pickers = 0
         for r, issue in enumerate(self._issue_rows):
-            self.issue_table.insertRow(r)
             self.issue_table.setItem(r, 0, QTableWidgetItem(ISSUE_LABELS[issue.status]))
             self.issue_table.setItem(r, 1, QTableWidgetItem(issue.stem))
             self.issue_table.setItem(r, 2, QTableWidgetItem(_KIND_LABELS.get(issue.kind, "")))
             candidates = [c for c in issue.candidates if isinstance(c, Candidate)]
-            if issue.status is IssueStatus.AMBIGUOUS and candidates:
+            if issue.status is IssueStatus.AMBIGUOUS and candidates and pickers < MAX_PICKERS:
+                pickers += 1
                 box = QComboBox()
                 for c in candidates:
                     box.addItem(_candidate_text(c))
@@ -649,8 +666,12 @@ class ExportDialog(QDialog):
                 use = QPushButton("Dùng file này")
                 use.clicked.connect(lambda _c=False, row=r, b=box: self.use_candidate(row, b.currentIndex()))
                 self.issue_table.setCellWidget(r, 4, use)
+            elif issue.status is IssueStatus.AMBIGUOUS and candidates:
+                self.issue_table.setItem(r, 3, QTableWidgetItem(
+                    f"{issue.detail} · {len(candidates)} file ứng viên (chọn được sau khi xử lý các dòng trên)"))
             else:
                 self.issue_table.setItem(r, 3, QTableWidgetItem(issue.detail))
+        self.issue_table.setUpdatesEnabled(True)
         self.preview_tabs.setTabText(1, f"Cần xem lại ({len(plan.issues)})")
 
     def use_candidate(self, row: int, candidate: int) -> None:
@@ -662,10 +683,14 @@ class ExportDialog(QDialog):
         self.refresh()
 
     # ------------------------------------------------------------------ names
-    def _refresh_names(self, ids: list[int] | None = None) -> None:
+    def _names_if_shown(self) -> None:
+        if self._names_dirty and self.tabs.currentWidget() is self.names_tab:
+            self._refresh_names(self._names_ids)
+
+    def _refresh_names(self, ids: list[int]) -> None:
         """Database only: works whatever the source, destination or card state (spec §3.8)."""
-        names = keep_names(self.project.conn, self._ids() if ids is None else ids,
-                           with_extension=self.names_with_ext.isChecked())
+        self._names_dirty = False
+        names = keep_names(self.project.conn, ids, with_extension=self.names_with_ext.isChecked())
         self._names = names.lines
         self.names_count.setText(f"{names.photos} ảnh đã Chọn trong phạm vi này · {len(names.lines)} tên")
         self.names_list.setPlainText("\n".join(names.lines))
@@ -681,6 +706,8 @@ class ExportDialog(QDialog):
         self.copy_names_button.setEnabled(bool(names.lines))
 
     def copy_names(self) -> None:
+        if self._names_dirty:
+            self._refresh_names(self._names_ids)
         QGuiApplication.clipboard().setText("\n".join(self._names))  # local clipboard only
         self.names_status.setText(f"Đã sao chép {len(self._names)} tên vào bộ nhớ tạm")
 

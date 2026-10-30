@@ -242,6 +242,7 @@ def test_retry_button_after_partial_failure(qtbot, fx, monkeypatch: pytest.Monke
 
 def test_names_tab_copies_to_clipboard(qtbot, fx) -> None:  # noqa: ANN001
     dialog = imported_dialog(qtbot, fx)
+    dialog.tabs.setCurrentWidget(dialog.names_tab)  # computed when shown
     assert dialog.names_list.toPlainText().splitlines() == ["DSC_0001", "DSC_0002", "DSC_0003", "DSC_0004",
                                                              "DSC_0005", "DSC_0006"]
     assert dialog.names_count.text().startswith("6 ảnh đã Chọn trong phạm vi này")
@@ -271,6 +272,7 @@ def test_names_warn_duplicates(qtbot, fx) -> None:  # noqa: ANN001
     other = add_asset(fx.project, source_id, fx.root, "Buổi 2/DSC_0001.JPG", seed=900, kind="raster")
     decisions.set_flag(fx.project.conn, other, "keep")
     dialog = imported_dialog(qtbot, fx)
+    dialog.tabs.setCurrentWidget(dialog.names_tab)
     assert "DSC_0001 (2 ảnh)" in dialog.names_warning.text()
     assert dialog.names_list.toPlainText().splitlines().count("DSC_0001") == 1  # one line per displayed name
     dialog.copy_names_button.click()
@@ -293,3 +295,21 @@ def test_dialog_fits_tiny_and_short(qtbot, fx, size: tuple[int, int]) -> None:  
         assert dialog.rect().contains(top_left) and top_left.y() + button.height() <= dialog.height()
     assert not dialog.scroll.horizontalScrollBar().isVisible()
     assert dialog.scroll.widget().width() <= dialog.scroll.viewport().width()
+
+
+def test_names_follow_the_scope_and_are_computed_when_shown(qtbot, fx) -> None:  # noqa: ANN001
+    dialog = imported_dialog(qtbot, fx)
+    assert dialog.names_list.toPlainText() == ""  # not computed while the copy tab is shown
+    dialog.tabs.setCurrentWidget(dialog.names_tab)
+    assert len(dialog.names_list.toPlainText().splitlines()) == 6
+    dialog.radios[Selection.FAVORITE].setChecked(True)  # scope ∩ Keep: the kept favourite only
+    assert dialog.names_list.toPlainText().splitlines() == ["DSC_0001"]
+
+
+def test_large_imported_plan_runs_in_the_background(qtbot, fx, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(ed, "IMPORTED_SYNC_LIMIT", 2)
+    dialog = imported_dialog(qtbot, fx)
+    assert dialog.plan is None and dialog.plan_threads  # 6 photos > 2: planned in the plan thread
+    wait_plan(qtbot, dialog)
+    assert len(dialog.plan.operations) == 7 and dialog.plan.options["source"] == "imported"
+    settle_threads(qtbot, dialog)
