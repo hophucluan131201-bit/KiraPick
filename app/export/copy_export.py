@@ -837,9 +837,14 @@ def run_export(
     options: Mapping[str, str] | None = None,
     hashes: HashCache | None = None,
     read_meta: Callable[..., PhotoMetadata] = read_metadata,
+    should_stop: Callable[[], bool] | None = None,
 ) -> ExportResult:
     """Copy the plan's files (spec §3.6, §12): sources revalidated, copies verified by SHA-256, existing files never
-    overwritten, a pair kept under one stem; a manifest of every operation and issue is written at the end."""
+    overwritten, a pair kept under one stem; a manifest of every operation and issue is written at the end.
+
+    ``should_cancel`` (the user's Dừng) is asked between photos and between 1 MiB chunks: a file being copied is
+    removed. ``should_stop`` (closing the app / switching folder) is asked between photos only: the current photo
+    is finished first, as the window's question says."""
     result = ExportResult()
     plan.destination.mkdir(parents=True, exist_ok=True)
     run = _Run(plan, result, hashes or HashCache(), read_meta, should_cancel,
@@ -849,7 +854,7 @@ def run_export(
     for group in _groups(plan.operations):
         if result.source_unavailable:
             break
-        if should_cancel is not None and should_cancel():
+        if (should_cancel is not None and should_cancel()) or (should_stop is not None and should_stop()):
             result.cancelled = True
             break
         try:

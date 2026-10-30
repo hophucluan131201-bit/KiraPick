@@ -742,8 +742,10 @@ class MainWindow(QMainWindow):
         ]
         threads = [("nhập ảnh", self.import_thread), ("phân tích AI", self.analyze_thread),
                    *(("phân tích AI", t) for t in self._retiring)]
-        threads += [("sao chép ảnh xuất", d.copy_thread) for d in self.findChildren(ExportDialog)]
+        threads += [("quét nguồn xuất ảnh", t) for d in self.findChildren(ExportDialog) for t in d.plan_threads]
         works += [shutdown.Work(name, t.wait, t.cancel) for name, t in threads if t is not None]
+        copies = [d.copy_thread for d in self.findChildren(ExportDialog)]  # finish the photo being copied first
+        works += [shutdown.Work("sao chép ảnh xuất", t.wait, t.stop_after_file) for t in copies if t is not None]
         return works
 
     def _all_work(self) -> list[shutdown.Work]:

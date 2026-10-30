@@ -292,11 +292,11 @@ def test_close_during_export_asks_first_and_no_keeps_copying(qtbot, env: dict, t
     assert w.close() is False and w.isVisible()
     assert len(asked) == 1 and "đang xuất ảnh" in asked[0].lower()
     thread = dialog.copy_thread
-    assert thread.isRunning() and not thread._cancel.is_set()
+    assert thread.isRunning() and not thread._cancel.is_set() and not thread._stop.is_set()
 
     answer[0] = QMessageBox.StandardButton.Yes
     assert w.close() is False  # waits for the file being copied
-    assert thread._cancel.is_set()
+    assert thread._stop.is_set() and not thread._cancel.is_set()  # after the current file, not inside it (Part 3)
     gate.set()
     qtbot.waitUntil(lambda: not w.isVisible(), timeout=10000)
 
