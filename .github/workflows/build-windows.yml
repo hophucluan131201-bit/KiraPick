@@ -152,19 +152,20 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          python -X faulthandler -m pytest -q -p no:cacheprovider *>&1 | Tee-Object -FilePath suite.log
+          python -X faulthandler -m pytest -q -p no:cacheprovider -o faulthandler_timeout=180 -o faulthandler_exit_on_timeout=true *>&1 | Tee-Object -FilePath suite.log
           $code = $LASTEXITCODE
           . scripts/ci_report.ps1
           Report-Pytest -Log suite.log -Title suite -Code $code
           exit $code
       - name: GUI smoke on the real Windows platform (Windows fonts, real windows)
         if: always()
+        timeout-minutes: 25
         shell: pwsh
         env:
           QT_QPA_PLATFORM: windows
           COLUMNS: "1500"
         run: |
-          python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_main_window.py tests/gui/test_adaptive_layout.py tests/gui/test_detail_panel.py tests/gui/test_review_notes_t15.py `
+          python -X faulthandler -m pytest -q -p no:cacheprovider -o faulthandler_timeout=180 -o faulthandler_exit_on_timeout=true tests/gui/test_main_window.py tests/gui/test_adaptive_layout.py tests/gui/test_detail_panel.py tests/gui/test_review_notes_t15.py `
             tests/gui/test_compare_tile.py tests/gui/test_compare_view.py tests/gui/test_compare_window.py `
             tests/gui/test_compare_actions.py tests/gui/test_compare_overlay.py tests/gui/test_compare_final.py `
             tests/gui/test_qt_image.py tests/gui/test_viewer_frames.py tests/gui/test_view_rotation.py *>&1 | Tee-Object -FilePath gui.log
@@ -174,6 +175,7 @@ jobs:
           exit $code
       - name: Compare GUI on the real Windows platform, 5 more runs (hover / routing stability)
         if: always()
+        timeout-minutes: 30
         shell: pwsh
         env:
           QT_QPA_PLATFORM: windows
@@ -182,7 +184,7 @@ jobs:
           . scripts/ci_report.ps1
           $failed = 0
           for ($i = 1; $i -le 5; $i++) {
-            python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_compare_view.py tests/gui/test_compare_window.py tests/gui/test_compare_actions.py tests/gui/test_compare_overlay.py tests/gui/test_compare_final.py *>&1 | Tee-Object -FilePath "gui_repeat$i.log"
+            python -X faulthandler -m pytest -q -p no:cacheprovider -o faulthandler_timeout=180 -o faulthandler_exit_on_timeout=true tests/gui/test_compare_view.py tests/gui/test_compare_window.py tests/gui/test_compare_actions.py tests/gui/test_compare_overlay.py tests/gui/test_compare_final.py *>&1 | Tee-Object -FilePath "gui_repeat$i.log"
             $code = $LASTEXITCODE
             if ($code -ne 0) { $failed++ }
             Report-Pytest -Log "gui_repeat$i.log" -Title "gui-windows repeat $i" -Code $code
@@ -238,11 +240,11 @@ jobs:
         run: |
           . scripts/ci_report.ps1
           $failed = 0  # every run counts (a loop would otherwise report only its last run)
-          python -X faulthandler -m pytest -q -p no:cacheprovider -m stress tests/gui/test_worker_lifecycle.py tests/gui/test_compare_lifecycle.py *>&1 | Tee-Object -FilePath stress0.log
+          python -X faulthandler -m pytest -q -p no:cacheprovider -o faulthandler_timeout=180 -o faulthandler_exit_on_timeout=true -m stress tests/gui/test_worker_lifecycle.py tests/gui/test_compare_lifecycle.py *>&1 | Tee-Object -FilePath stress0.log
           $code = $LASTEXITCODE
           if ($code -ne 0) { $failed++; Report-Pytest -Log stress0.log -Title "stress run 0" -Code $code }
           for ($i = 1; $i -le 5; $i++) {
-            python -X faulthandler -m pytest -q -p no:cacheprovider tests/gui/test_shutdown_timeout.py tests/gui/test_shutdown_callbacks.py tests/unit/test_shutdown.py tests/gui/test_compare_lifecycle.py *>&1 | Tee-Object -FilePath "stress$i.log"
+            python -X faulthandler -m pytest -q -p no:cacheprovider -o faulthandler_timeout=180 -o faulthandler_exit_on_timeout=true tests/gui/test_shutdown_timeout.py tests/gui/test_shutdown_callbacks.py tests/unit/test_shutdown.py tests/gui/test_compare_lifecycle.py *>&1 | Tee-Object -FilePath "stress$i.log"
             $code = $LASTEXITCODE
             if ($code -ne 0) { $failed++; Report-Pytest -Log "stress$i.log" -Title "stress run $i" -Code $code }
           }
