@@ -25,7 +25,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path, PurePosixPath
 
-from app.core.errors import KiraPickError
+from app.export.errors import ExportError
 from app.export.formats import ExportFormat, wanted_kinds
 from app.export.layout import (
     MAX_PATH_CHARS,
@@ -38,16 +38,11 @@ from app.export.layout import (
     subject_folders,
 )
 from app.export.photos import Photo, PhotoFile, load_photos
-from app.export.sources import SourceSpec
+from app.export.sources import MANIFEST_DIR, SourceSpec  # export lists live in MANIFEST_DIR, not between photos
 from app.ingest.fingerprint import full_sha256, quick_fingerprint
 from app.storage.project import Project
 
 _CHUNK = 1024 * 1024
-MANIFEST_DIR = "_kirapick_danh_sach"  # export lists live here, not between the photos
-
-
-class ExportError(KiraPickError):
-    pass
 
 
 class Selection(str, Enum):
