@@ -1,6 +1,6 @@
 # KiraPick Part 3 — Advanced Export: technical design
 
-Status: **design checkpoint** (rev 1, 2026-10-30) — for external review. No code is written before this specification
+Status: **design checkpoint** (rev 2, 2026-10-30; rev 1 → rev 2 delta in §10) — for external review. No code is written before this specification
 and its plan (`docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md`) are approved. Nothing is released.
 
 Inputs: owner answers (2026-10-30), external review "Part 3 — Architecture Review: APPROVED WITH CHANGES"
@@ -33,6 +33,10 @@ Decisions (owner + review):
 | D6 | External matching: same base name + capture time within 2 s; never widened; anything unsure is "ambiguous" and is copied only after the user confirms one candidate | review CR-P3-01 |
 | D7 | Default: imported source + RAW+JPEG + one folder, proven equal to today's export by regression tests (pairs, RAW-only, JPEG-only, standalone files) | review CR-P3-02 |
 | D8 | Database schema unchanged; Part 2 (Compare) unchanged | review |
+| D9 | Byte identity is claimed only after a full SHA-256 comparison; the quick fingerprint (size + head/tail 64 KiB) only filters candidates | review CR-P3-D01 |
+| D10 | Other rasters (TIFF / PNG / HEIC): kept from the imported source under RAW_JPEG (legacy); never matched on an external source in rev 2; not part of "JPEG only"; no conversion of any kind | review CR-P3-D02, Q3 |
+| D11 | The old "Giữ cấu trúc thư mục con" box is removed; `export/include_pairs = false` users get RAW + JPEG and are told once (§4) | review Q1, CR-P3-D03 |
+| D12 | Every source file is revalidated when it is copied; changed content is never copied silently (§3.6) | review (additional safety case) |
 
 ## 2. Current export architecture (audit)
 
@@ -97,6 +101,16 @@ wanted files are the kinds selected, looked up on the external source — **incl
 needs at least one of them matched; the other, when absent, is noted "chỉ có RAW" / "chỉ có JPEG" (informational,
 not an error). `other` files are only ever copied from the imported source (documented limitation).
 
+Other rasters, explicitly (D10):
+- Imported + RAW_JPEG copies standalone TIFF / PNG / HEIC photos and `other` files of a pair group, as today
+  (legacy compatibility, `include_pairs = true`).
+- Imported + RAW or JPEG: `other` files are never copied; a TIFF / PNG / HEIC-only photo gets "Thiếu RAW" /
+  "Thiếu JPEG" (`missing_format`).
+- External source (any format): only `raw` and `jpeg` files are indexed and matched; a photo whose wanted kind is
+  `other` is not looked up there. Under External + RAW_JPEG a TIFF / PNG / HEIC-only photo therefore gets
+  `missing_format` with detail "định dạng này chỉ lấy được từ thư mục đã nhập".
+- KiraPick performs no conversion, extraction or re-encoding in any combination.
+
 ### 3.3 Source resolution (`app/export/sources.py`, new) — CR-P3-01
 
 `SourceMode.IMPORTED` (default): the wanted file is the imported asset at `source_root / relative_path`; checked with
@@ -111,12 +125,15 @@ not an error). `other` files are only ever copied from the imported source (docu
    opened during the scan.
 2. **Candidates** for photo P and wanted kind K: external files with `stem.casefold() == P.stem.casefold()` and kind K.
    The base name must match exactly (case-insensitive); `DSC_0123 (1)`, `DSC_0123-Edit` are not candidates.
-3. **Same-format verification** (an imported file R of kind K exists): a candidate C **matches by content** when
-   `C.size == R.size` and the head/tail hash of C (`quick_fingerprint`, 64 KiB + 64 KiB, the import's own
-   `quick_hash`) equals `R.quick_hash`. Same name with different content → "Khác nội dung" (not copied; e.g. an
-   edited or re-saved file). Several candidates with identical content are the same bytes: one is used (shortest path,
-   then alphabetical), the others are listed as "bản giống hệt" — this is the only multi-candidate case resolved
-   automatically, because the bytes copied are identical whichever is chosen.
+3. **Same-format verification** (an imported file R of kind K exists), in two stages (D9):
+   - *filter*: `C.size == R.size` and C's head/tail hash (`quick_fingerprint`) equals `R.quick_hash`; a candidate
+     failing the filter cannot be identical;
+   - *proof*: full SHA-256 of C equals the full SHA-256 of R (`assets.sha256` when recorded, otherwise R is hashed
+     once, read-only, §3.9). Only then is C a **content match**.
+   Same name and the filter or the proof fails → "Khác nội dung" (not copied; e.g. an edited or re-saved file).
+   Several candidates proven identical by full SHA-256 are the same bytes: one is used (shortest path, then
+   alphabetical), the others are listed as "bản giống hệt" — the only multi-candidate case resolved automatically
+   (review Q2). Candidates that pass the filter but not the proof never count as duplicates.
 4. **Cross-format verification** (no imported file of kind K, e.g. imported JPEG → card RAW): read C's capture time
    (`app.ingest.metadata.read_metadata`, DateTimeOriginal + SubSecTimeOriginal, camera make/model; read only for
    candidates, never for the whole card). C is **valid** when:
@@ -127,15 +144,16 @@ not an error). `other` files are only ever copied from the imported source (docu
 
    | Situation | Status | Copied? |
    |---|---|---|
-   | exactly one content match (3) or exactly one valid candidate (4) | `matched` | yes |
+   | exactly one content match (3, full SHA-256), or ≥ 2 candidates all proven identical (3), or exactly one valid candidate (4) | `matched` | yes |
    | no candidate | `missing` ("Không tìm thấy") | no |
    | candidates exist, all with a known, different capture time or camera | `not_matched` ("Không khớp" — e.g. the camera counter restarted) | no |
-   | same-format candidates, none with identical content | `content_differs` ("Khác nội dung") | no |
+   | same-format candidates, none proven identical (filter or full SHA-256 differs) | `content_differs` ("Khác nội dung") | no |
    | ≥ 2 valid candidates; or a candidate whose (or the photo's) capture time is unknown | `ambiguous` ("Không chắc") | only after manual confirmation |
 
 6. **Manual confirmation**: the preview's "Cần xem lại" list shows each ambiguous (photo, kind) with its candidates
    (path relative to the external root, size, capture time or "không đọc được", camera). The user picks one candidate
-   ("Dùng file này") or leaves it. A confirmed choice becomes `matched_manual` for this dialog only (kept in memory,
+   ("Dùng file này") or leaves it. The confirmation stores the candidate's identity (path, size, `mtime_ns`, §3.9).
+   A confirmed choice becomes `matched_manual` for this dialog only (kept in memory,
    not in the database — D8), shown with a "✋ xác nhận tay" mark and written as `match = manual` in the manifest.
    Choosing a source folder again or closing the dialog forgets the confirmations.
 7. The external source is never written: no `mkdir`, no temp file, no metadata update; files are opened read-only and
@@ -146,15 +164,23 @@ not an error). `other` files are only ever copied from the imported source (docu
 `Layout.SINGLE` (default): every operation goes to the destination root (today). `Layout.SUBJECTS`:
 
 - **Membership** (read-only, no AI run, assignments never changed): photo P belongs to subject S when an occurrence of
-  any file of P's pair group has `subject_id = S`, `S` is not merged (`merged_into IS NULL`), and
-  `assignment IN ('auto', 'manual')`. `suggested` does not count (D5).
+  any file of P's pair group has `assignment IN ('auto', 'manual')` and its `subject_id` **resolves** to S.
+  `suggested` and `none` do not count (D5).
+- **Merged subjects — resolution**: `merge_subjects` (app/identity/actions.py) moves every occurrence of the dropped
+  subject to the kept one and deletes the dropped row, so occurrences normally reference surviving subjects only.
+  Defensively (older sessions, an interrupted merge), `resolve(subject_id)` follows `subjects.merged_into` until a row
+  with `merged_into IS NULL` (at most 32 steps; a cycle or a missing row → unresolved). An unresolved occurrence does
+  not make the photo a member of anything; if it was the photo's only assignment the photo goes to `Chưa xác định`.
+  A photo whose occurrences resolve to the same subject twice gets one folder (set semantics).
 - A photo with one or more subjects is placed in **each** subject's folder (D4) — one operation per (file, subject).
 - A photo with no subject (no person, never analysed, only `suggested`, or `none`) goes to `Chưa xác định`.
 - **Folder names**: `display_name`, or `Chủ thể <id>` when unnamed. Sanitised for Windows: characters
   `< > : " / \ | ? *` and control characters → `_`; leading/trailing spaces and trailing dots removed; reserved names
-  (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`, also with an extension) get a `_` suffix; empty after
-  sanitising → `Chủ thể <id>`; length ≤ 60 characters (cut at a character boundary). Unicode (Vietnamese) kept as is
-  (NFC).
+  (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`, also with an extension) get a `_` suffix; length ≤ 60
+  characters (cut at a character boundary); Unicode (Vietnamese) kept, normalised to NFC.
+  **Fallback rule (single definition):** if the sanitised name contains no letter and no digit (Unicode categories
+  L* and N*) — e.g. `???` → `___`, `...`, `  ` — the folder is `Chủ thể <id>`. Otherwise the sanitised name is
+  used, replacement characters included (`Mai/Lan?` → `Mai_Lan_`).
 - **Duplicate folder names** (two subjects both named "Mai", or sanitising makes two names equal, compared
   case-insensitively): every such subject gets ` (#<id>)` appended — `Mai (#12)`, `Mai (#31)` — stable across runs.
   `Chưa xác định` is reserved: a subject named so becomes `Chưa xác định (#<id>)`.
@@ -192,10 +218,22 @@ plan_export(project, photo_ids, destination, *, source: SourceSpec = IMPORTED, f
 
 - Unchanged: exclusive create, never overwrite, `copystat`, partial file of a failed or cancelled copy removed (only
   our own), cancel between files, per-file failure continues.
-- New verification after each copy: size **and** head/tail hash of the target equal the source; otherwise the target
-  (our own new file) is removed and the operation is `failed: verify`.
-- Already-present targets are re-verified at run time (size + head/tail hash) before being reported as present; a
-  target that changed since the preview is re-planned to the next free ` (n)` name, never overwritten.
+- **Source revalidation (D12)** — every operation carries the source identity taken when it was planned or confirmed:
+  `size`, `mtime_ns`, and `sha256` when the plan computed one (content matches, duplicates). Just before copying:
+  `lstat` the source; not a regular file, a symlink, or `size` / `mtime_ns` different → the operation is
+  `source_changed` ("File nguồn đã thay đổi sau khi xem trước"), nothing copied. While copying, the source bytes are
+  hashed (SHA-256) from the same stream (no extra read); if the plan had a `sha256` and it differs → the new target
+  is removed, `source_changed`. For a time match (§3.3 point 4) the copied target's capture time and camera are read
+  back and must still satisfy the match; otherwise the target is removed, `source_changed`. The user can re-plan
+  ("Xem trước lại") after any `source_changed`.
+- **Copy verification**: after the copy the target is read once and its SHA-256 must equal the streamed source
+  SHA-256 (and the sizes equal); otherwise the target (our own new file) is removed and the operation is
+  `failed: verify`. (Replaces rev 1's size + head/tail check.)
+- **Already-present targets** (D9): at planning time the size + quick fingerprint only *suggests* that a target holds
+  the same file; the preview says "có vẻ đã có sẵn — sẽ kiểm tra đầy đủ khi chép". At run time, in the copy thread,
+  the target and the source are compared by full SHA-256 (the source hash reused if known) before the operation is
+  reported `already_present`. If they differ, the operation is copied to the next free ` (n)` name; the existing file
+  is never overwritten.
 - External source removed mid-copy (card ejected): the current file fails (`OSError`), later operations fail fast
   after 3 consecutive "device not ready / not found" errors with one message "Nguồn không còn truy cập được"; copied
   files stay.
@@ -208,9 +246,10 @@ cancelled or partly failed, as CSV (UTF-8 with BOM) and JSON, file name `kirapic
 - header (JSON) / first rows (CSV): app version, options (scope, source mode — the external root's folder **name**
   only, format, layout), counts;
 - one row per planned operation and per issue: `status` (`copied`, `already_present`, `failed`, `not_started`
-  (cancelled), `missing`, `missing_format`, `not_matched`, `content_differs`, `ambiguous`, `path_too_long`),
-  `exported_as`, `folder`, `photo` (stem), `kind`, `source` (path relative to its root), `match`, `size_bytes`, `flag`,
-  `rating`, `favorite`, `capture_time`, `camera`, `error`.
+  (cancelled), `source_changed`, `missing`, `missing_format`, `not_matched`, `content_differs`, `ambiguous`,
+  `path_too_long`), `exported_as`, `folder`, `photo` (stem), `kind`, `source` (path relative to its root), `match`,
+  `size_bytes`, `sha256` (of the copied / verified file, empty otherwise), `flag`, `rating`, `favorite`,
+  `capture_time`, `camera`, `error`.
 - **Retry**: exporting again with the same options into the same destination re-plans; files present with identical
   content are skipped (`already_present`), so only missing / failed operations are copied. The dialog offers
   "Thử lại các file chưa chép" after a cancelled or partly failed run (same plan, refreshed). The manifest is a record
@@ -231,6 +270,19 @@ cancelled or partly failed, as CSV (UTF-8 with BOM) and JSON, file name `kirapic
   Source / Format / Layout choices;
 - clipboard: `QGuiApplication.clipboard().setText("\n".join(lines))`; local only, nothing leaves the PC.
 
+### 3.9 Hashing and source identity (`app/export/hashing.py`, new) — CR-P3-D01
+
+- `sha256_file(path, *, should_cancel) -> str`: 1 MiB chunks, `should_cancel` checked between chunks
+  (`HashCancelled`), file opened read-only. Never called on the GUI thread (plan thread or copy thread only).
+- `HashCache` for one dialog: key `(resolved path, size, mtime_ns)` → sha256; a file is hashed at most once per
+  dialog however many previews, duplicates or retries need it. Imported files reuse `assets.sha256` when the import
+  recorded it and the file's `size` / `mtime_ns` still equal the asset row; `assets` is never written by export.
+- Where full hashes are computed: external same-format candidates that pass the quick filter (§3.3 point 3) and the
+  imported file they are compared with; already-present targets and their sources (at run time, §3.6); every copied
+  file (streamed source + one read of the target).
+- Cost: a same-format external export reads each matched source once at planning and once while copying (the copy
+  stream). The preview shows "Đang kiểm tra nội dung … n / m file" with the scan progress; cancel stops it.
+
 ## 4. UX — Export dialog
 
 Title "Xuất ảnh (sao chép)". Two tabs so it fits the TINY / SHORT layouts of Part 1 (minimum 560 × 400): the dialog
@@ -247,16 +299,26 @@ scrolls inside each tab; buttons stay visible.
    [path] [Chọn…].
 5. **Xem trước** — sub-tabs "Sẽ chép (n)" (photo, from, to folder / name; renamed targets in yellow; manual matches
    marked ✋) and "Cần xem lại (n)" (status, photo, kind, detail; for `ambiguous`: candidates + "Dùng file này").
-6. **Tóm tắt** — "n ảnh → m file (x GB) vào k thư mục · dung lượng trống y GB · đã có sẵn a · thiếu b · không khớp c
-   · không chắc d · …" (each count only when non-zero), hints of 3.4.
+6. **Tóm tắt** — "n ảnh → m file (x GB) vào k thư mục · dung lượng trống y GB · có vẻ đã có sẵn a (kiểm tra đầy
+   đủ khi chép) · thiếu b · không khớp c · không chắc d · …" (each count only when non-zero), hints of 3.4.
 7. Buttons: **Sao chép m file** (disabled while scanning, while nothing is planned or space is short) · Đóng.
 
 The three groups are independent radios; every combination is valid (12). The choices are remembered
 (`export/source`, `export/format`, `export/layout`, `export/external_root` in QSettings); the external folder is
 remembered but re-scanned on each opening (a card may have changed). Default for a first run: Thư mục đã nhập · RAW +
-JPEG · Một thư mục. Migration: the old `export/include_pairs` (true or false) becomes `RAW_JPEG` (copies at least what
-was copied before; never fewer files); the old "Giữ cấu trúc thư mục con" box is removed (it was off by default; see
-compatibility 7).
+JPEG · Một thư mục.
+
+Migration (CR-P3-D03, D11): the old key `export/include_pairs` is read once and then removed.
+- `true` (the default before Part 3) → RAW + JPEG: the same files as before (proven by §6.1).
+- `false` → RAW + JPEG as well, which **changes the previous behaviour**: before, a RAW+JPEG pair exported only its
+  primary file (the RAW) and a standalone photo its own file; now the pair's JPEG is copied too. The dialog shows once,
+  above ② Định dạng: "Trước đây bạn tắt 'Kèm JPEG của cặp RAW+JPEG'. Bản mới mặc định chép RAW + JPEG — chọn 'Chỉ RAW'
+  nếu chỉ muốn file RAW (ảnh chỉ có JPEG khi đó sẽ được báo thiếu)." The notice is dismissed by any change of ② or by
+  closing it (`export/migration_notice_shown`). No setting claims to preserve the old "off" preference: neither new
+  option equals it (Chỉ RAW skips JPEG-only photos, which the old option copied).
+- "Giữ cấu trúc thư mục con" (Q1: removed): it was off by default. Users who turned it on now get one folder (or
+  subject folders); sub-folder structure of the source is not reproduced. Documented in README and the release
+  notes.
 
 **Tab 2 "📋 Tên ảnh đã Chọn"**: count ("128 ảnh đã Chọn trong phạm vi này"), [✓] Kèm đuôi file, a read-only list (one
 name per line), big button **📋 Sao chép tên ảnh** → status "Đã sao chép 128 tên vào bộ nhớ tạm". Uses the scope of
@@ -269,8 +331,11 @@ _kirapick_danh_sach" and "Thử lại các file chưa chép" when some failed or
 
 ## 5. Threading, shutdown, offline
 
-- External scan and planning with an external source run in a `QThread` (`ExportPlanThread`), cancellable, with a
-  generation token: a result for an older choice (source / format / layout / scope changed meanwhile) is dropped.
+- External scan, EXIF reads, full SHA-256 hashing and planning with an external source run in a `QThread`
+  (`ExportPlanThread`), cancellable (between files and between 1 MiB hash chunks), with a generation token: a result
+  for an older choice (source / format / layout / scope changed meanwhile) is dropped. No hashing on the GUI thread:
+  imported-source planning uses only `stat` and the quick fingerprint of existing targets; full verification of
+  already-present targets happens in the copy thread (§3.6).
   Imported-source planning stays on the GUI thread as today (stat per file; measured in 6.4, moved to the thread if
   it exceeds 100 ms for 1 000 photos).
 - The plan thread joins the window's shutdown contract as one more `Work` entry ("quét nguồn xuất ảnh"), like the
@@ -283,22 +348,36 @@ _kirapick_danh_sach" and "Thử lại các file chưa chép" when some failed or
 fixtures {RAW+JPEG pairs, RAW-only, JPEG-only, standalone TIFF/PNG, a pair whose JPEG is missing on disk, name
 collisions at the destination, an identical copy already there} × scopes {Keep, Favorite, Rated, IDs, Collection}:
 new `plan_export(IMPORTED, RAW_JPEG, SINGLE)` == old `plan_export(include_pairs=True)` (operations, names,
-already_present, missing). Old `include_pairs=False` documented as replaced (no equivalent). Keep / Reject: rejected and
+already_present candidates, missing). The equivalence claim covers `include_pairs = true` only. For
+`include_pairs = false` a separate test documents the **difference** (old: pair → RAW only; new RAW_JPEG: RAW + JPEG)
+and the one-time migration notice (§4); no test or text claims the old "off" preference is preserved. Keep / Reject: rejected and
 undecided photos never appear for scope Keep; decisions of a pair's primary apply to the pair; copying never changes
 decisions, subjects, view rotation or sources (byte-identical tables and files before/after).
-6.2 **Formats** — 3 formats × imported fixtures: wanted files, `missing_format` issues, sizes.
+6.2 **Formats** — 3 formats × imported fixtures: wanted files, `missing_format` issues, sizes; TIFF / PNG / HEIC:
+copied under Imported + RAW_JPEG only, `missing_format` under RAW / JPEG and under every External combination, no
+conversion (D10).
 6.3 **External matching** — unit tests on synthetic folders (real JPEG / TIFF-based files with EXIF written by the
-tests): same-format content match; content differs; identical duplicates; cross-format within 2.0 s / at 2.01 s
+tests): same-format content match proven by full SHA-256; same size + same head/tail but a different middle byte →
+`content_differs` (the quick filter alone would have passed it); duplicates identical by full SHA-256 → resolved,
+duplicates equal only in head/tail → not duplicates; each file hashed once per dialog (`HashCache` counter); hash
+cancel; cross-format within 2.0 s / at 2.01 s
 (not matched); unknown time → ambiguous; two valid → ambiguous; camera mismatch; stem case and `DSC_0123 (1)`;
 symlink / junction not followed; hidden folder skipped; the card is read-only during the whole export (directory and
 file mtimes, sizes and a hash snapshot equal before/after; a read-only temp tree on Linux; on Windows CI the read-only
 attribute); manual confirmation; scan cancel.
 6.4 **Layout** — membership from auto/manual only; multi-subject → each folder; suggested-only and unknown →
 "Chưa xác định"; merged subjects; duplicate names → `(#id)`; Windows-forbidden characters, reserved names, 60-char cut,
-NFC; path > 259 → issue; DB unchanged by planning and export.
+NFC; the fallback rule (`???`, `...`, spaces → `Chủ thể <id>`; `Mai/Lan?` → `Mai_Lan_`); merged subjects: an
+occurrence still pointing to a dropped subject with `merged_into` resolves to the survivor, a chain of two merges
+resolves to the last, a cycle or missing row → unresolved → `Chưa xác định` when nothing else; path > 259 → issue; DB
+unchanged by planning and export.
 6.5 **12 combinations** — parametrized end-to-end (plan + run + manifest) on one fixture with pairs, a JPEG-only photo,
 two subjects, an unknown subject and an external folder; asserts operations, folders, issues, manifest rows.
-6.6 **Copy safety** — verify-after-copy failure removes only our file; changed already-present target re-planned;
+6.6 **Copy safety** — verify-after-copy (full SHA-256) failure removes only our file; an already-present target
+with the same size and head/tail but a different middle byte is not accepted: copied to ` (n)`, original untouched;
+source revalidation: a source modified (content, size or mtime) or replaced between preview / confirmation and copy
+→ `source_changed`, nothing (or only our removed file) written, for imported, content-matched, time-matched and
+manually confirmed sources; a time-matched source replaced by a same-name file of another time → `source_changed`;
 cancel mid-run (copied stay, manifest has `not_started`); card removed mid-run (fail-fast after 3); retry copies only
 the missing; never overwrite (pre-created different file).
 6.7 **Names** — one line per photo with pairs and multi-subject; with/without extension; scope ∩ Keep; same stem in two
@@ -316,8 +395,9 @@ tree, EXIF reads only for candidates; no Qt-thread block > 100 ms during scan / 
 | Area | Effect |
 |---|---|
 | Default export | same files and names as today (6.1); the dialog's look changes (tabs, groups) |
-| "Kèm file JPEG của cặp" box | replaced by ② Định dạng; old setting → RAW + JPEG |
-| "Giữ cấu trúc thư mục con" box | removed (exactly three groups); it was off by default. **Reviewer decision needed (Q1)** |
+| "Kèm file JPEG của cặp" box | replaced by ② Định dạng. Old `true` → RAW + JPEG, same files. Old `false` → RAW + JPEG, **different files** (a pair's JPEG is now copied too); one-time notice in the dialog; README / release notes say so |
+| "Giữ cấu trúc thư mục con" box | removed (review Q1); it was off by default; users who used it now get one folder or subject folders; documented |
+| Already-present detection | stricter: a target is skipped only after a full SHA-256 match at copy time (before: size + head/tail at plan time) |
 | Bottom-bar size ("x GB") | follows ② Định dạng for the imported source, one folder (no subject duplication, no external lookup); tooltip says so. `stats.counts` takes the format instead of `include_pairs` |
 | Client list export ("Xuất theo danh sách khách…") | unchanged entry; opens the dialog on scope "Danh sách khách" |
 | ✓ "Xuất ảnh" step / `export_runs` | unchanged rule; files count includes subject duplicates |
@@ -337,10 +417,25 @@ tree, EXIF reads only for candidates; no Qt-thread block > 100 ms during scan / 
 | Users expect "Chưa xác định" photos to be assigned | low | preview hint + link to "Cần xem lại" |
 | Dialog crowded on TINY | medium | tabs + scrolling; GUI tests at TINY / SHORT |
 | Card ejected mid-copy | medium | fail-fast message; manifest; retry |
+| Source changed or replaced after the preview | medium | revalidation before and during the copy (§3.6), `source_changed`, re-plan |
+| Full hashing of large same-format sets takes time | medium | only candidates that pass the quick filter; one hash per file per dialog; plan thread with progress and cancel |
 
-## 9. Open questions for the reviewer
+## 9. Reviewer answers (design checkpoint 1)
 
-- **Q1** Remove "Giữ cấu trúc thư mục con" (proposed: yes, three groups only) or keep it as a fourth, hidden-by-default
-  option?
-- **Q2** Identical-content duplicates on the external source resolved automatically (3.3 point 3) — accepted?
-- **Q3** `other` rasters (TIFF / PNG / HEIC) only from the imported source, and not in "Chỉ JPEG" — accepted?
+- **Q1** Remove "Giữ cấu trúc thư mục con" in the new UI; compatibility impact documented (§4, §7). → D11
+- **Q2** Identical external duplicates are resolved automatically only after full-content (SHA-256) verification
+  (§3.3 point 3). → D9
+- **Q3** Standalone other rasters stay exported from the imported source under RAW_JPEG; other rasters are not matched
+  externally in rev 2 (§3.2). → D10
+
+## 10. Rev 1 → rev 2 delta
+
+| Review item | Change | Sections |
+|---|---|---|
+| CR-P3-D01 content verification | quick fingerprint = filter only; byte identity = full SHA-256 for content matches, duplicates, already-present targets and copy verification; hashing only in worker threads, cancellable per 1 MiB chunk, cached once per file per dialog; `assets.sha256` reused when still valid | D9, §3.3.3, §3.6, §3.9, §5, §6.3, §6.6 |
+| CR-P3-D02 other rasters | explicit list: Imported + RAW_JPEG keeps TIFF/PNG/HEIC; External matches RAW/JPEG only; JPEG-only excludes them; no conversion anywhere | D10, §3.2, §6.2 |
+| CR-P3-D03 legacy migration | `include_pairs = false` → RAW + JPEG documented as a behaviour change with a one-time notice; equivalence tests only for `true` | D11, §4, §6.1, §7 |
+| CR-P3-D04.1 folder fallback | one rule: no letter and no digit after sanitising → `Chủ thể <id>` | §3.4, plan Task 4 |
+| CR-P3-D04.2 merged subjects | occurrences resolve through `merged_into` to the surviving subject (≤ 32 steps; cycle / missing → unresolved); `merge_subjects` normally leaves none | §3.4, §6.4, plan Task 4 |
+| Additional safety case | source identity (size, mtime_ns, sha256 when known) recorded at plan / confirmation; revalidated before and during the copy; time matches re-read from the copied file; `source_changed` status | D12, §3.6, §3.7, §6.6, plan Task 7 |
+| Q1–Q3 | answered | §9 |
