@@ -27,7 +27,16 @@ from pathlib import Path, PurePosixPath
 
 from app.core.errors import KiraPickError
 from app.export.formats import ExportFormat, wanted_kinds
-from app.export.layout import Layout
+from app.export.layout import (
+    MAX_PATH_CHARS,
+    UNKNOWN_FOLDER,
+    Layout,
+    LayoutStats,
+    analysed,
+    has_suggestion,
+    photo_subjects,
+    subject_folders,
+)
 from app.export.photos import Photo, PhotoFile, load_photos
 from app.export.sources import SourceSpec
 from app.ingest.fingerprint import quick_fingerprint
@@ -100,6 +109,7 @@ class ExportPlan:
     issues: list[ExportIssue] = field(default_factory=list)
     already_present: list[str] = field(default_factory=list)  # identical copy already at the destination
     photos: dict[int, Photo] = field(default_factory=dict)
+    layout_stats: LayoutStats | None = None  # Layout.SUBJECTS only
 
     @property
     def items(self) -> list[ExportOp]:
@@ -247,14 +257,30 @@ def plan_export(
     source = source or SourceSpec()
     if source.mode != "imported":
         raise ExportError("xuất từ nguồn khác chưa có trong bản này")
-    if layout is not Layout.SINGLE:
-        raise ExportError("xuất theo chủ thể chưa có trong bản này")
     dest = _validate_destination(project, destination)
     plan = ExportPlan(dest, [])
+    conn = project.conn
     taken: set[str] = set()
     seen: set[int] = set()
     wanted = wanted_kinds(fmt, external=False)
-    for photo in load_photos(project.conn, asset_ids):
+    photos = load_photos(conn, asset_ids)
+    folders_of: dict[int, list[str]] = {}
+    if layout is Layout.SUBJECTS:
+        names = subject_folders(conn)
+        stats = LayoutStats(analysed=analysed(conn))
+        plan.layout_stats = stats
+        members = photo_subjects(conn, photos)
+        for photo in photos:
+            subjects = [names[s] for s in members.get(photo.photo_id, ()) if s in names]
+            if not subjects:
+                if has_suggestion(conn, photo):
+                    stats.unknown_suggested += 1
+                else:
+                    stats.unknown_other += 1
+            elif len(subjects) > 1:
+                stats.multi_subject += 1
+            folders_of[photo.photo_id] = sorted(subjects, key=str.casefold) or [UNKNOWN_FOLDER]
+    for photo in photos:
         if photo.photo_id in seen:
             continue  # a file of a photo already planned (a pair's JPEG selected with its RAW)
         seen.update(f.asset_id for f in photo.files)
@@ -273,7 +299,10 @@ def plan_export(
                 continue
             present.append(f)
         if present:
-            _plan_folder(plan, photo, present, "", taken)
+            for folder in folders_of.get(photo.photo_id, [""]):
+                _plan_folder(plan, photo, present, folder, taken)
+                if plan.layout_stats is not None:
+                    plan.layout_stats.per_folder[folder] = plan.layout_stats.per_folder.get(folder, 0) + 1
     return plan
 
 
@@ -286,6 +315,10 @@ def _plan_folder(plan: ExportPlan, photo: Photo, files: list[PhotoFile], folder:
     for i, (f, suffix) in enumerate(zip(files, suffixes)):
         rel = str(PurePosixPath(folder, free + suffix)) if folder else free + suffix
         taken.add(rel.casefold())
+        if len(str(plan.destination / rel)) > MAX_PATH_CHARS:
+            plan.issues.append(ExportIssue(photo.photo_id, photo.stem, f.kind, IssueStatus.PATH_TOO_LONG,
+                                           f"đường dẫn quá dài (> {MAX_PATH_CHARS} ký tự): {rel}", f.relative_path))
+            continue
         if i in present:
             plan.already_present.append(rel)
             continue
