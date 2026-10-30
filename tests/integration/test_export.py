@@ -70,9 +70,9 @@ def test_export_copies_without_touching_or_overwriting(setup: tuple[Project, Pat
     assert sources == {f: full_sha256(f) for f in sources}, "originals changed"
 
     rows = list(csv.DictReader(open(result.manifest_csv, encoding="utf-8-sig")))
-    assert sorted(r["exported_as"] for r in rows) == names
-    assert any("Ngày 1" in r["source_path"] for r in rows)  # Unicode survives
-    assert len(json.loads(result.manifest_json.read_text(encoding="utf-8"))["files"]) == 3
+    assert sorted(r["exported_as"] for r in rows) == names and {r["status"] for r in rows} == {"copied"}
+    assert any("Ngày 1" in r["source"] for r in rows)  # Unicode survives (root folder name + relative path)
+    assert len(json.loads(result.manifest_json.read_text(encoding="utf-8"))["rows"]) == 3  # manifest v2 (Part 3)
 
 
 def test_source_subfolders_are_not_reproduced(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
@@ -110,7 +110,10 @@ def test_cancel_and_missing_files(setup: tuple[Project, Path, Path], tmp_path: P
     plan = plan_export(p, ids, tmp_path / "out")
     assert plan.missing == ["sub/DSC_0002.jpg"] and len(plan.items) == 2
     result = run_export(plan, should_cancel=lambda: True)
-    assert result.cancelled and result.copied == [] and result.manifest_csv is None
+    assert result.cancelled and result.copied == []
+    # Manifest v2 (Part 3 spec §3.7): written for every run that started, cancelled ones included
+    statuses = sorted(r["status"] for r in csv.DictReader(open(result.manifest_csv, encoding="utf-8-sig")))
+    assert statuses == ["missing", "not_started", "not_started"]
 
 
 def test_raw_jpeg_pair_exported_together_with_shared_stem(tmp_path: Path, public_nef: Path) -> None:

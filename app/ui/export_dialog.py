@@ -233,7 +233,10 @@ class ExportDialog(QDialog):
             skip.setForeground(Qt.GlobalColor.gray)
             self.table.setItem(r, 1, skip)
         free = free_space(plan.destination)
-        lines = [f"<b>{len(plan.to_copy)} file sẽ chép</b> ({_gb(plan.total_bytes)}) → {plan.destination}",
+        size = f"khoảng {_gb(plan.estimated_bytes)}"
+        if plan.worst_case_bytes > plan.estimated_bytes:  # seemingly present targets may still differ (RV-P3-B-02)
+            size += f", tối đa {_gb(plan.worst_case_bytes)} nếu file 'có vẻ đã có' khác nội dung"
+        lines = [f"<b>{len(plan.to_copy)} file sẽ chép</b> ({size}) → {plan.destination}",
                  f"Dung lượng trống ở đích: {_gb(free)}"]
         if plan.already_present:
             lines.append(f"{len(plan.already_present)} file có vẻ đã có sẵn ở đích → khi chép sẽ so toàn bộ nội dung: "
@@ -245,9 +248,12 @@ class ExportDialog(QDialog):
         if not plan.to_copy and plan.already_present:
             lines.append("<b>Tất cả ảnh đã chọn có vẻ đã có ở thư mục này.</b> Bấm nút để kiểm tra đầy đủ "
                          "(chỉ file khác nội dung mới được chép).")
-        enough = free > plan.total_bytes
+        enough = free > plan.estimated_bytes
         if not enough:
             lines.append(f"<span style='color:{theme.REJECT}'>Không đủ dung lượng trống.</span>")
+        elif free < plan.worst_case_bytes:
+            lines.append("Nếu phải chép thêm, KiraPick đo lại chỗ trống trước mỗi ảnh; thiếu chỗ thì báo lỗi ảnh đó, "
+                         "không bao giờ ghi đè hay xoá file ở đích.")
         self._set_summary("<br>".join(lines), error=False, ready=bool(plan.operations) and enough)
 
     def _record_run(self, result: ExportResult) -> None:
@@ -279,7 +285,7 @@ class ExportDialog(QDialog):
             return
         answer = QMessageBox.question(
             self, "Xác nhận sao chép",
-            f"Sao chép {len(self.plan.to_copy)} file ({_gb(self.plan.total_bytes)}) vào\n{self.plan.destination}?\n\n"
+            f"Sao chép {len(self.plan.to_copy)} file (khoảng {_gb(self.plan.estimated_bytes)}) vào\n{self.plan.destination}?\n\n"
             "Ảnh gốc giữ nguyên. File trùng tên ở đích sẽ không bị ghi đè.",
         )
         if answer != QMessageBox.StandardButton.Yes:
@@ -320,10 +326,15 @@ class ExportDialog(QDialog):
             parts.append(f"{len(result.renamed)} file được đặt tên mới để không ghi đè.")
         if result.failed:
             parts.append(f"{len(result.failed)} file lỗi: " + "; ".join(f"{k} ({v})" for k, v in list(result.failed.items())[:5]))
+        changed = sum(v == "source_changed" for v in result.statuses.values())
+        if changed:
+            parts.append(f"{changed} file nguồn đã thay đổi sau khi xem trước → không chép; hãy xem trước lại.")
+        if result.source_unavailable:
+            parts.append("Nguồn không còn truy cập được (thẻ nhớ / ổ đĩa đã rút?); các file đã chép vẫn còn nguyên.")
         if result.cancelled:
             parts.append("Bạn đã dừng giữa chừng; các file đã chép vẫn còn nguyên.")
         if result.manifest_csv:
-            parts.append(f"Danh sách ảnh đã chép: thư mục con {result.manifest_csv.parent.name}")
+            parts.append(f"Danh sách xuất (mọi file và lý do): thư mục con {result.manifest_csv.parent.name}")
         if self.isVisible():
             QMessageBox.information(self, "Xuất ảnh xong", "\n".join(parts))
         self.refresh()
