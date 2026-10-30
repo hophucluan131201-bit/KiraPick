@@ -252,8 +252,14 @@ def test_export_dialog_previews_then_copies(qtbot, env: dict, tmp_path: Path) ->
     thread.wait()
     assert sorted(p.name for p in dest.glob("*.jpg")) == ["DSC_0000.jpg", "DSC_0001.jpg"]
     assert len(list((dest / "_kirapick_danh_sach").glob("kirapick_export_*.csv"))) == 1
-    dialog.refresh()  # exporting again: nothing new to copy
-    assert not dialog.copy_button.isEnabled() and "đã có ở thư mục này" in dialog.summary.text()
+    dialog.refresh()  # exporting again: nothing new to copy, the copies only seem present until checked in full
+    assert "có vẻ đã có ở thư mục này" in dialog.summary.text()
+    assert dialog.copy_button.isEnabled() and dialog.copy_button.text() == "Kiểm tra 2 file đã có"  # CR-P3-A02
+    dialog.result = None
+    dialog.start_copy()
+    qtbot.waitUntil(lambda: dialog.result is not None, timeout=20000)
+    assert dialog.result.copied == [] and sorted(dialog.result.already_present) == ["DSC_0000.jpg", "DSC_0001.jpg"]
+    assert sorted(p.name for p in dest.glob("*.jpg")) == ["DSC_0000.jpg", "DSC_0001.jpg"]
 
 
 def test_window_fits_the_screen_and_remembers_its_size(qtbot, env: dict) -> None:

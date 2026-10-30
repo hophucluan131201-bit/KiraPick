@@ -141,3 +141,59 @@ def test_marked_unreadable_photo_is_still_copied(fx) -> None:  # noqa: ANN001
     conn.execute("UPDATE assets SET status = 'error' WHERE id = ?", (fx.ids["jpeg_only"],))
     plan = plan_export(fx.project, [fx.ids["jpeg_only"]], fx.dest)
     assert _names(plan) == ["DSC_0004.JPG"] and plan.issues == []
+
+
+# ---- CR-P3-A02: a target that seems present stays an operation; only run_export verifies it -----------------------
+
+def _same_head_tail_other_middle(src: Path, target: Path) -> None:
+    data = bytearray(src.read_bytes())
+    data[len(data) // 2] ^= 0xFF  # same size, same first and last 64 KiB, one byte different in the middle
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(bytes(data))
+
+
+def test_maybe_present_stays_an_operation(fx) -> None:  # noqa: ANN001
+    fx.dest.mkdir()
+    (fx.dest / "DSC_0003.NEF").write_bytes((fx.root / "DSC_0003.NEF").read_bytes())
+    plan = plan_export(fx.project, [fx.ids["raw_only"], fx.ids["jpeg_only"]], fx.dest)
+    by_name = {op.dest_relative: op for op in plan.operations}
+    assert by_name["DSC_0003.NEF"].maybe_present is True and by_name["DSC_0004.JPG"].maybe_present is False
+    assert plan.already_present == ["DSC_0003.NEF"]  # "có vẻ đã có sẵn" in the preview
+    assert [op.dest_relative for op in plan.to_copy] == ["DSC_0004.JPG"]
+    assert plan.total_bytes == 300_000 and plan.maybe_present_bytes == 300_000
+
+
+def test_identical_target_confirmed_by_full_hash(fx) -> None:  # noqa: ANN001
+    from app.export.copy_export import run_export
+
+    fx.dest.mkdir()
+    (fx.dest / "DSC_0003.NEF").write_bytes((fx.root / "DSC_0003.NEF").read_bytes())
+    result = run_export(plan_export(fx.project, [fx.ids["raw_only"]], fx.dest))
+    assert result.copied == [] and result.already_present == ["DSC_0003.NEF"] and not result.failed
+    assert sorted(p.name for p in fx.dest.iterdir() if p.is_file()) == ["DSC_0003.NEF"]
+
+
+def test_middle_byte_differs_is_copied_beside_never_over(fx) -> None:  # noqa: ANN001
+    from app.export.copy_export import run_export
+
+    src = fx.root / "DSC_0003.NEF"
+    _same_head_tail_other_middle(src, fx.dest / "DSC_0003.NEF")
+    before = (fx.dest / "DSC_0003.NEF").read_bytes()
+    plan = plan_export(fx.project, [fx.ids["raw_only"]], fx.dest)
+    assert [op.maybe_present for op in plan.operations] == [True]  # the quick filter cannot tell them apart
+    result = run_export(plan)
+    assert result.already_present == [] and result.copied == ["DSC_0003 (1).NEF"]
+    assert (fx.dest / "DSC_0003 (1).NEF").read_bytes() == src.read_bytes()
+    assert (fx.dest / "DSC_0003.NEF").read_bytes() == before  # the existing file untouched
+    assert result.renamed == {"DSC_0003.NEF": "DSC_0003 (1).NEF"}
+
+
+def test_seemingly_present_target_removed_before_copy(fx) -> None:  # noqa: ANN001
+    from app.export.copy_export import run_export
+
+    fx.dest.mkdir()
+    (fx.dest / "DSC_0003.NEF").write_bytes((fx.root / "DSC_0003.NEF").read_bytes())
+    plan = plan_export(fx.project, [fx.ids["raw_only"]], fx.dest)
+    (fx.dest / "DSC_0003.NEF").unlink()
+    result = run_export(plan)
+    assert result.copied == ["DSC_0003.NEF"] and result.already_present == []

@@ -216,7 +216,7 @@ class ExportDialog(QDialog):
             self._set_summary(f"Không xuất được: {exc}", error=True)
             return
         self.plan = plan
-        for item in plan.items[:_PREVIEW_ROWS]:
+        for item in plan.to_copy[:_PREVIEW_ROWS]:
             r = self.table.rowCount()
             self.table.insertRow(r)
             self.table.setItem(r, 0, QTableWidgetItem(item.source.name))
@@ -229,24 +229,26 @@ class ExportDialog(QDialog):
             r = self.table.rowCount()
             self.table.insertRow(r)
             self.table.setItem(r, 0, QTableWidgetItem(Path(name).name))
-            skip = QTableWidgetItem(f"{name} — đã có sẵn, bỏ qua")
+            skip = QTableWidgetItem(f"{name} — có vẻ đã có sẵn (kiểm tra đầy đủ khi chép)")
             skip.setForeground(Qt.GlobalColor.gray)
             self.table.setItem(r, 1, skip)
         free = free_space(plan.destination)
-        lines = [f"<b>{len(plan.items)} file sẽ chép</b> ({_gb(plan.total_bytes)}) → {plan.destination}",
+        lines = [f"<b>{len(plan.to_copy)} file sẽ chép</b> ({_gb(plan.total_bytes)}) → {plan.destination}",
                  f"Dung lượng trống ở đích: {_gb(free)}"]
         if plan.already_present:
-            lines.append(f"{len(plan.already_present)} file đã có sẵn ở đích (giống hệt) → bỏ qua, không tạo bản trùng.")
-        if len(plan.items) > _PREVIEW_ROWS:
+            lines.append(f"{len(plan.already_present)} file có vẻ đã có sẵn ở đích → khi chép sẽ so toàn bộ nội dung: "
+                         "giống hệt thì bỏ qua, khác thì chép thành tên mới (không ghi đè).")
+        if len(plan.to_copy) > _PREVIEW_ROWS:
             lines.append(f"(bảng chỉ hiện {_PREVIEW_ROWS} file đầu)")
         if plan.missing:
             lines.append(f"<span style='color:{theme.ERROR}'>{len(plan.missing)} file không còn trên ổ đĩa sẽ bị bỏ qua.</span>")
-        if not plan.items and plan.already_present:
-            lines.append("<b>Tất cả ảnh đã chọn đều đã có ở thư mục này — không cần chép lại.</b>")
+        if not plan.to_copy and plan.already_present:
+            lines.append("<b>Tất cả ảnh đã chọn có vẻ đã có ở thư mục này.</b> Bấm nút để kiểm tra đầy đủ "
+                         "(chỉ file khác nội dung mới được chép).")
         enough = free > plan.total_bytes
         if not enough:
             lines.append(f"<span style='color:{theme.REJECT}'>Không đủ dung lượng trống.</span>")
-        self._set_summary("<br>".join(lines), error=False, ready=bool(plan.items) and enough)
+        self._set_summary("<br>".join(lines), error=False, ready=bool(plan.operations) and enough)
 
     def _record_run(self, result: ExportResult) -> None:
         """A finished, not cancelled export that copied something counts for the "Xuất ảnh" step."""
@@ -268,14 +270,16 @@ class ExportDialog(QDialog):
         self.summary.setText(f"<span style='color:{theme.REJECT}'>{html}</span>" if error else html)
         self.copy_button.setEnabled(ready)
         if ready and self.plan is not None:
-            self.copy_button.setText(f"Sao chép {len(self.plan.items)} file")
+            n, k = len(self.plan.to_copy), len(self.plan.already_present)
+            self.copy_button.setText(f"Sao chép {n} file" + (f" · kiểm tra {k} file đã có" if k else "") if n
+                                     else f"Kiểm tra {k} file đã có")
 
     def _confirm_and_copy(self) -> None:
         if self.plan is None:
             return
         answer = QMessageBox.question(
             self, "Xác nhận sao chép",
-            f"Sao chép {len(self.plan.items)} file ({_gb(self.plan.total_bytes)}) vào\n{self.plan.destination}?\n\n"
+            f"Sao chép {len(self.plan.to_copy)} file ({_gb(self.plan.total_bytes)}) vào\n{self.plan.destination}?\n\n"
             "Ảnh gốc giữ nguyên. File trùng tên ở đích sẽ không bị ghi đè.",
         )
         if answer != QMessageBox.StandardButton.Yes:
@@ -310,6 +314,8 @@ class ExportDialog(QDialog):
         self.result = result
         self._record_run(result)
         parts = [f"Đã sao chép {len(result.copied)} file."]
+        if result.already_present:
+            parts.append(f"{len(result.already_present)} file đã có sẵn, giống hệt từng byte → không chép lại.")
         if result.renamed:
             parts.append(f"{len(result.renamed)} file được đặt tên mới để không ghi đè.")
         if result.failed:

@@ -39,7 +39,7 @@ from app.export.layout import (
 )
 from app.export.photos import Photo, PhotoFile, load_photos
 from app.export.sources import SourceSpec
-from app.ingest.fingerprint import quick_fingerprint
+from app.ingest.fingerprint import full_sha256, quick_fingerprint
 from app.storage.project import Project
 
 _CHUNK = 1024 * 1024
@@ -107,7 +107,6 @@ class ExportPlan:
     destination: Path
     operations: list[ExportOp]
     issues: list[ExportIssue] = field(default_factory=list)
-    already_present: list[str] = field(default_factory=list)  # identical copy already at the destination
     photos: dict[int, Photo] = field(default_factory=dict)
     layout_stats: LayoutStats | None = None  # Layout.SUBJECTS only
 
@@ -122,8 +121,24 @@ class ExportPlan:
         return [i.source_relative or i.stem for i in self.issues if i.status is IssueStatus.MISSING]
 
     @property
+    def to_copy(self) -> list[ExportOp]:
+        """Operations whose target does not seem to hold the file yet."""
+        return [op for op in self.operations if not op.maybe_present]
+
+    @property
+    def already_present(self) -> list[str]:
+        """Targets that seem to hold the file already (size + head/tail equal): "có vẻ đã có sẵn". They stay
+        operations; run_export compares the whole content before reporting one as already present (CR-P3-A02)."""
+        return [op.dest_relative for op in self.operations if op.maybe_present]
+
+    @property
     def total_bytes(self) -> int:
-        return sum(op.size for op in self.operations)
+        """Bytes expected to be copied (seemingly present targets excluded)."""
+        return sum(op.size for op in self.to_copy)
+
+    @property
+    def maybe_present_bytes(self) -> int:
+        return sum(op.size for op in self.operations if op.maybe_present)
 
     @property
     def photos_planned(self) -> int:
@@ -145,6 +160,7 @@ class ExportResult:
     manifest_csv: Path | None = None
     manifest_json: Path | None = None
     copied_ids: list[int] = field(default_factory=list)  # asset id of each entry of `copied`, same order
+    already_present: list[str] = field(default_factory=list)  # targets proven identical (full SHA-256): not copied
 
 
 def select_assets(
@@ -327,13 +343,10 @@ def _plan_folder(plan: ExportPlan, photo: Photo, files: list[PhotoFile], folder:
             plan.issues.append(ExportIssue(photo.photo_id, photo.stem, f.kind, IssueStatus.PATH_TOO_LONG,
                                            f"đường dẫn quá dài (> {MAX_PATH_CHARS} ký tự): {rel}", f.relative_path))
             continue
-        if i in present:
-            plan.already_present.append(rel)
-            continue
         st = f.path.stat()
         plan.operations.append(ExportOp(
             photo.photo_id, f.asset_id, f.kind, f.path, f.relative_path, folder, rel, st.st_size, "imported",
-            SourceIdentity(st.st_size, st.st_mtime_ns),
+            SourceIdentity(st.st_size, st.st_mtime_ns), maybe_present=i in present,
         ))
 
 
@@ -376,6 +389,13 @@ def _copy_exclusive(src: Path, dest_root: Path, rel: str) -> str:
         return candidate.relative_to(dest_root).as_posix()
 
 
+def _identical(source: Path, target: Path) -> bool:
+    """True only when ``target`` holds exactly the bytes of ``source`` (size, then full SHA-256 of both)."""
+    if target.is_symlink() or not target.is_file() or target.stat().st_size != source.stat().st_size:
+        return False
+    return full_sha256(target) == full_sha256(source)
+
+
 def run_export(
     plan: ExportPlan,
     *,
@@ -391,6 +411,11 @@ def run_export(
             result.cancelled = True
             break
         try:
+            if item.maybe_present and _identical(item.source, plan.destination / item.dest_relative):
+                result.already_present.append(item.dest_relative)
+                if progress is not None:
+                    progress(i, total)
+                continue
             actual = _copy_exclusive(item.source, plan.destination, item.dest_relative)
         except OSError as exc:
             result.failed[item.dest_relative] = exc.strerror or str(exc)

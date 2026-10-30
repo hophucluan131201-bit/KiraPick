@@ -104,10 +104,16 @@ def make_export_session(tmp_path: Path) -> ExportFixture:
     return fx
 
 
-def snapshot(plan) -> dict[str, list]:  # noqa: ANN001 - old ExportPlan or new
-    """The comparable content of a plan: (source name, dest_relative) per copy, already present, missing."""
+def snapshot(plan) -> dict[str, list]:  # noqa: ANN001
+    """The comparable content of a plan, in the terms of the export before Part 3: the files it would copy
+    (source name, dest_relative), the targets that already hold the file, the missing files.
+
+    Contract note (CR-P3-A02): since Checkpoint A v2 a target that seems to hold the file is still an operation
+    (``maybe_present``, verified by full SHA-256 when copying); the old plan left it out of ``items``. ``copies`` is
+    therefore the operations that are not ``maybe_present`` (``plan.to_copy``), and ``already_present`` the names of
+    the ``maybe_present`` ones — the same two lists the old plan gave."""
     return {
-        "copies": sorted((Path(i.source).name, i.dest_relative) for i in plan.items),
+        "copies": sorted((Path(i.source).name, i.dest_relative) for i in plan.to_copy),
         "already_present": sorted(plan.already_present),
         "missing": sorted(plan.missing),
     }

@@ -143,8 +143,10 @@ def test_re_export_skips_identical_files_instead_of_duplicating(setup: tuple[Pro
 
     for _ in range(3):
         again = plan_export(p, all_ids, dest)
-        assert again.items == []
+        assert again.to_copy == []  # nothing new to copy; the three stay operations to verify (CR-P3-A02)
         assert sorted(again.already_present) == ["DSC_0001 (1).jpg", "DSC_0001 (2).jpg", "DSC_0002.jpg"]
+        rerun = run_export(again)
+        assert rerun.copied == [] and sorted(rerun.already_present) == sorted(again.already_present)
 
     photos = sorted(f.name for f in dest.iterdir() if f.is_file())
     assert photos == ["DSC_0001 (1).jpg", "DSC_0001 (2).jpg", "DSC_0001.jpg", "DSC_0002.jpg"]  # no lists among photos
@@ -153,7 +155,7 @@ def test_re_export_skips_identical_files_instead_of_duplicating(setup: tuple[Pro
     # A newly kept photo is still added; only it gets copied.
     (dest / "DSC_0002.jpg").unlink()
     partial = plan_export(p, all_ids, dest)
-    assert [i.dest_relative for i in partial.items] == ["DSC_0002.jpg"] and len(partial.already_present) == 2
+    assert [i.dest_relative for i in partial.to_copy] == ["DSC_0002.jpg"] and len(partial.already_present) == 2
 
 
 def test_two_exports_in_one_second_keep_both_manifests(setup: tuple[Project, Path, Path], tmp_path: Path,
