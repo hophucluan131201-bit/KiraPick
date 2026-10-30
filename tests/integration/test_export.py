@@ -154,3 +154,25 @@ def test_re_export_skips_identical_files_instead_of_duplicating(setup: tuple[Pro
     (dest / "DSC_0002.jpg").unlink()
     partial = plan_export(p, all_ids, dest)
     assert [i.dest_relative for i in partial.items] == ["DSC_0002.jpg"] and len(partial.already_present) == 2
+
+
+def test_two_exports_in_one_second_keep_both_manifests(setup: tuple[Project, Path, Path], tmp_path: Path,
+                                                       monkeypatch) -> None:  # noqa: ANN001
+    """Found by Part 3 Task 4: a second export into the same folder within the same second raised FileExistsError
+    after copying (the manifest name is the time to the second, opened with 'x')."""
+    from app.export import copy_export
+
+    class Frozen:
+        @staticmethod
+        def now():  # noqa: ANN205
+            import datetime as dt
+            return dt.datetime(2026, 10, 30, 12, 0, 0)
+
+    monkeypatch.setattr(copy_export, "datetime", Frozen)
+    p, _, _ = setup
+    ids = sorted(_ids(p).values())
+    dest = tmp_path / "out"
+    first = run_export(plan_export(p, ids[:1], dest))
+    second = run_export(plan_export(p, ids[1:], dest))
+    assert first.manifest_csv != second.manifest_csv and second.manifest_csv.is_file()
+    assert first.manifest_json != second.manifest_json and second.manifest_json.is_file()

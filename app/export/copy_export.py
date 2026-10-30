@@ -379,8 +379,12 @@ def _write_manifests(dest: Path, done: list[tuple[ExportOp, str]], photos: dict[
         })
     folder = dest / MANIFEST_DIR
     folder.mkdir(exist_ok=True)
-    csv_path = folder / f"kirapick_export_{stamp}.csv"
-    json_path = folder / f"kirapick_export_{stamp}.json"
+    name, n = f"kirapick_export_{stamp}", 1
+    while (folder / f"{name}.csv").exists() or (folder / f"{name}.json").exists():  # two exports in one second
+        n += 1
+        name = f"kirapick_export_{stamp}_{n}"
+    csv_path = folder / f"{name}.csv"
+    json_path = folder / f"{name}.json"
     # utf-8-sig so Excel on Windows opens Vietnamese paths correctly
     with open(csv_path, "x", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
