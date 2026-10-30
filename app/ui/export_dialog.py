@@ -233,6 +233,8 @@ class ExportDialog(QDialog):
         scan_row.addWidget(self.stop_scan_button)
         sbox.addLayout(scan_row)
         layout.addWidget(source)
+        if settings is not None:
+            migrate_export_settings(settings)  # before the notice below reads its flag
         external = settings is not None and str(settings.value(SOURCE_KEY, "imported")) == "external"
         (self.source_external if external else self.source_imported).setChecked(True)
 

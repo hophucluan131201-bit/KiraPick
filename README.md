@@ -91,9 +91,17 @@ kéo thanh cỡ ảnh lớn, app tự làm ảnh nhỏ nét hơn (đọc ảnh g
 **Danh sách khách chọn (📋 Khách chọn):** dán tin nhắn khách gửi; app hiểu số, khoảng
 (`9657-9660`, `9657 đến 9660`, `9645-50`) và tên file đầy đủ, báo trước những số không tìm thấy.
 
-**Xuất ảnh** chỉ **sao chép** (Giữ, Yêu thích, ≥ N sao, ảnh đang chọn hoặc danh sách khách), giữ
-cặp RAW+JPEG đi cùng nhau, không ghi đè, bỏ qua ảnh đã xuất trước đó, và ghi danh sách CSV/JSON
-vào thư mục con `_kirapick_danh_sach`.
+**Xuất ảnh** chỉ **sao chép** (Giữ, Yêu thích, ≥ N sao, ảnh đang chọn hoặc danh sách khách). Ba lựa
+chọn độc lập: ① **Nguồn** — thư mục đã nhập, hoặc nguồn khác (thẻ nhớ, ổ cứng: KiraPick chỉ đọc, file
+cùng định dạng phải giống hệt từng byte, khác định dạng thì khớp theo giờ chụp ≤ 2 giây và cùng máy;
+trường hợp không chắc bạn tự chọn "Dùng file này"); ② **Định dạng** — RAW + JPEG, chỉ RAW, chỉ JPEG
+(không chuyển đổi); ③ **Thư mục đích** — một thư mục, hoặc mỗi chủ thể một thư mục (ảnh chưa rõ
+người vào "Chưa xác định"). Cặp RAW+JPEG luôn cùng tên; không bao giờ ghi đè (file trùng tên khác nội
+dung → tên mới " (1)"); file đã có giống hệt được bỏ qua; nút Dừng dừng ngay cả giữa một file lớn (file
+dở dang bị xoá). Danh sách đầy đủ mọi file và lý do bỏ qua (CSV/JSON) nằm trong thư mục con
+`_kirapick_danh_sach`; "Thử lại các file chưa chép" chép phần còn thiếu. Tab **📋 Tên ảnh đã Chọn**
+sao chép tên ảnh (mỗi ảnh một dòng, báo khi có ảnh khác nhau trùng tên) mà không cần thẻ hay thư mục
+đích. Tuỳ chọn cũ "Giữ cấu trúc thư mục con" đã bỏ.
 
 **Dữ liệu của ứng dụng** (không phải ảnh): `%LOCALAPPDATA%\KiraPick` — `sessions` (ghi nhớ từng
 thư mục ảnh, tự quên sau 30 ngày không mở; **↺ Làm lại** để quên ngay), `learning` (bộ nhớ học:
@@ -204,9 +212,16 @@ screens or with large cards, sharper thumbnails are made automatically (the phot
 (`9657-9660`, `9657 đến 9660`, `9645-50`) and full file names are understood, and names that match
 no photo are reported before anything is saved.
 
-**Export** only **copies** (kept, favourites, ≥ N stars, the selection or a client list), keeps
-RAW+JPEG pairs together, never overwrites, skips photos already exported there, and writes a
-CSV/JSON list into the `_kirapick_danh_sach` subfolder.
+**Export** only **copies** (kept, favourites, ≥ N stars, the selection or a client list). Three
+independent choices: ① **source** — the imported folders, or another folder (card, drive: read only;
+same format must be byte-identical, other format matches by capture time ≤ 2 s and camera; unsure cases
+are confirmed by you); ② **format** — RAW + JPEG, RAW only, JPEG only (no conversion); ③ **layout** —
+one folder, or one folder per subject (unknown → "Chưa xác định"). A RAW+JPEG pair keeps one name; nothing
+is overwritten; identical files already there are skipped; Dừng stops even inside a large file (the
+partial file is removed). A full list of every file and every skip reason (CSV/JSON) goes into
+`_kirapick_danh_sach`; "Thử lại các file chưa chép" copies what is missing. The **📋 Tên ảnh đã Chọn** tab
+copies the kept photos' names (one line per photo, warns about different photos with the same name)
+without a card or destination. The old "Giữ cấu trúc thư mục con" option was removed.
 
 **App data** (not photos): `%LOCALAPPDATA%\KiraPick` — `sessions` (memory of each photo folder,
 forgotten after 30 days unused; **↺ Làm lại** forgets it now), `learning` (numbers only, from your
