@@ -9,8 +9,8 @@ No release marker is pushed until the owner gives the release command.
 | Decision | Status |
 |---|---|
 | Code review of UI part 1 (Tasks 1–15) | **passed** — Task 15 APPROVED WITH NOTES (implementation only) |
-| Code review of UI part 2 — Compare (Tasks 1–8) | **pending** — Tasks 1–7 approved; Task 8 REQUEST CHANGES (CR-P2-FINAL-01/02) answered in `review_p2_final_v2` |
-| Part 3 — Advanced Export | **not started** — designed and built after part 2 is approved; no beta before it (review) |
+| Code review of UI part 2 — Compare (Tasks 1–8) | **passed** — PART 2 APPROVED WITH NOTES (2026-10-30): K12 and K2 stay known issues; the owner's Windows acceptance (section 3 step 10) pending |
+| Part 3 — Advanced Export | **design** — specification and plan for external review, no code yet; no beta before it |
 | Release ready (beta may be published) | **NO** — open: B3, B4, B5, B6, K2. Next phase: release-candidate validation, nothing published |
 
 Rules for the release-candidate phase (review):

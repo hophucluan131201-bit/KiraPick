@@ -358,11 +358,11 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
-## UI part 2 — Compare mode (2026-10-29) — status: Tasks 1–8 tested offscreen (Linux) and on Windows CI (real platform); Task 8 V2 waits for review; Windows manual blocked
+## UI part 2 — Compare mode (2026-10-29) — status: CODE REVIEW COMPLETE (Part 2 APPROVED WITH NOTES, 2026-10-30); pending the owner's Windows acceptance and the final beta release validation
 
 Spec `docs/superpowers/specs/2026-10-29-kirapick-compare-design.md` (rev 3), plan
 `docs/superpowers/plans/2026-10-29-kirapick-compare.md`. Batches 1–2 and Task 7 approved by the external reviewer;
-Task 8 waits for the final Part 2 review. Not released: no tag, no build, no publish.
+External review 2026-10-30: P2-01…P2-08 approved; CR-P2-FINAL-01 / -02 resolved; search-timer regression fixed with tests. Notes kept: K12 (shutdown / teardown, known issue), K2 (part 1 GC pause; the Windows perf step is not fully green). Not released: no tag, no installer, no build, no publish.
 
 | Task | Status | Evidence |
 |---|---|---|
