@@ -135,10 +135,10 @@ def _held_export(qtbot, w: mw.MainWindow, dest: Path, monkeypatch) -> tuple[thre
     gate, copying = threading.Event(), threading.Event()
     real = copy_export._copy_exclusive
 
-    def held(src: Path, dest_root: Path, rel: str) -> str:
+    def held(src: Path, dest_root: Path, rel: str, **kw):  # noqa: ANN003, ANN202
         copying.set()
         gate.wait(30)
-        return real(src, dest_root, rel)
+        return real(src, dest_root, rel, **kw)
 
     monkeypatch.setattr(copy_export, "_copy_exclusive", held)
     w.select_row(0)

@@ -541,9 +541,15 @@ class _Copied:
     source_mtime_ns: int  # of the source after reading
 
 
-def _copy_exclusive(src: Path, dest_root: Path, rel: str) -> _Copied:
+class CopyCancelled(ExportError):
+    """The user stopped the export inside a file: that file (ours) was removed."""
+
+
+def _copy_exclusive(src: Path, dest_root: Path, rel: str, *,
+                    should_cancel: Callable[[], bool] | None = None) -> _Copied:
     """Copy ``src`` into the new file ``dest_root/rel`` (FileExistsError when the name is taken: never overwritten),
-    hashing the bytes from the same stream. A failed copy removes only the file it created."""
+    hashing the bytes from the same stream; ``should_cancel`` is asked between 1 MiB chunks (CopyCancelled). A
+    failed or cancelled copy removes only the file it created."""
     target = dest_root / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     out = open(target, "xb")  # noqa: SIM115 - closed below; 'x' never overwrites
@@ -565,6 +571,8 @@ def _copy_exclusive(src: Path, dest_root: Path, rel: str) -> _Copied:
                     digest.update(chunk)
                     out.write(chunk)
                     size += len(chunk)
+                    if should_cancel is not None and should_cancel():
+                        raise CopyCancelled("đã dừng giữa một file")
                 after = os.fstat(inp.fileno())
         shutil.copystat(src, target)
         return _Copied(digest.hexdigest(), size, after.st_mtime_ns)
@@ -644,10 +652,12 @@ def _write(run: _Run, members: list[tuple[ExportOp, str]]) -> bool:
             run.set(op, OpStatus.FAILED, SOURCE_GONE)
             continue
         try:
-            copied = _copy_exclusive(op.source, run.plan.destination, rel)
-        except FileExistsError:
-            for _op, done_rel, _sha in created:
+            copied = _copy_exclusive(op.source, run.plan.destination, rel, should_cancel=run.should_cancel)
+        except (FileExistsError, CopyCancelled) as exc:
+            for _op, done_rel, _sha in created:  # one attempt writes a pair whole or not at all
                 (run.plan.destination / done_rel).unlink(missing_ok=True)
+            if isinstance(exc, CopyCancelled):
+                raise
             return False
         except _SourceGone:
             run.gone(op)
@@ -844,10 +854,8 @@ def run_export(
             break
         try:
             _run_group(run, group)
-        except HashCancelled:
-            result.cancelled = True
-            for op in group:
-                result.statuses.pop(op.dest_relative, None)
+        except (HashCancelled, CopyCancelled):
+            result.cancelled = True  # this group's files written by the stopped attempt were removed
             break
         _note_incomplete(run, group)
         done += len(group)

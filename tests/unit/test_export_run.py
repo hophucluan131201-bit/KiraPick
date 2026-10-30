@@ -165,7 +165,7 @@ def test_source_changed_before_copy(fx, match: str, how: str, monkeypatch: pytes
     else:
         st = op.source.stat()
         os.utime(op.source, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
-    monkeypatch.setattr(copy_export, "_copy_exclusive", lambda *a: pytest.fail("copied a changed source"))
+    monkeypatch.setattr(copy_export, "_copy_exclusive", lambda *a, **k: pytest.fail("copied a changed source"))
     result = run_export(plan)
     assert result.statuses == {op.dest_relative: "source_changed"}
     assert not (fx.dest / op.dest_relative).exists() and result.copied == []
@@ -286,11 +286,11 @@ def test_pair_race_removes_only_our_files(fx, monkeypatch: pytest.MonkeyPatch) -
     real = copy_export._copy_exclusive
     fired = []
 
-    def racing(src: Path, root: Path, rel: str):  # noqa: ANN202
+    def racing(src: Path, root: Path, rel: str, **kw):  # noqa: ANN003, ANN202
         if rel == "DSC_0001.JPG" and not fired:
             fired.append(1)
             write_file(root / rel, 6)  # appears between our two creates
-        return real(src, root, rel)
+        return real(src, root, rel, **kw)
 
     monkeypatch.setattr(copy_export, "_copy_exclusive", racing)
     result = run_export(plan)
@@ -355,8 +355,8 @@ def test_free_space_rechecked_before_extra_copy(fx, monkeypatch: pytest.MonkeyPa
 
 def test_cancel_writes_not_started(fx) -> None:  # noqa: ANN001
     plan = plan_export(fx.project, select_assets(fx.project, Selection.KEEP), fx.dest)
-    calls = iter([False, True])
-    result = run_export(plan, should_cancel=lambda: next(calls, True))
+    stop: list[int] = []  # Dừng pressed once the first photo is done
+    result = run_export(plan, should_cancel=lambda: bool(stop), progress=lambda done, _total: stop.append(done))
     assert result.cancelled
     statuses = list(result.statuses.values())
     assert statuses.count("copied") >= 1 and "not_started" in statuses and len(statuses) == len(plan.operations)
@@ -404,8 +404,8 @@ def test_copied_files_stay_when_source_vanishes_midway(fx, monkeypatch: pytest.M
     plan = _external(fx, card, [fx.ids["raw_only"], fx.ids["jpeg_only"], fx.ids["pair"]])
     real = copy_export._copy_exclusive
 
-    def eject_after_first(src: Path, root: Path, rel: str):  # noqa: ANN202
-        out = real(src, root, rel)
+    def eject_after_first(src: Path, root: Path, rel: str, **kw):  # noqa: ANN003, ANN202
+        out = real(src, root, rel, **kw)
         shutil.rmtree(card, ignore_errors=True)
         return out
 
@@ -485,3 +485,102 @@ def test_issue_rows_keep_their_status(fx) -> None:  # noqa: ANN001
     result = run_export(plan_export(fx.project, [fx.ids["tiff"]], fx.dest, fmt=ExportFormat.JPEG))
     (row,) = _rows(result)
     assert (row["status"], row["kind"], row["error"]) == (IssueStatus.MISSING_FORMAT.value, "jpeg", "Thiếu JPEG")
+
+
+# --- RV-P3-C01 / C04: cancel inside a large file; second member of a pair fails ------------------------------------
+
+BIG = 3 * 1024 * 1024 + 123
+
+
+def _big_pair(fx) -> int:  # noqa: ANN001
+    from tests.fixtures_export import add_asset
+
+    conn = fx.project.conn
+    source_id = conn.execute("SELECT id FROM sources").fetchone()[0]
+    group = conn.execute("INSERT INTO pair_groups (status) VALUES ('confirmed')").lastrowid
+    raw = add_asset(fx.project, source_id, fx.root, "DSC_0098.NEF", seed=601, kind="raw", pair_group=group, size=BIG)
+    add_asset(fx.project, source_id, fx.root, "DSC_0098.JPG", seed=602, kind="raster", pair_group=group, size=BIG)
+    conn.commit()
+    return raw
+
+
+def _photo_files(dest: Path) -> list[str]:
+    return sorted(p.relative_to(dest).as_posix() for p in dest.rglob("*")
+                  if p.is_file() and copy_export.MANIFEST_DIR not in p.parts)
+
+
+def _cancel_after_chunks(n: int):  # noqa: ANN202
+    calls = [0]
+
+    def should_cancel() -> bool:
+        calls[0] += 1
+        return calls[0] > n
+
+    return should_cancel
+
+
+def test_cancel_inside_a_large_file_removes_the_partial_file(fx) -> None:  # noqa: ANN001
+    plan = plan_export(fx.project, [_big_pair(fx)], fx.dest)
+    result = run_export(plan, should_cancel=_cancel_after_chunks(2))  # group check + 1st chunk, then stop
+    assert result.cancelled and result.copied == []
+    assert _photo_files(fx.dest) == []  # the half-written NEF is gone
+    assert result.statuses == {"DSC_0098.NEF": "not_started", "DSC_0098.JPG": "not_started"}
+    assert [r["status"] for r in _rows(result)] == ["not_started", "not_started"]
+
+
+def test_cancel_inside_the_second_file_rolls_back_the_pair(fx, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
+    plan = plan_export(fx.project, [_big_pair(fx)], fx.dest)
+    real, finished = copy_export._copy_exclusive, []
+
+    def spy(src: Path, root: Path, rel: str, **kw):  # noqa: ANN003, ANN202
+        out = real(src, root, rel, **kw)
+        finished.append(rel)
+        return out
+
+    monkeypatch.setattr(copy_export, "_copy_exclusive", spy)
+    result = run_export(plan, should_cancel=_cancel_after_chunks(1 + 4 + 1))  # NEF done (4 chunks), stop in the JPEG
+    assert finished == ["DSC_0098.NEF"]  # the NEF was complete on disk before the stop
+    assert result.cancelled and result.copied == [] and _photo_files(fx.dest) == []  # never half a pair
+    assert set(result.statuses.values()) == {"not_started"}
+
+
+def test_second_member_fails_after_the_first_was_written(fx, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
+    plan = _pair_plan(fx)
+    real = copy_export._copy_exclusive
+
+    def full_disk(src: Path, root: Path, rel: str, **kw):  # noqa: ANN003, ANN202
+        if rel.endswith(".JPG"):
+            (root / rel).write_bytes(b"partial")  # what a failing write leaves …
+            (root / rel).unlink()  # … and removes (as _copy_exclusive does)
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real(src, root, rel, **kw)
+
+    monkeypatch.setattr(copy_export, "_copy_exclusive", full_disk)
+    result = run_export(plan)
+    assert result.statuses == {"DSC_0001.NEF": "copied", "DSC_0001.JPG": "failed"}
+    assert result.failed == {"DSC_0001.JPG": "No space left on device"}
+    assert _photo_files(fx.dest) == ["DSC_0001.NEF"]
+    rows = {r["kind"]: r for r in _rows(result)}
+    assert rows["raw"]["note"] == rows["jpeg"]["note"] == copy_export.NOTE_INCOMPLETE
+    assert rows["jpeg"]["exported_as"] == "" and rows["jpeg"]["sha256"] == ""
+    assert rows["raw"]["sha256"] == sha256_file(fx.dest / "DSC_0001.NEF")
+
+
+def test_second_member_name_race_then_cancel(fx, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
+    plan = plan_export(fx.project, [_big_pair(fx)], fx.dest)
+    real = copy_export._copy_exclusive
+    stop = []
+
+    def race_then_stop(src: Path, root: Path, rel: str, **kw):  # noqa: ANN003, ANN202
+        if rel == "DSC_0098.JPG" and not stop:
+            write_file(root / rel, 7)  # another program takes the JPEG's name …
+            stop.append(1)  # … and the user presses Dừng while the pair is moved to "(1)"
+        return real(src, root, rel, **kw)
+
+    monkeypatch.setattr(copy_export, "_copy_exclusive", race_then_stop)
+    result = run_export(plan, should_cancel=lambda: len(stop) > 0 and stop.append(1) is None and len(stop) > 3)
+    assert result.cancelled and result.copied == []
+    assert _photo_files(fx.dest) == ["DSC_0098.JPG"]  # only the other program's file; ours rolled back
+    assert set(result.statuses.values()) == {"not_started"}
+    rows = _rows(result)
+    assert [r["status"] for r in rows] == ["not_started", "not_started"] and all(not r["exported_as"] for r in rows)

@@ -39,10 +39,10 @@ def test_partial_failure_lists_only_copied_photos(setup, tmp_path: Path, monkeyp
     broken = plan.items[1]
     real = copy_export._copy_exclusive
 
-    def flaky(src, root, rel):  # noqa: ANN001, ANN202
+    def flaky(src, root, rel, **kw):  # noqa: ANN001, ANN003, ANN202
         if rel == broken.dest_relative:
             raise OSError(28, "No space left on device")
-        return real(src, root, rel)
+        return real(src, root, rel, **kw)
 
     monkeypatch.setattr(copy_export, "_copy_exclusive", flaky)
     result = run_export(plan)
@@ -53,8 +53,8 @@ def test_partial_failure_lists_only_copied_photos(setup, tmp_path: Path, monkeyp
 def test_cancelled_export_lists_what_was_copied_before_the_stop(setup, tmp_path: Path) -> None:  # noqa: ANN001, F811
     p, _, _ = setup
     plan = plan_export(p, sorted(_ids(p).values()), tmp_path / "out")
-    calls = iter([False, True, True])
-    result = run_export(plan, should_cancel=lambda: next(calls))
+    stop = []  # the user presses Dừng once the first file is done (checks run between files and 1 MiB chunks)
+    result = run_export(plan, should_cancel=lambda: bool(stop), progress=lambda done, _total: stop.append(done))
     assert result.cancelled and result.copied_ids == [plan.items[0].asset_id]
 
 
