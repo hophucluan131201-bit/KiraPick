@@ -20,7 +20,7 @@ from app.export.sources import SourceSpec, scan_external
 from app.ingest.fingerprint import quick_fingerprint
 from app.storage import decisions
 from app.storage.project import Project, utc_now
-from app.ui.export_dialog import ExportDialog
+from app.ui.export_dialog import IMPORTED_SYNC_LIMIT, ExportDialog
 from tests.perf.test_grid_perf import _record
 from tests.unit.test_export_match import exif_file
 
@@ -66,9 +66,11 @@ def test_plan_imported_on_gui_thread(tmp_path: Path, n: int) -> None:
             plan = plan_export(project, ids, tmp_path / "out")
             times.append((time.perf_counter() - t0) * 1000)
         assert len(plan.operations) == n
-        _record("export_plan_imported", n, best_ms=min(times), worst_ms=max(times))
-        if n == 1000:
-            assert min(times) <= 100, "imported planning must move to the plan thread (spec §5)"
+        per_photo = min(times) / n
+        _record("export_plan_imported", n, best_ms=min(times), worst_ms=max(times),
+                gui_thread_ms_at_limit=per_photo * IMPORTED_SYNC_LIMIT)
+        # spec §5: the dialog plans on the GUI thread only up to IMPORTED_SYNC_LIMIT photos; that must stay ≤ 100 ms
+        assert per_photo * IMPORTED_SYNC_LIMIT <= 100
     finally:
         project.close()
 

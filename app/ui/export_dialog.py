@@ -67,7 +67,9 @@ from app.ui.shutdown import Gate
 
 _PREVIEW_ROWS = 300
 MAX_PICKERS = 50  # candidate pickers built at once (widgets are slow); the next ones appear once these are decided
-IMPORTED_SYNC_LIMIT = 1000  # more photos than this: the imported-folder plan runs in the plan thread too (spec §5)
+# More photos than this: the imported-folder plan runs in the plan thread too (spec §5). Measured per photo: Linux VM
+# 0.07 ms, Windows CI 0.14 ms (1 000 photos: 140 ms > 100 ms) → 300 photos stay ≤ ~45 ms on the GUI thread.
+IMPORTED_SYNC_LIMIT = 300
 FORMAT_KEY = "export/format"
 SOURCE_KEY = "export/source"
 LAYOUT_KEY = "export/layout"
@@ -485,7 +487,7 @@ class ExportDialog(QDialog):
             self._start_plan(PlanRequest(tuple(ids), Path(dest_text), SourceSpec("external", root, index),
                                          self.export_format, self.export_layout, dict(self.confirmations)), root)
             return
-        if len(ids) > IMPORTED_SYNC_LIMIT:  # measured: 10 000 photos plan in ~0.9 s — not on the GUI thread
+        if len(ids) > IMPORTED_SYNC_LIMIT:  # measured: 10 000 photos plan in 0.9 s (Linux) – 1.4 s (Windows CI)
             self._start_plan(PlanRequest(tuple(ids), Path(dest_text), SourceSpec(), self.export_format,
                                          self.export_layout), None)
             return

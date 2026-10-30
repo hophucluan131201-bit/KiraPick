@@ -255,7 +255,10 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           KIRAPICK_PERF_OUT: perf.jsonl
-        run: python -m pytest -q -m perf tests/perf
+        run: |
+          . scripts/ci_report.ps1
+          $code = Invoke-Pytest -Log perf.log -Title perf-tests -TimeoutSec 2400 -PytestArgs @("-m", "perf", "tests/perf")
+          exit $code
       - name: Performance results (4 results per notice; a job keeps only 50 notices)
         if: always()
         shell: pwsh
