@@ -197,3 +197,36 @@ def test_seemingly_present_target_removed_before_copy(fx) -> None:  # noqa: ANN0
     (fx.dest / "DSC_0003.NEF").unlink()
     result = run_export(plan)
     assert result.copied == ["DSC_0003.NEF"] and result.already_present == []
+
+
+# ---- RV-P3-A03: a RAW+JPEG pair asked for through either file -------------------------------------------------------
+
+LEGACY_PAIR_IDENTITY = {
+    # Recorded from the export before Part 3 (copy_export.py at 17d4152, include_pairs=True) on this fixture with a
+    # 'reject' decision on the hidden JPEG: the first id given is the photo; its decision applies to both files;
+    # each file is copied once. (scratchpad script legacy_identity.py, output quoted in review_p3_batchA_v2.)
+    "raw,jpg": [("DSC_0001.NEF", "keep"), ("DSC_0001.JPG", "keep")],
+    "jpg,raw": [("DSC_0001.JPG", "reject"), ("DSC_0001.NEF", "reject")],
+    "jpg": [("DSC_0001.JPG", "reject"), ("DSC_0001.NEF", "reject")],
+}
+
+
+@pytest.mark.parametrize("order", list(LEGACY_PAIR_IDENTITY))
+def test_pair_identity_by_input_order(fx, order: str) -> None:  # noqa: ANN001
+    from app.export.layout import Layout
+    from app.storage import decisions
+    from tests.unit.test_export_layout import _occ, _subject
+
+    conn = fx.project.conn
+    raw, jpg = fx.files["pair"]
+    decisions.set_flag(conn, jpg, "reject")  # a decision left on the hidden JPEG (e.g. from before pairing)
+    mai = _subject(conn, "Mai")
+    _occ(conn, raw, mai)
+    ids = {"raw,jpg": [raw, jpg], "jpg,raw": [jpg, raw], "jpg": [jpg]}[order]
+    plan = plan_export(fx.project, ids, fx.dest)
+    got = [(op.dest_relative, plan.photos[op.photo_id].flag) for op in plan.operations]
+    assert got == LEGACY_PAIR_IDENTITY[order]  # same photo identity and decision as before Part 3
+    assert len(plan.photos) == 1 and plan.photos_planned == 1  # one photo, never exported twice
+    assert {op.asset_id for op in plan.operations} == {raw, jpg}
+    subjects = plan_export(fx.project, ids, fx.dest / "s", layout=Layout.SUBJECTS)
+    assert sorted(op.dest_relative for op in subjects.operations) == ["Mai/DSC_0001.JPG", "Mai/DSC_0001.NEF"]
