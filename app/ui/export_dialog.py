@@ -123,7 +123,14 @@ def _remembered(settings: QSettings | None, key: str, enum, default):  # noqa: A
 
 
 def _gb(n: int) -> str:
-    return f"{n / 1e9:.2f} GB" if n >= 1e8 else f"{n / 1e6:.1f} MB"
+    if n >= 1e8:
+        return f"{n / 1e9:.2f} GB"
+    return f"{n / 1e6:.1f} MB" if n >= 1e6 else f"{n / 1e3:.0f} KB"
+
+
+def _note_only(issue: ExportIssue) -> bool:
+    """"RAW/JPEG không có tại nguồn được chọn": the photo's other format is copied — information, not a problem."""
+    return issue.status is IssueStatus.MISSING and issue.detail.endswith("không có tại nguồn được chọn")
 
 
 def _candidate_text(c: Candidate) -> str:
@@ -300,9 +307,14 @@ class ExportDialog(QDialog):
         self.plan_table.setHorizontalHeaderLabels(["Ảnh", "Lấy từ", "Chép vào"])
         self.issue_table = QTableWidget(0, 5)
         self.issue_table.setHorizontalHeaderLabels(["Tình trạng", "Ảnh", "Loại", "Chi tiết / file ứng viên", ""])
-        for table in (self.plan_table, self.issue_table):
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-            table.horizontalHeader().setStretchLastSection(True)
+        modes = {self.plan_table: (QHeaderView.ResizeMode.ResizeToContents, QHeaderView.ResizeMode.Stretch,
+                                   QHeaderView.ResizeMode.Stretch),
+                 self.issue_table: (QHeaderView.ResizeMode.ResizeToContents, QHeaderView.ResizeMode.ResizeToContents,
+                                    QHeaderView.ResizeMode.ResizeToContents, QHeaderView.ResizeMode.Stretch,
+                                    QHeaderView.ResizeMode.ResizeToContents)}
+        for table, column_modes in modes.items():
+            for column, mode in enumerate(column_modes):
+                table.horizontalHeader().setSectionResizeMode(column, mode)
             table.verticalHeader().setVisible(False)
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             table.setMinimumHeight(120)
@@ -325,6 +337,7 @@ class ExportDialog(QDialog):
         nbox.addWidget(self.names_with_ext)
         self.names_warning = QLabel()
         self.names_warning.setWordWrap(True)
+        self.names_warning.hide()
         self.names_warning.setStyleSheet(f"color: {theme.ERROR};")
         nbox.addWidget(self.names_warning)
         self.names_list = QPlainTextEdit()
@@ -569,9 +582,14 @@ class ExportDialog(QDialog):
         missing = sum(1 for i in plan.issues if i.status is IssueStatus.MISSING)
         if missing and not self.source_external.isChecked():
             lines.append(f"<span style='color:{theme.ERROR}'>{missing} file không còn trên ổ đĩa sẽ bị bỏ qua.</span>")
-        if plan.issues:
-            lines.append(f"<span style='color:{theme.ERROR}'>{len(plan.issues)} mục cần xem lại (tab 'Cần xem lại') "
+        problems = [i for i in plan.issues if not _note_only(i)]
+        if problems:
+            lines.append(f"<span style='color:{theme.ERROR}'>{len(problems)} mục cần xem lại (tab 'Cần xem lại') "
                          "sẽ bị bỏ qua nếu không xử lý.</span>")
+        notes = len(plan.issues) - len(problems)
+        if notes:
+            lines.append(f"{notes} ảnh chỉ có một định dạng ở nguồn đã chọn: chép định dạng có sẵn (ghi chú trong "
+                         "tab 'Cần xem lại').")
         lines += self._subject_hints(plan)
         if not plan.to_copy and plan.already_present:
             lines.append("<b>Tất cả ảnh đã chọn có vẻ đã có ở thư mục này.</b> Bấm nút để kiểm tra đầy đủ "
@@ -598,9 +616,12 @@ class ExportDialog(QDialog):
                  f"{folders} thư mục ({plan.destination})", f"dung lượng trống {_gb(free)}"]
         if plan.already_present:
             parts.append(f"có vẻ đã có sẵn {len(plan.already_present)} (kiểm tra đầy đủ khi chép)")
-        for status, word in ((IssueStatus.MISSING, "thiếu"), (IssueStatus.MISSING_FORMAT, "thiếu định dạng"),
-                             (IssueStatus.NOT_MATCHED, "không khớp"), (IssueStatus.CONTENT_DIFFERS, "khác nội dung"),
-                             (IssueStatus.AMBIGUOUS, "không chắc"), (IssueStatus.PATH_TOO_LONG, "đường dẫn quá dài")):
+        missing = sum(1 for i in plan.issues if i.status is IssueStatus.MISSING and not _note_only(i))
+        if missing:
+            parts.append(f"thiếu {missing}")
+        for status, word in ((IssueStatus.MISSING_FORMAT, "thiếu định dạng"), (IssueStatus.NOT_MATCHED, "không khớp"),
+                             (IssueStatus.CONTENT_DIFFERS, "khác nội dung"), (IssueStatus.AMBIGUOUS, "không chắc"),
+                             (IssueStatus.PATH_TOO_LONG, "đường dẫn quá dài")):
             n = plan.counts().get(status, 0)
             if n:
                 parts.append(f"{word} {n}")
@@ -652,7 +673,8 @@ class ExportDialog(QDialog):
         self.issue_table.setRowCount(len(self._issue_rows))
         pickers = 0
         for r, issue in enumerate(self._issue_rows):
-            self.issue_table.setItem(r, 0, QTableWidgetItem(ISSUE_LABELS[issue.status]))
+            self.issue_table.setItem(r, 0, QTableWidgetItem("Ghi chú" if _note_only(issue)
+                                                            else ISSUE_LABELS[issue.status]))
             self.issue_table.setItem(r, 1, QTableWidgetItem(issue.stem))
             self.issue_table.setItem(r, 2, QTableWidgetItem(_KIND_LABELS.get(issue.kind, "")))
             candidates = [c for c in issue.candidates if isinstance(c, Candidate)]
@@ -702,6 +724,7 @@ class ExportDialog(QDialog):
                 + ". Mỗi tên chỉ ghi một lần; người nhận dò theo tên có thể gặp nhiều ảnh cùng tên.")
         else:
             self.names_warning.setText("")
+        self.names_warning.setVisible(bool(names.shared_stems))
         self.names_status.setText("")
         self.copy_names_button.setEnabled(bool(names.lines))
 

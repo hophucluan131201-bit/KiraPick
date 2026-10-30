@@ -3,6 +3,7 @@
     python scripts/ui_screenshots.py --out <folder>            # all sizes at 100 %
     python scripts/ui_screenshots.py --out <folder> --scale 2   # e.g. 2560×1387 physical = 1280×693 logical
     python scripts/ui_screenshots.py --out <folder> --compare   # Compare (part 2) with 2, 3 and 4 photos
+    python scripts/ui_screenshots.py --out <folder> --export    # Export dialog (part 3) at the five layout modes
 
 Uses synthetic photos in a temporary folder and a temporary settings file; never touches real photos or the
 user's KiraPick data. Sizes are the window's client area in logical pixels (as app.ui.layout_modes expects).
@@ -77,11 +78,70 @@ def _compare_shots(w, out: Path, suffix: str, settle) -> None:  # noqa: ANN001
     w.grab().save(str(out / f"compare4_1920x1000{suffix}_zoom100.png"))
 
 
+def _card(tmp: Path) -> Path:
+    """Another folder for the export: two kept JPEGs (content matches) and two RAW stand-ins for DSC_0004 within
+    2 s of its capture time (an unsure match the user confirms)."""
+    import shutil
+
+    from PIL import Image
+
+    card = tmp / "Thẻ nhớ" / "DCIM"
+    (card / "100NIKON").mkdir(parents=True)
+    for name in ("DSC_0000.jpg", "DSC_0001.jpg"):
+        shutil.copy2(tmp / "photos" / name, card / "100NIKON" / name)
+    for folder, second in (("100NIKON", "09"), ("101NIKON", "07")):
+        (card / folder).mkdir(exist_ok=True)
+        exif = Image.Exif()
+        exif.get_ifd(0x8769)[0x9003] = f"2026:10:25 16:00:{second}"
+        Image.new("RGB", (16, 16), (9, 9, 9)).save(card / folder / "DSC_0004.NEF", "TIFF", exif=exif.tobytes())
+    return card.parent
+
+
+def _export_shots(w, tmp: Path, out: Path, suffix: str, settle) -> None:  # noqa: ANN001
+    """The export dialog over the window at WIDE / MEDIUM / NARROW / SHORT / TINY: imported preview, another folder
+    with an unsure match to confirm, and the names tab."""
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    QMessageBox.information = lambda *a, **k: None  # type: ignore[method-assign]
+    card = _card(tmp)
+    names = ["wide", "medium", "narrow", "short", "tiny"]
+    for (width, height), mode in zip(COMPARE_SIZES, names):
+        w.resize(width, height)
+        settle()
+        dialog = w.open_export_dialog()
+        dialog.resize(min(880, width - 20), min(700, height - 20))
+        dialog.dest.setText(str(tmp / "Xuất"))
+        dialog.source_imported.setChecked(True)
+        dialog.refresh()
+        for _ in range(5):
+            QApplication.processEvents()
+        dialog.grab().save(str(out / f"export_{mode}_{width}x{height}{suffix}_imported.png"))
+        dialog.external_path.setText(str(card))
+        dialog.source_external.setChecked(True)
+        for _ in range(2000):
+            QApplication.processEvents()
+            if dialog.plan is not None and not dialog.scanning:
+                break
+        dialog.preview_tabs.setCurrentIndex(1)
+        dialog.scroll.verticalScrollBar().setValue(dialog.scroll.verticalScrollBar().maximum())
+        QApplication.processEvents()
+        dialog.grab().save(str(out / f"export_{mode}_{width}x{height}{suffix}_external_review.png"))
+        dialog.tabs.setCurrentWidget(dialog.names_tab)
+        QApplication.processEvents()
+        dialog.grab().save(str(out / f"export_{mode}_{width}x{height}{suffix}_names.png"))
+        print(mode, dialog.size().width(), dialog.size().height())
+        dialog._cancel_plans()
+        for t in dialog._plan_threads:
+            t.wait()
+        dialog.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--scale", type=float, default=1.0)
     parser.add_argument("--compare", action="store_true", help="Compare screenshots instead of the grid ones")
+    parser.add_argument("--export", action="store_true", help="Export dialog screenshots instead of the grid ones")
     args = parser.parse_args()
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     if args.scale != 1.0:
@@ -123,6 +183,10 @@ def main() -> int:
 
     if args.compare:
         _compare_shots(w, args.out, suffix, settle)
+        w.close()
+        return 0
+    if args.export:
+        _export_shots(w, tmp, args.out, suffix, settle)
         w.close()
         return 0
     for width, height in (SCALED if args.scale != 1.0 else SIZES):
