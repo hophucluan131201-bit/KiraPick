@@ -10,7 +10,7 @@ No release marker is pushed until the owner gives the release command.
 |---|---|
 | Code review of UI part 1 (Tasks 1–15) | **passed** — Task 15 APPROVED WITH NOTES (implementation only) |
 | Code review of UI part 2 — Compare (Tasks 1–8) | **passed** — PART 2 APPROVED WITH NOTES (2026-10-30): K12 and K2 stay known issues; the owner's Windows acceptance (section 3 step 10) pending |
-| Part 3 — Advanced Export | **design** — specification and plan for external review, no code yet; no beta before it |
+| Part 3 — Advanced Export | **code complete, final review pending** — Batches A and B approved (Checkpoints A v2, B); Batch C (Tasks 9–11) submitted in `review_p3_final`; the owner's Windows acceptance (section 3 step 11) pending; no beta before both |
 | Release ready (beta may be published) | **NO** — open: B3, B4, B5, B6, K2. Next phase: release-candidate validation, nothing published |
 
 Rules for the release-candidate phase (review):
@@ -56,6 +56,8 @@ moves for the hover tests), `perf` includes `test_compare_perf.py` / `test_compa
 | K10 | Compare: the active photo follows the mouse only (owner decision); a pen / touch screen without hover cannot change it except by tapping into a tile | Touch-only use is awkward | Not in scope for part 2 |
 | K11 | Transparent PNGs show their transparent areas filled (the loader flattens to RGB since before part 2; `app.ingest.preview._to_rgb`) | Cosmetic, photo culling uses camera JPEG / RAW | Not changed in part 2 |
 | K12 | Deleting a viewer while its pool still decodes waits for the decode on the GUI thread with Python's GIL held (deadlock); deleting the main window while it waits to close made its "Thoát ngay?" timer crash the process (0xc0000374). Both seen only when test code deleted widgets with work running (a diagnostic script; Windows CI runs 40999914267, 41004173185) | None found in the app: closing, Compare and folder switches wait for the pools first (shutdown contract) and nothing deletes the window while it waits | tests/gui/conftest.py waits for every viewer's pools before pytest-qt deletes widgets; the held-worker layout test always releases its worker. Keep the shutdown contract |
+| K13 | Export from another folder: a RAW whose capture time cannot be read (OM System OM-1 .orf sample; stripped CRW / RAF / MRW / X3F samples) is never matched by time — it is shown as "Không chắc" and the user picks it. A time / manual match is revalidated by size + modification time (+ capture time re-read from the copy), not by a hash taken at planning: a file rewritten in place with the same size, restored mtime and the same metadata would not be detected (spec §3.9, pinned by a test) | Extra clicks for those cameras; deliberate tampering between preview and copy | Documented limit; content matches are fully hashed |
+| K14 | Export: closing the app / switching folder finishes the photo being copied (as the question says); only the progress window's Dừng button stops inside a large file (the partial file is removed). No real memory card was used in tests (folders on the local disk; card ejection simulated by removing the folder) | — | Owner step 11 with a real card reader |
 | K8 | `test_real_raw_*`, RV2-04 pair test and RAW HD numbers skip in CI (RAW samples are git-ignored, some are not redistributable) | Covered on Linux only | — |
 
 Not an issue (checked on the real `windows` platform): the detail tabs need 349 px with full titles in Segoe UI
@@ -76,3 +78,12 @@ Ghi kết quả từng bước (Đạt / Lỗi + ảnh chụp màn hình nếu l
 8. **Tốc độ:** một buổi chụp lớn (≥ 1.000 ảnh): mở, cuộn nhanh, kéo thanh cỡ ảnh lớn nhất, P/X liên tục 2–3 phút, chạy 📊 phân tích AI rồi cuộn trong lúc chạy. Ghi lại chỗ nào thấy giật. Thoát app rồi gửi dòng `GUI-thread GC` cuối cùng trong `kirapick.log`.
 9. **Ổ đầy (không bắt buộc):** USB gần đầy làm nơi xuất → app báo không đủ chỗ trước khi chép.
 10. **So sánh (phần 2):** đánh dấu 2, 3 rồi 4 ảnh (Ctrl+click) → bấm C (hoặc ⧉ So sánh). Rê chuột qua từng ảnh: khung xanh và bảng chi tiết đi theo ảnh dưới chuột. P / X / 1–5 / ⟳ chỉ đổi ảnh đang có khung xanh. Z 100 % trên từng ảnh (ảnh RAW lớn): cửa sổ không bị đứng khi ảnh gốc hiện ra. Đổi Xếp: Tự động / Một hàng / Lưới 2×2; kéo cửa sổ vào nửa màn hình. I bật/tắt dòng AI. Esc / G về lưới, vị trí cuộn của lưới giữ nguyên. Bấm ✕ khi đang ở So sánh và ảnh gốc đang tải: app đóng bình thường.
+11. **Xuất nâng cao (phần 3):** Chọn vài cặp RAW+JPEG và ảnh chỉ JPEG. ⤴ Xuất ảnh:
+    a. ① Thư mục đã nhập · ② RAW + JPEG · ③ Tất cả vào một thư mục → giống bản cũ (cặp có cả .NEF và .JPG).
+    b. ② Chỉ RAW, rồi Chỉ JPEG → tab "Cần xem lại" báo ảnh thiếu định dạng; không có file nào bị đổi đuôi hay chuyển định dạng.
+    c. ③ Mỗi chủ thể một thư mục (sau 📊 phân tích AI) → mỗi người một thư mục; ảnh có 2 người nằm ở cả 2 thư mục; ảnh chưa rõ người ở "Chưa xác định".
+    d. ① Nguồn khác → chọn thư mục DCIM trên **thẻ nhớ thật** (cắm đầu đọc thẻ) khi đã nhập JPEG vào máy: RAW lấy từ thẻ, ghi "khớp theo giờ chụp"; thẻ không bị ghi gì (Windows không hỏi "quét lỗi thẻ" lần sau).
+    e. Rút thẻ giữa lúc chép → báo "Nguồn không còn truy cập được", các file đã chép còn nguyên; cắm lại → "Thử lại các file chưa chép" chỉ chép phần còn thiếu.
+    f. Xuất lần 2 vào cùng thư mục → "có vẻ đã có sẵn", không tạo file "(1)".
+    g. Tab 📋 Tên ảnh đã Chọn → Sao chép tên ảnh → dán vào Zalo/Notepad: mỗi ảnh một dòng.
+    h. Bấm Dừng khi đang chép một file RAW lớn → dừng ngay; thư mục đích không còn file dở dang.

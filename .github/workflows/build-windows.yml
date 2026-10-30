@@ -157,7 +157,7 @@ jobs:
           exit $code
       - name: GUI smoke on the real Windows platform (Windows fonts, real windows; each file alone, 4 min each)
         if: always()
-        timeout-minutes: 40
+        timeout-minutes: 50
         shell: pwsh
         env:
           QT_QPA_PLATFORM: windows
@@ -166,10 +166,11 @@ jobs:
         run: |
           . scripts/ci_report.ps1
           $failed = 0
-          foreach ($f in "test_compare_tile", "test_compare_view", "test_compare_window", "test_compare_actions",
-                         "test_compare_overlay", "test_compare_final", "test_qt_image", "test_viewer_frames",
-                         "test_view_rotation", "test_main_window", "test_adaptive_layout", "test_detail_panel",
-                         "test_review_notes_t15") {
+          $gui = @("test_compare_tile", "test_compare_view", "test_compare_window", "test_compare_actions",
+                   "test_compare_overlay", "test_compare_final", "test_qt_image", "test_viewer_frames",
+                   "test_view_rotation", "test_main_window", "test_adaptive_layout", "test_detail_panel",
+                   "test_review_notes_t15", "test_export_dialog_p3", "test_export_plan_thread", "test_export_runs")
+          foreach ($f in $gui) {
             try {
               $code = Invoke-Pytest -Log "gui_$f.log" -Title "gui-windows $f" -TimeoutSec 240 -PytestArgs @("tests/gui/$f.py")
             } catch {
@@ -178,7 +179,7 @@ jobs:
             }
             if ($code -ne 0) { $failed++ }
           }
-          Write-Host "::notice title=gui-windows::files failed: $failed of 13"
+          Write-Host "::notice title=gui-windows::files failed: $failed of $($gui.Count)"
           exit $failed
       - name: Compare GUI on the real Windows platform, 2 more rounds (hover / routing stability)
         if: always()

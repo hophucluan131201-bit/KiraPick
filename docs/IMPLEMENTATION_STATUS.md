@@ -358,26 +358,27 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
-## Part 3 — Advanced Export (2026-10-30) — status: Batch A approved (Checkpoint A v2); Batch B (Tasks 5–8) implemented and tested offscreen; waits for Checkpoint B review
+## Part 3 — Advanced Export (2026-10-30) — status: Batches A and B approved (Checkpoints A v2, B); Batch C (Tasks 9–11) implemented and tested; waits for the final Part 3 review and the owner's Windows acceptance
 
-Spec `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 4: §12 for RV-P3-B-01…03), plan
-`docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md` (rev 4). Batch C (dialog with the three groups and the
-names tab, plan thread, end-to-end, Windows CI) not started. Not released: no tag, no installer, no build, no publish.
+Spec `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 4), plan
+`docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md` (rev 4). Not released: no tag, no installer, no build,
+no publish. Schema v7, AI scoring, Part 2 and Keep/Reject rules unchanged.
 
 | Task | Status | Evidence |
 |---|---|---|
 | 1 Compatibility baseline (golden plans of the export before Part 3) | tested | `tests/unit/test_export_compat.py` (passed on the old code at 4199202) |
 | 2 Photos and formats | tested | `tests/unit/test_export_photos.py` |
-| 3 Planner: operations, issues, formats; ② Định dạng in the dialog; bottom-bar size by format | tested | `tests/unit/test_export_plan.py`, updated stats / bottom-bar / export GUI tests |
+| 3 Planner: operations, issues, formats; bottom-bar size by format | tested | `tests/unit/test_export_plan.py` |
 | 4 One folder per subject | tested | `tests/unit/test_export_layout.py` |
-| 5 Read-only scan of another folder; SHA-256 + per-dialog cache | tested (Windows junction test runs on Windows CI only) | `tests/unit/test_export_scan.py`, `tests/unit/test_export_hashing.py` |
-| 6 Matching on another folder (content / capture time / manual), External mode in the planner | tested (synthetic EXIF files; no real card) | `tests/unit/test_export_match.py` |
-| 7 Revalidated, verified copies; pair copy groups; free space per group; manifest v2; cancel / retry / card ejected | tested | `tests/unit/test_export_run.py` (mutation-checked) |
-| 8 Names of the kept photos | tested | `tests/unit/test_export_names.py` |
-| 9–11 | not started | Batch C after Checkpoint B |
+| 5 Read-only scan of another folder; SHA-256 + per-dialog cache | tested | `tests/unit/test_export_scan.py`, `tests/unit/test_export_hashing.py` |
+| 6 Matching on another folder (content / capture time / manual) | tested (synthetic + 44 real RAW samples) | `tests/unit/test_export_match.py`, `tests/integration/test_export_raw_metadata.py` |
+| 7 Revalidated, verified copies; pair copy groups; free space per group; manifest v2; cancel inside a file (RV-P3-C01); second-member failures (RV-P3-C04) | tested (mutation-checked) | `tests/unit/test_export_run.py` |
+| 8 Names of the kept photos (duplicate-name warning, RV-P3-C05) | tested | `tests/unit/test_export_names.py`, `tests/gui/test_export_dialog_p3.py` |
+| 9 Plan thread, generations, shutdown contract | tested offscreen; Windows real platform: see review | `tests/gui/test_export_plan_thread.py` |
+| 10 Export dialog: three groups, preview, confirmation, retry, names tab | tested offscreen; screenshots WIDE / MEDIUM / NARROW / SHORT / TINY | `tests/gui/test_export_dialog_p3.py`, updated export GUI tests |
+| 11 12 combinations, performance, Windows CI, docs | tested | `tests/integration/test_export_combinations.py`, `tests/perf/test_export_perf.py` |
 
-Not yet reachable from the UI: the External source and the names list (Batch C, Task 10). The dialog shows the
-estimate / worst-case bytes and the new finish lines.
+Known limits: beta checklist K13, K14. Owner acceptance: checklist section 3 step 11.
 
 ## UI part 2 — Compare mode (2026-10-29) — status: CODE REVIEW COMPLETE (Part 2 APPROVED WITH NOTES, 2026-10-30); pending the owner's Windows acceptance and the final beta release validation
 
