@@ -28,3 +28,16 @@ def public_nef() -> Path:
     if not path.exists():
         pytest.skip("public NEF sample absent (run scripts/raw_samples.py fetch)")
     return path
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """KIRAPICK_EXIT_WATCHDOG=<seconds> (CI): if the test process has not exited that long after the last test, print
+    every thread's stack and exit — a hang at interpreter exit (thread pools, Qt teardown) then shows where it is."""
+    import faulthandler
+    import os
+    import sys
+
+    seconds = os.environ.get("KIRAPICK_EXIT_WATCHDOG")
+    if seconds:
+        print("\n[exit watchdog armed]", file=sys.stderr, flush=True)
+        faulthandler.dump_traceback_later(int(seconds), exit=True)
