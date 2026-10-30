@@ -135,7 +135,7 @@ jobs:
           python-version: "3.12"
       - name: Install
         shell: pwsh
-        run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt "pytest>=8,<10" "pytest-qt>=4.4,<5"
+        run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt "pytest>=9,<10" "pytest-qt>=4.4,<5"
       - name: Screen and fonts (a bigger desktop for the real-platform steps; what Qt sees)
         if: always()
         shell: pwsh
@@ -152,29 +152,30 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          python -X faulthandler -m pytest -q -p no:cacheprovider -o faulthandler_timeout=180 -o faulthandler_exit_on_timeout=true *>&1 | Tee-Object -FilePath suite.log
-          $code = $LASTEXITCODE
           . scripts/ci_report.ps1
-          Report-Pytest -Log suite.log -Title suite -Code $code
+          $code = Invoke-Pytest -Log suite.log -Title suite -TimeoutSec 1500 -PytestArgs @()
           exit $code
-      - name: GUI smoke on the real Windows platform (Windows fonts, real windows)
+      - name: GUI smoke on the real Windows platform (Windows fonts, real windows; each file alone, 4 min each)
         if: always()
-        timeout-minutes: 25
+        timeout-minutes: 40
         shell: pwsh
         env:
           QT_QPA_PLATFORM: windows
           COLUMNS: "1500"
           KIRAPICK_EXIT_WATCHDOG: "60"
         run: |
-          python -X faulthandler -m pytest -q -p no:cacheprovider -o faulthandler_timeout=180 -o faulthandler_exit_on_timeout=true tests/gui/test_main_window.py tests/gui/test_adaptive_layout.py tests/gui/test_detail_panel.py tests/gui/test_review_notes_t15.py `
-            tests/gui/test_compare_tile.py tests/gui/test_compare_view.py tests/gui/test_compare_window.py `
-            tests/gui/test_compare_actions.py tests/gui/test_compare_overlay.py tests/gui/test_compare_final.py `
-            tests/gui/test_qt_image.py tests/gui/test_viewer_frames.py tests/gui/test_view_rotation.py *>&1 | Tee-Object -FilePath gui.log
-          $code = $LASTEXITCODE
           . scripts/ci_report.ps1
-          Report-Pytest -Log gui.log -Title gui-windows -Code $code
-          exit $code
-      - name: Compare GUI on the real Windows platform, each file alone, 3 rounds (hover / routing stability)
+          $failed = 0
+          foreach ($f in "test_main_window", "test_adaptive_layout", "test_detail_panel", "test_review_notes_t15",
+                         "test_compare_tile", "test_compare_view", "test_compare_window", "test_compare_actions",
+                         "test_compare_overlay", "test_compare_final", "test_qt_image", "test_viewer_frames",
+                         "test_view_rotation") {
+            $code = Invoke-Pytest -Log "gui_$f.log" -Title "gui-windows $f" -TimeoutSec 240 -PytestArgs @("tests/gui/$f.py")
+            if ($code -ne 0) { $failed++ }
+          }
+          Write-Host "::notice title=gui-windows::files failed: $failed of 13"
+          exit $failed
+      - name: Compare GUI on the real Windows platform, 2 more rounds (hover / routing stability)
         if: always()
         timeout-minutes: 30
         shell: pwsh
@@ -185,15 +186,11 @@ jobs:
         run: |
           . scripts/ci_report.ps1
           $failed = 0
-          for ($i = 1; $i -le 3; $i++) {
-            foreach ($f in "test_compare_view", "test_compare_window", "test_compare_actions", "test_compare_overlay", "test_compare_final") {
-              $start = Get-Date
-              python -X faulthandler -m pytest -q -p no:cacheprovider -o faulthandler_timeout=180 -o faulthandler_exit_on_timeout=true "tests/gui/$f.py" *>&1 | Tee-Object -FilePath "rep_${f}_$i.log"
-              $code = $LASTEXITCODE
-              $secs = [int]((Get-Date) - $start).TotalSeconds
-              if ($code -ne 0) { $failed++ }
-              Report-Pytest -Log "rep_${f}_$i.log" -Title "repeat $i $f (${secs}s)" -Code $code
-            }
+          for ($i = 1; $i -le 2; $i++) {
+            $code = Invoke-Pytest -Log "rep_$i.log" -Title "compare repeat $i" -TimeoutSec 600 -PytestArgs @(
+              "tests/gui/test_compare_view.py", "tests/gui/test_compare_window.py", "tests/gui/test_compare_actions.py",
+              "tests/gui/test_compare_overlay.py", "tests/gui/test_compare_final.py")
+            if ($code -ne 0) { $failed++ }
           }
           exit $failed
       - name: Compare hover diagnostic (real Windows platform; CR-P2-FINAL-01)
@@ -263,7 +260,8 @@ jobs:
           path: |
             perf.jsonl
             suite.log
-            gui.log
+            gui_*.log
+            rep_*.log
             diag.jsonl
             stress*.log
           retention-days: 30
