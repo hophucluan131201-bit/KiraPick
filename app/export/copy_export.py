@@ -294,6 +294,9 @@ def plan_export(
         folders = [""]
         if plan.layout_stats is not None:
             folders = _subject_folders_of(conn, plan.layout_stats, photo, members, names)
+            for folder in folders:
+                assigned = plan.layout_stats.assigned_per_folder
+                assigned[folder] = assigned.get(folder, 0) + 1
         files = [f for f in photo.files if f.kind in wanted]
         if not files:
             for kind in sorted(wanted - {"other"}):
@@ -309,9 +312,11 @@ def plan_export(
             present.append(f)
         if present:
             for folder in folders:
+                before = len(plan.operations)
                 _plan_folder(plan, photo, present, folder, taken)
-                if plan.layout_stats is not None:
-                    plan.layout_stats.per_folder[folder] = plan.layout_stats.per_folder.get(folder, 0) + 1
+                if plan.layout_stats is not None and len(plan.operations) > before:
+                    exportable = plan.layout_stats.exportable_per_folder
+                    exportable[folder] = exportable.get(folder, 0) + 1
     return plan
 
 

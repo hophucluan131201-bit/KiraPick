@@ -113,7 +113,7 @@ def test_multi_subject_photo_in_each_folder(fx) -> None:  # noqa: ANN001
     assert _folders(plan) == {"Lan": ["Lan/DSC_0001.JPG", "Lan/DSC_0001.NEF"],
                               "Mai": ["Mai/DSC_0001.JPG", "Mai/DSC_0001.NEF"]}
     assert plan.total_bytes == 2 * (500_000 + 300_000) and plan.photos_planned == 1
-    assert plan.layout_stats.multi_subject == 1 and plan.layout_stats.per_folder == {"Lan": 1, "Mai": 1}
+    assert plan.layout_stats.multi_subject == 1 and plan.layout_stats.assigned_per_folder == plan.layout_stats.exportable_per_folder == {"Lan": 1, "Mai": 1}
     result = run_export(plan)
     assert sorted(result.copied) == sorted(op.dest_relative for op in plan.operations) and not result.failed
     assert (fx.dest / "Mai" / "DSC_0001.NEF").read_bytes() == (fx.root / "DSC_0001.NEF").read_bytes()
@@ -210,7 +210,7 @@ def test_stats_count_a_pair_once_when_both_halves_are_selected(fx) -> None:  # n
     conn = fx.project.conn
     raw, jpg = fx.files["pair"]
     plan = plan_export(fx.project, [raw, jpg], fx.dest, layout=Layout.SUBJECTS)
-    assert plan.layout_stats.unknown_other == 1 and plan.layout_stats.per_folder == {UNKNOWN_FOLDER: 1}
+    assert plan.layout_stats.unknown_other == 1 and plan.layout_stats.assigned_per_folder == {UNKNOWN_FOLDER: 1}
     mai, lan = _subject(conn, "Mai"), _subject(conn, "Lan")
     _occ(conn, raw, mai)
     _occ(conn, raw, lan)
@@ -282,3 +282,19 @@ def test_names_stable_between_runs(fx) -> None:  # noqa: ANN001
     for n in ("Mai", "mai", "Mai (#1)", "Lan", None, "???", "Á" * 70):
         _subject(conn, n)
     assert subject_folders(conn) == subject_folders(conn)
+
+
+def test_folder_stats_separate_assigned_and_exportable(fx, tmp_path: Path) -> None:  # noqa: ANN001
+    """RV-P3-A04: a photo assigned to a folder whose every file is PATH_TOO_LONG is assigned, not exportable."""
+    conn = fx.project.conn
+    mai = _subject(conn, "M" * 55)
+    lan = _subject(conn, "Lan")
+    _occ(conn, fx.ids["raw_only"], mai)
+    _occ(conn, fx.ids["jpeg_only"], lan)
+    base = tmp_path.resolve()
+    long_dest = base / ("d" * (215 - len(str(base)) - 1))  # 215 characters: "Lan/…" fits in 259, "MMM…/…" does not
+    assert len(str(long_dest / ("M" * 55) / "DSC_0003.NEF")) > 259 >= len(str(long_dest / "Lan" / "DSC_0004.JPG"))
+    plan = plan_export(fx.project, [fx.ids["raw_only"], fx.ids["jpeg_only"]], long_dest, layout=Layout.SUBJECTS)
+    stats = plan.layout_stats
+    assert stats.assigned_per_folder == {"M" * 55: 1, "Lan": 1}
+    assert stats.exportable_per_folder == {"Lan": 1}

@@ -28,7 +28,8 @@ class Layout(str, Enum):
 
 @dataclass(slots=True)
 class LayoutStats:
-    per_folder: dict[str, int] = field(default_factory=dict)  # folder -> photos
+    assigned_per_folder: dict[str, int] = field(default_factory=dict)  # folder -> photos the layout puts there
+    exportable_per_folder: dict[str, int] = field(default_factory=dict)  # folder -> photos with ≥ 1 file to copy there
     multi_subject: int = 0  # photos copied into several subject folders
     unknown_suggested: int = 0  # photos in "Chưa xác định" with a subject only suggested by the AI
     unknown_other: int = 0  # photos in "Chưa xác định" without any subject (no person, unknown, not analysed)
