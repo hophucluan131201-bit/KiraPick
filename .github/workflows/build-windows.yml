@@ -166,11 +166,16 @@ jobs:
         run: |
           . scripts/ci_report.ps1
           $failed = 0
-          foreach ($f in "test_main_window", "test_adaptive_layout", "test_detail_panel", "test_review_notes_t15",
-                         "test_compare_tile", "test_compare_view", "test_compare_window", "test_compare_actions",
+          foreach ($f in "test_compare_tile", "test_compare_view", "test_compare_window", "test_compare_actions",
                          "test_compare_overlay", "test_compare_final", "test_qt_image", "test_viewer_frames",
-                         "test_view_rotation") {
-            $code = Invoke-Pytest -Log "gui_$f.log" -Title "gui-windows $f" -TimeoutSec 240 -PytestArgs @("tests/gui/$f.py")
+                         "test_view_rotation", "test_main_window", "test_adaptive_layout", "test_detail_panel",
+                         "test_review_notes_t15") {
+            try {
+              $code = Invoke-Pytest -Log "gui_$f.log" -Title "gui-windows $f" -TimeoutSec 240 -PytestArgs @("tests/gui/$f.py")
+            } catch {
+              Write-Host "::notice title=gui-windows $f REPORT ERROR::$_"
+              $code = 1
+            }
             if ($code -ne 0) { $failed++ }
           }
           Write-Host "::notice title=gui-windows::files failed: $failed of 13"

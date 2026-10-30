@@ -311,15 +311,19 @@ def test_mode_change_while_workers_run(qtbot, env: dict) -> None:  # noqa: F811
     window still closes cleanly afterwards."""
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
-    gate = threading.Event()
+    sizes = [size for size, _mode in REFERENCE if fits_screen(w, size)]  # never skip while the worker is held (it would
+    gate = threading.Event()                                       # keep the window waiting to close)
     hold = _Hold(gate)
     w.viewer._pool.start(hold)
-    assert hold.started.wait(10)  # running, not just queued
-    project = w.project
-    for size, _mode in REFERENCE:
-        _at(qtbot, w, size)
-        assert w._gate.open and w.project is project and not w.viewer.wait_idle(0)
-    gate.set()
+    try:
+        assert hold.started.wait(10)  # running, not just queued
+        project = w.project
+        for size in sizes:
+            w.resize(*size)
+            qtbot.wait(DEBOUNCE_MS + 60)
+            assert w._gate.open and w.project is project and not w.viewer.wait_idle(0)
+    finally:
+        gate.set()
     assert w.viewer.wait_idle(5000)
     assert w.close() is True
 

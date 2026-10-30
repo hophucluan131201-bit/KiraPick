@@ -9,6 +9,7 @@
 
 function Invoke-Pytest {
     param([string]$Log, [string]$Title, [int]$TimeoutSec, [string[]]$PytestArgs)
+    $ErrorActionPreference = "Continue"  # a reporting hiccup must never end the step before its notices
     $err = "$Log.err"
     $all = @("-X", "faulthandler", "-m", "pytest", "-v", "-p", "no:cacheprovider", "-o", "faulthandler_timeout=180",
              "-o", "faulthandler_exit_on_timeout=true") + $PytestArgs
@@ -36,6 +37,7 @@ function Invoke-Pytest {
 
 function Report-Pytest {
     param([string]$Log, [string]$Title, [int]$Code)
+    $ErrorActionPreference = "Continue"
     $lines = @(if (Test-Path $Log) { Get-Content $Log } else { "(no log)" })
     $summary = ($lines | Where-Object { $_ -match "(passed|failed|error|no tests ran)" } | Select-Object -Last 1)
     Write-Host "::notice title=$Title::exit $Code; $summary"
