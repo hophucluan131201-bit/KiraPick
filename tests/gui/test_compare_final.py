@@ -27,7 +27,7 @@ from tests.gui.test_compare_window import _mark, _opened  # noqa: E402
 from tests.gui.test_main_window import _import, _key, _window, env  # noqa: E402, F401 - fixture
 from tests.gui.test_shutdown_timeout import _db_open, _watch_db  # noqa: E402
 from tests.integration.test_import_job import _photo  # noqa: E402
-from tests.gui.pointer import move_pointer, park_pointer  # noqa: E402, F401 - autouse fixture
+from tests.gui.pointer import move_pointer  # noqa: E402
 
 LONG = ("mắt hơi mềm vì tiêu cự dài và tốc độ chụp thấp so với chuyển động của người mẫu, tóc che một phần mắt trái, "
         "ánh sáng nền cháy ở góc trên")

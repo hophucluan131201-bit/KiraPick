@@ -12,7 +12,7 @@ from app.ui.asset_model import Filter
 from app.ui.compare_layout import start_error
 from app.ui.compare_view import PANEL_DELAY_MS
 from tests.gui.test_main_window import _import, _key, _window, env  # noqa: F401 - fixture
-from tests.gui.pointer import move_pointer, park_pointer  # noqa: F401 - autouse fixture
+from tests.gui.pointer import move_pointer
 
 
 def _mark(w, rows: list[int], current: int | None = None) -> list[int]:  # noqa: ANN001

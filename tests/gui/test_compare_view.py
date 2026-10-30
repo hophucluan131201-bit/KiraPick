@@ -19,7 +19,7 @@ from app.ui.compare_view import PANEL_DELAY_MS, CompareView  # noqa: E402
 from tests.gui.test_compare_tile import _centre, _record  # noqa: E402
 from tests.integration.test_import_job import _photo  # noqa: E402
 from tests.gui import pointer  # noqa: E402
-from tests.gui.pointer import move_pointer, park_pointer  # noqa: E402, F401 - autouse fixture
+from tests.gui.pointer import move_pointer  # noqa: E402
 
 
 @pytest.fixture
