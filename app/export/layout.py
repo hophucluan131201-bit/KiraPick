@@ -61,17 +61,44 @@ def resolve_subject(conn: sqlite3.Connection, subject_id: int) -> int | None:
     return None
 
 
+def _key(name: str) -> str:
+    """How Windows compares folder names (case-insensitive) after Unicode normalisation."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def _with_suffix(base: str, suffix: str) -> str:
+    """``base`` + ``suffix`` within MAX_FOLDER_CHARS (the base is cut, never the suffix)."""
+    room = MAX_FOLDER_CHARS - len(suffix)
+    return base[:room].rstrip(". ") + suffix
+
+
 def subject_folders(conn: sqlite3.Connection) -> dict[int, str]:
-    """Unmerged subject -> its folder name, unique case-insensitively (``Mai (#12)`` when two would be equal)."""
-    names = {int(sid): safe_folder_name(name or "", f"Chủ thể {sid}")
+    """Unmerged subject -> folder name, unique as Windows compares names (CR-P3-A01).
+
+    1. each subject's sanitised name (``safe_folder_name``);
+    2. names shared by several subjects (case-insensitive, NFC) and the reserved ``Chưa xác định`` get `` (#<id>)``;
+    3. in subject id order, a name already given to another subject (e.g. one literally named ``Mai (#12)``) gets
+       `` (#<id>)`` appended, then `` (#<id>-2)``, `` (#<id>-3)`` … until free.
+    Every name stays within MAX_FOLDER_CHARS. The result depends only on the subjects' ids and names, so it is the
+    same on every export while the subjects do not change."""
+    bases = {int(sid): safe_folder_name(name or "", f"Chủ thể {sid}")
              for sid, name in conn.execute("SELECT id, display_name FROM subjects WHERE merged_into IS NULL")}
-    taken: dict[str, int] = {}
-    for name in names.values():
-        taken[name.casefold()] = taken.get(name.casefold(), 0) + 1
+    shared: dict[str, int] = {}
+    for base in bases.values():
+        shared[_key(base)] = shared.get(_key(base), 0) + 1
+    used = {_key(UNKNOWN_FOLDER)}
     out = {}
-    for sid, name in names.items():
-        clash = taken[name.casefold()] > 1 or name.casefold() == UNKNOWN_FOLDER.casefold()
-        out[sid] = f"{name} (#{sid})" if clash else name
+    for sid in sorted(bases):
+        base = bases[sid]
+        candidates = [base] if shared[_key(base)] == 1 else []
+        candidates.append(_with_suffix(base, f" (#{sid})"))
+        n = 1
+        while all(_key(c) in used for c in candidates):
+            n += 1
+            candidates.append(_with_suffix(base, f" (#{sid}-{n})"))
+        name = next(c for c in candidates if _key(c) not in used)
+        used.add(_key(name))
+        out[sid] = name
     return out
 
 

@@ -216,3 +216,69 @@ def test_stats_count_a_pair_once_when_both_halves_are_selected(fx) -> None:  # n
     _occ(conn, raw, lan)
     plan = plan_export(fx.project, [raw, jpg], fx.dest, layout=Layout.SUBJECTS)
     assert plan.layout_stats.multi_subject == 1
+
+
+# ---- CR-P3-A01: final folder names unique (Windows, case-insensitive) -------------------------------------------
+
+def _assert_unique(folders: dict[int, str]) -> None:
+    finals = [unicodedata.normalize("NFC", n).casefold() for n in folders.values()]
+    assert len(finals) == len(set(finals)), folders
+    assert UNKNOWN_FOLDER.casefold() not in finals
+    assert all(len(n) <= MAX_FOLDER_CHARS and n == n.rstrip(". ") and n.strip() == n for n in folders.values())
+
+
+def test_collision_after_suffix(fx) -> None:  # noqa: ANN001
+    """Review CR-P3-A01: 12 "Mai" → "Mai (#12)", but subject 45 is literally named "Mai (#12)"."""
+    conn = fx.project.conn
+    first, second = _subject(conn, "Mai"), _subject(conn, "Mai")
+    literal = _subject(conn, f"Mai (#{first})")
+    folders = subject_folders(conn)
+    _assert_unique(folders)
+    assert folders[first] == f"Mai (#{first})" and folders[second] == f"Mai (#{second})"
+    assert folders[literal] == f"Mai (#{first}) (#{literal})"
+
+
+def test_literal_name_first_then_suffixed_twin(fx) -> None:  # noqa: ANN001
+    conn = fx.project.conn
+    literal = _subject(conn, "Lan (#99)")  # created before the subjects whose suffix would produce it
+    conn.execute("INSERT INTO subjects (id, display_name, created_at) VALUES (99, 'Lan', ?)", (utc_now(),))
+    other = _subject(conn, "Lan")
+    folders = subject_folders(conn)
+    _assert_unique(folders)
+    assert folders[99] != folders[literal]
+
+
+def test_long_names_stay_unique_and_short(fx) -> None:  # noqa: ANN001
+    conn = fx.project.conn
+    ids = [_subject(conn, "Á" * 70) for _ in range(3)] + [_subject(conn, "Á" * 60 + "B")]
+    folders = subject_folders(conn)
+    _assert_unique(folders)
+    assert all(folders[i].endswith(f"(#{i})") for i in ids)  # equal after the 60-character cut
+
+
+def test_unicode_forms_and_similar_names_clash(fx) -> None:  # noqa: ANN001
+    conn = fx.project.conn
+    nfc = _subject(conn, "Hằng")
+    nfd = _subject(conn, unicodedata.normalize("NFD", "Hằng"))
+    names = [_subject(conn, n) for n in ("Ren", "ren ", "REN.", "Ren?")]  # Ren / ren / REN equal; Ren_ differs
+    folders = subject_folders(conn)
+    _assert_unique(folders)
+    assert folders[nfc] == f"Hằng (#{nfc})" and folders[nfd] == f"Hằng (#{nfd})"
+    assert [folders[i] for i in names] == [f"Ren (#{names[0]})", f"ren (#{names[1]})", f"REN (#{names[2]})", "Ren_"]
+
+
+@pytest.mark.parametrize("name", [UNKNOWN_FOLDER, UNKNOWN_FOLDER.upper(), unicodedata.normalize("NFD", UNKNOWN_FOLDER),
+                                  UNKNOWN_FOLDER + ".", f"  {UNKNOWN_FOLDER}  "])
+def test_unknown_folder_name_never_taken(fx, name: str) -> None:  # noqa: ANN001
+    conn = fx.project.conn
+    sid = _subject(conn, name)
+    folders = subject_folders(conn)
+    _assert_unique(folders)
+    assert folders[sid].endswith(f"(#{sid})")
+
+
+def test_names_stable_between_runs(fx) -> None:  # noqa: ANN001
+    conn = fx.project.conn
+    for n in ("Mai", "mai", "Mai (#1)", "Lan", None, "???", "Á" * 70):
+        _subject(conn, n)
+    assert subject_folders(conn) == subject_folders(conn)
