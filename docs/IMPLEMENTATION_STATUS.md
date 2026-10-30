@@ -358,6 +358,20 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
+## Part 3 — Advanced Export (2026-10-30) — status: Batch A (Tasks 1–4) implemented and tested offscreen; waits for Checkpoint A review
+
+Spec `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 3, approved with notes), plan
+`docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md` (rev 3). Batch B (external source, copy safety,
+names) and Batch C (dialog, threads, end-to-end) not started.
+
+| Task | Status | Evidence |
+|---|---|---|
+| 1 Compatibility baseline (golden plans of the export before Part 3) | tested | `tests/unit/test_export_compat.py` (passed on the old code at 4199202) |
+| 2 Photos and formats | tested | `tests/unit/test_export_photos.py` |
+| 3 Planner: operations, issues, formats; ② Định dạng in the dialog; bottom-bar size by format | tested | `tests/unit/test_export_plan.py`, updated stats / bottom-bar / export GUI tests |
+| 4 One folder per subject | tested | `tests/unit/test_export_layout.py` |
+| 5–11 | not started | Batch B / C after Checkpoint A |
+
 ## UI part 2 — Compare mode (2026-10-29) — status: CODE REVIEW COMPLETE (Part 2 APPROVED WITH NOTES, 2026-10-30); pending the owner's Windows acceptance and the final beta release validation
 
 Spec `docs/superpowers/specs/2026-10-29-kirapick-compare-design.md` (rev 3), plan
