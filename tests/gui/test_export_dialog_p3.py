@@ -283,6 +283,9 @@ def test_names_warn_duplicates(qtbot, fx) -> None:  # noqa: ANN001
 
 @pytest.mark.parametrize("size", [(560, 400), (1280, 323)])
 def test_dialog_fits_tiny_and_short(qtbot, fx, size: tuple[int, int]) -> None:  # noqa: ANN001
+    from tests.gui.platform_checks import skip_without_real_fonts
+
+    skip_without_real_fonts()  # text widths: checked on the real windows platform in CI
     dialog = imported_dialog(qtbot, fx)
     dialog.show()
     dialog.resize(*size)
