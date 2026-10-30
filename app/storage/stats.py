@@ -11,6 +11,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from app.export.copy_export import Selection, estimated_bytes, select_ids
+from app.export.formats import ExportFormat
 
 # The grid's rule for "one photo": not missing/duplicate, and a JPEG is hidden when its pair group has a RAW.
 SHOWN_PHOTO_SQL = """a.status NOT IN ('missing', 'duplicate')
@@ -31,11 +32,11 @@ class Counts:
     reject: int
     undecided: int  # readable photos with neither Chọn nor Loại
     errors: int  # photos that could not be read
-    keep_bytes: int  # what "Xuất ảnh đã Chọn" would copy: app.export.copy_export.export_groups, same files
+    keep_bytes: int  # what "Xuất ảnh đã Chọn" would copy from the imported folders: same files as plan_export
 
 
-def counts(conn: sqlite3.Connection, include_pairs: bool) -> Counts:
-    """``include_pairs``: the export option "Kèm file JPEG của cặp RAW+JPEG" (the pair's other files count)."""
+def counts(conn: sqlite3.Connection, fmt: ExportFormat) -> Counts:
+    """``fmt``: the export option ② Định dạng (which files of a photo count)."""
     row = conn.execute(
         f"""SELECT COUNT(*),
                    COALESCE(SUM(d.flag = 'keep'), 0),
@@ -45,4 +46,4 @@ def counts(conn: sqlite3.Connection, include_pairs: bool) -> Counts:
             FROM assets a LEFT JOIN decisions d ON d.asset_id = a.id AND d.subject_id IS NULL
             WHERE {SHOWN_PHOTO_SQL}""").fetchone()
     kept = select_ids(conn, Selection.KEEP)
-    return Counts(*(int(v) for v in row), estimated_bytes(conn, kept, include_pairs=include_pairs))
+    return Counts(*(int(v) for v in row), estimated_bytes(conn, kept, fmt=fmt))

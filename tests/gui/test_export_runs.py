@@ -43,15 +43,35 @@ def test_export_dialog_records_a_run(qtbot, env: dict, tmp_path: Path) -> None: 
     assert exports.count(w.project.conn) == 1
 
 
-def test_include_pairs_choice_is_remembered(qtbot, env: dict) -> None:  # noqa: F811
+def test_format_choice_is_remembered(qtbot, env: dict) -> None:  # noqa: F811
+    from app.export.formats import ExportFormat
+
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
     dialog = w.open_export_dialog()
     qtbot.addWidget(dialog)
-    assert dialog.include_pairs.isChecked()  # default on
-    dialog.include_pairs.setChecked(False)
+    assert dialog.format_buttons[ExportFormat.RAW_JPEG].isChecked()  # default RAW + JPEG
+    assert not hasattr(dialog, "include_pairs") and not hasattr(dialog, "keep_folders")  # old boxes gone (Q1)
+    dialog.format_buttons[ExportFormat.RAW].setChecked(True)
     dialog.close()
-    assert w.settings.value("export/include_pairs", True, bool) is False
+    assert w.settings.value("export/format") == "raw"
     again = w.open_export_dialog()
     qtbot.addWidget(again)
-    assert not again.include_pairs.isChecked()
+    assert again.format_buttons[ExportFormat.RAW].isChecked() and again.export_format is ExportFormat.RAW
+
+
+def test_old_include_pairs_setting_migrates_to_raw_jpeg(tmp_path) -> None:  # noqa: ANN001
+    """CR-P3-D03: true or false → RAW + JPEG; false is a behaviour change, flagged for a one-time notice."""
+    from PySide6.QtCore import QSettings
+
+    from app.export.formats import ExportFormat
+    from app.ui.export_dialog import MIGRATION_NOTICE_KEY, export_format
+
+    for old, notice in ((True, False), (False, True)):
+        s = QSettings(str(tmp_path / f"s{old}.ini"), QSettings.Format.IniFormat)
+        s.setValue("export/include_pairs", old)
+        assert export_format(s) is ExportFormat.RAW_JPEG
+        assert not s.contains("export/include_pairs")
+        assert s.value(MIGRATION_NOTICE_KEY, False, bool) is notice
+        s.setValue("export/format", "jpeg")
+        assert export_format(s) is ExportFormat.JPEG  # migrated once, later choices kept

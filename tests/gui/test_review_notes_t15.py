@@ -149,6 +149,7 @@ def test_real_raw_jpeg_pair_import_keep_export(qtbot, env: dict, public_nef: Pat
     from PySide6.QtCore import Qt
 
     from app.export.copy_export import Selection, plan_export, run_export, select_assets
+    from app.export.formats import ExportFormat
     from app.storage.stats import counts
     from tests.integration.test_import_job import _photo
 
@@ -166,9 +167,9 @@ def test_real_raw_jpeg_pair_import_keep_export(qtbot, env: dict, public_nef: Pat
     conn = w.project.conn
     w.rotate_view()
     assert conn.execute("SELECT count(*) FROM view_rotation").fetchone()[0] >= 1
-    plan = plan_export(w.project, select_assets(w.project, Selection.KEEP), tmp_path / "out", include_pairs=True)
+    plan = plan_export(w.project, select_assets(w.project, Selection.KEEP), tmp_path / "out")
     assert sorted(i.dest_relative for i in plan.items) == ["ISS.JPG", "ISS.NEF"]
-    assert counts(conn, True).keep_bytes == plan.total_bytes == sum((shoot / n).stat().st_size for n in sources)
+    assert counts(conn, ExportFormat.RAW_JPEG).keep_bytes == plan.total_bytes == sum((shoot / n).stat().st_size for n in sources)
     result = run_export(plan)
     assert sorted(result.copied) == ["ISS.JPG", "ISS.NEF"]
     for name, (digest, mtime) in sources.items():

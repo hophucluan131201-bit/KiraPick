@@ -8,7 +8,6 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -37,6 +36,7 @@ from app.export.copy_export import (
     plan_export,
     select_assets,
 )
+from app.export.formats import ExportFormat
 from app.selection.client_list import list_collections
 from app.storage import exports
 from app.storage.project import Project
@@ -45,8 +45,35 @@ from app.ui.jobs import ExportThread
 from app.ui.shutdown import Gate
 
 _PREVIEW_ROWS = 300
-INCLUDE_PAIRS_KEY = "export/include_pairs"
+FORMAT_KEY = "export/format"
+LEGACY_INCLUDE_PAIRS_KEY = "export/include_pairs"  # before Part 3: "Kèm file JPEG của cặp RAW+JPEG"
+MIGRATION_NOTICE_KEY = "export/migration_notice_pending"
+FORMAT_LABELS = {ExportFormat.RAW_JPEG: "RAW + JPEG", ExportFormat.RAW: "Chỉ RAW", ExportFormat.JPEG: "Chỉ JPEG/JPG"}
 log = logging.getLogger(__name__)
+
+
+def migrate_export_settings(settings: QSettings) -> None:
+    """The old "Kèm JPEG" box becomes ② Định dạng = RAW + JPEG whatever its value (spec §4, CR-P3-D03). When it was
+    off this changes what an export copies (a pair's JPEG now comes too): a one-time notice is pending then."""
+    if not settings.contains(LEGACY_INCLUDE_PAIRS_KEY):
+        return
+    was_on = settings.value(LEGACY_INCLUDE_PAIRS_KEY, True, bool)
+    if not settings.contains(FORMAT_KEY):
+        settings.setValue(FORMAT_KEY, ExportFormat.RAW_JPEG.value)
+    if not was_on:
+        settings.setValue(MIGRATION_NOTICE_KEY, True)
+    settings.remove(LEGACY_INCLUDE_PAIRS_KEY)
+
+
+def export_format(settings: QSettings | None) -> ExportFormat:
+    """The remembered ② Định dạng (RAW + JPEG when none, or unreadable)."""
+    if settings is None:
+        return ExportFormat.RAW_JPEG
+    migrate_export_settings(settings)
+    try:
+        return ExportFormat(str(settings.value(FORMAT_KEY, ExportFormat.RAW_JPEG.value)))
+    except ValueError:
+        return ExportFormat.RAW_JPEG
 
 
 def _gb(n: int) -> str:
@@ -96,14 +123,20 @@ class ExportDialog(QDialog):
         layout.addLayout(row)
         self.radios[Selection.KEEP].setChecked(True)
 
-        self.include_pairs = QCheckBox("Kèm file JPEG của cặp RAW+JPEG")
-        self.include_pairs.setChecked(settings.value(INCLUDE_PAIRS_KEY, True, bool) if settings is not None else True)
-        if settings is not None:  # the bottom bar's "x GB" follows this choice
-            self.include_pairs.toggled.connect(lambda on: settings.setValue(INCLUDE_PAIRS_KEY, on))
-        self.keep_folders = QCheckBox("Giữ cấu trúc thư mục con")
         opts = QHBoxLayout()
-        opts.addWidget(self.include_pairs)
-        opts.addWidget(self.keep_folders)
+        opts.addWidget(QLabel("Định dạng:"))
+        self.format_group = QButtonGroup(self)
+        self.format_buttons: dict[ExportFormat, QRadioButton] = {}
+        chosen = export_format(settings)
+        for fmt, text in FORMAT_LABELS.items():
+            rb = QRadioButton(text)
+            rb.setChecked(fmt is chosen)
+            self.format_group.addButton(rb)
+            self.format_buttons[fmt] = rb
+            opts.addWidget(rb)
+        if settings is not None:  # the bottom bar's "x GB" follows this choice
+            for fmt, rb in self.format_buttons.items():
+                rb.toggled.connect(lambda on, f=fmt: on and settings.setValue(FORMAT_KEY, f.value))
         opts.addStretch(1)
         layout.addLayout(opts)
 
@@ -137,8 +170,8 @@ class ExportDialog(QDialog):
 
         for rb in self.radios.values():
             rb.toggled.connect(self.refresh)
-        for widget in (self.include_pairs, self.keep_folders):
-            widget.toggled.connect(self.refresh)
+        for rb in self.format_buttons.values():
+            rb.toggled.connect(lambda on: on and self.refresh())
         self.min_rating.valueChanged.connect(self.refresh)
         self.collection.currentIndexChanged.connect(self.refresh)
         if not self.collection.count():
@@ -151,6 +184,10 @@ class ExportDialog(QDialog):
             self.collection.setCurrentIndex(self.collection.findData(collection_id))
             self.radios[Selection.COLLECTION].setChecked(True)
         self.refresh()
+
+    @property
+    def export_format(self) -> ExportFormat:
+        return next(fmt for fmt, rb in self.format_buttons.items() if rb.isChecked())
 
     def _selection(self) -> Selection:
         return next(sel for sel, rb in self.radios.items() if rb.isChecked())
@@ -174,8 +211,7 @@ class ExportDialog(QDialog):
             self._set_summary(f"{len(ids)} ảnh được chọn. Hãy chọn thư mục đích.", error=False, ready=False)
             return
         try:
-            plan = plan_export(self.project, ids, Path(dest_text), include_pairs=self.include_pairs.isChecked(),
-                               keep_folders=self.keep_folders.isChecked())
+            plan = plan_export(self.project, ids, Path(dest_text), fmt=self.export_format)
         except ExportError as exc:
             self._set_summary(f"Không xuất được: {exc}", error=True)
             return

@@ -12,12 +12,14 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QProgressBar, QPushButton, QSizePolicy, QToolButton, QWidget
 
+from app.export.formats import ExportFormat
 from app.storage.stats import Counts
 from app.ui import theme
 from app.ui.score_style import COLORS
 
 SIZE_TIP = ("Số ảnh: một cặp RAW+JPEG tính là 1 ảnh.\n"
-            "Dung lượng: các file sẽ được chép khi xuất ảnh đã Chọn (RAW và — nếu bật \"Kèm JPEG\" — file JPEG kèm).\n"
+            "Dung lượng: các file sẽ được chép khi xuất ảnh đã Chọn từ thư mục đã nhập, theo Định dạng đang chọn khi "
+            "xuất (RAW + JPEG / chỉ RAW / chỉ JPEG), vào một thư mục.\n"
             "Đây là con số ước tính lấy lúc nhập ảnh: khi xuất có thể ít hơn nếu file đã bị xoá khỏi ổ hoặc đã có sẵn ở "
             "thư mục đích, và có thể nhiều hơn nếu một file JPEG được Chọn riêng từ trước khi ghép cặp.")
 
@@ -119,13 +121,13 @@ class BottomBar(QWidget):
         self.export_button.setMenu(menu)
         row.addWidget(self.export_button)
         self._counts: Counts | None = None
-        self._include_pairs = True
+        self._format = ExportFormat.RAW_JPEG
         self._compact = False
         self.set_compact(False)
 
     # ------------------------------------------------------------------ API
-    def set_counts(self, c: Counts, include_pairs: bool, marked: int) -> None:
-        self._counts, self._include_pairs = c, include_pairs
+    def set_counts(self, c: Counts, fmt: ExportFormat, marked: int) -> None:
+        self._counts, self._format = c, fmt
         self.marking.setText(f"Đang đánh dấu {marked} ảnh — phím tắt áp dụng cho cả {marked}")
         self.marking.setHidden(marked < 2)
         self._render()
@@ -160,7 +162,8 @@ class BottomBar(QWidget):
         if self._compact:
             self.kept.setText(f"✓{c.keep} ✗{c.reject} ·{c.undecided}")
             return
-        pairs = ", gồm JPEG kèm" if self._include_pairs else ""
+        pairs = {ExportFormat.RAW_JPEG: ", gồm JPEG kèm", ExportFormat.RAW: ", chỉ RAW",
+                 ExportFormat.JPEG: ", chỉ JPEG"}[self._format]
         self.kept.setText(f"Đã chọn {c.keep} ảnh ({size_text(c.keep_bytes)}{pairs})")
         self.rejected.setText(f"Đã loại {c.reject}")
         self.undecided.setText(f"Chưa chọn {c.undecided}")

@@ -22,10 +22,9 @@ def test_copied_ids_follow_race_renames_and_subfolders(setup, tmp_path: Path) ->
     p, _, _ = setup
     ids = _ids(p)
     dest = tmp_path / "out"
-    plan = plan_export(p, sorted(ids.values()), dest, keep_folders=True)
+    plan = plan_export(p, sorted(ids.values()), dest)  # subfolders: subject folders, tests/unit/test_export_layout.py
     sub = next(i for i in plan.items if i.asset_id == ids["sub/DSC_0002.jpg"])
-    assert "/" in sub.dest_relative  # in a subfolder
-    (dest / sub.dest_relative).parent.mkdir(parents=True)
+    (dest / sub.dest_relative).parent.mkdir(parents=True, exist_ok=True)
     (dest / sub.dest_relative).write_bytes(b"appeared meanwhile")  # forces a rename at copy time
     result = run_export(plan)
     assert sub.dest_relative in result.renamed

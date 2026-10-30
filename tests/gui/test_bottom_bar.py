@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QItemSelectionModel, Qt
 
 from app.storage import decisions, view
+from app.export.formats import ExportFormat
 from app.storage.stats import Counts
 from app.ui.bottom_bar import BottomBar, size_text
 from tests.gui.test_main_window import _import, _key, _window, env  # noqa: F401 - fixture
@@ -16,11 +17,13 @@ def test_counts_and_size_text(qtbot) -> None:  # noqa: ANN001
     bar = BottomBar()
     qtbot.addWidget(bar)
     bar.set_counts(Counts(total=10, keep=2, reject=3, undecided=4, errors=1, keep_bytes=int(2.46 * GB)),
-                   include_pairs=True, marked=0)
+                   fmt=ExportFormat.RAW_JPEG, marked=0)
     assert bar.kept.text() == "Đã chọn 2 ảnh (2,5 GB, gồm JPEG kèm)"
     assert bar.rejected.text() == "Đã loại 3" and bar.undecided.text() == "Chưa chọn 4"
-    bar.set_counts(Counts(10, 2, 3, 4, 1, int(0.0412 * GB)), include_pairs=False, marked=0)
-    assert bar.kept.text() == "Đã chọn 2 ảnh (41,2 MB)"
+    bar.set_counts(Counts(10, 2, 3, 4, 1, int(0.0412 * GB)), fmt=ExportFormat.RAW, marked=0)
+    assert bar.kept.text() == "Đã chọn 2 ảnh (41,2 MB, chỉ RAW)"
+    bar.set_counts(Counts(10, 2, 3, 4, 1, int(0.0412 * GB)), fmt=ExportFormat.JPEG, marked=0)
+    assert bar.kept.text() == "Đã chọn 2 ảnh (41,2 MB, chỉ JPEG)"
     assert size_text(0) == "0 MB" and size_text(int(1.26 * GB)) == "1,3 GB"
 
 
@@ -28,7 +31,7 @@ def test_size_tooltip_explains_estimate(qtbot) -> None:  # noqa: ANN001
     """Review RV3-01: photos vs files vs an estimate."""
     bar = BottomBar()
     qtbot.addWidget(bar)
-    bar.set_counts(Counts(10, 2, 3, 4, 1, GB), include_pairs=True, marked=0)
+    bar.set_counts(Counts(10, 2, 3, 4, 1, GB), fmt=ExportFormat.RAW_JPEG, marked=0)
     tip = bar.kept.toolTip()
     assert "1 ảnh" in tip and "file" in tip and "ước tính" in tip and "đã có sẵn" in tip and "trước khi ghép cặp" in tip
 
@@ -37,9 +40,9 @@ def test_marking_text_only_for_two_or_more(qtbot) -> None:  # noqa: ANN001
     bar = BottomBar()
     qtbot.addWidget(bar)
     c = Counts(10, 0, 0, 10, 0, 0)
-    bar.set_counts(c, include_pairs=True, marked=1)
+    bar.set_counts(c, fmt=ExportFormat.RAW_JPEG, marked=1)
     assert bar.marking.isHidden()
-    bar.set_counts(c, include_pairs=True, marked=5)
+    bar.set_counts(c, fmt=ExportFormat.RAW_JPEG, marked=5)
     assert not bar.marking.isHidden() and bar.marking.text().startswith("Đang đánh dấu 5 ảnh")
 
 
@@ -47,7 +50,7 @@ def test_compact_keeps_keep_reject_export_visible(qtbot) -> None:  # noqa: ANN00
     bar = BottomBar()
     qtbot.addWidget(bar)
     bar.show()
-    bar.set_counts(Counts(10, 150, 42, 862, 0, GB), include_pairs=True, marked=0)
+    bar.set_counts(Counts(10, 150, 42, 862, 0, GB), fmt=ExportFormat.RAW_JPEG, marked=0)
     bar.set_compact(True)
     assert bar.kept.text() == "✓150 ✗42 ·862"
     for b in (bar.keep_button, bar.reject_button, bar.export_button, bar.more_button):
@@ -97,8 +100,8 @@ def test_bar_counts_follow_decisions_and_marking(qtbot, env: dict) -> None:  # n
     assert w.status is w.bottom_bar.status  # old status messages land in the bar
 
 
-def test_size_follows_include_pairs_toggle(qtbot, env: dict) -> None:  # noqa: F811
-    """Review CR3-05: switching "Kèm JPEG" in the export dialog updates the bar at once."""
+def test_size_follows_the_format_choice(qtbot, env: dict) -> None:  # noqa: F811
+    """Review CR3-05 (Part 3: ② Định dạng replaces "Kèm JPEG"): the export dialog's choice updates the bar at once."""
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
     w.select_row(0)
@@ -106,9 +109,9 @@ def test_size_follows_include_pairs_toggle(qtbot, env: dict) -> None:  # noqa: F
     assert "gồm JPEG kèm" in w.bottom_bar.kept.text()
     dialog = w.open_export_dialog()
     qtbot.addWidget(dialog)
-    dialog.include_pairs.setChecked(False)
-    assert "gồm JPEG kèm" not in w.bottom_bar.kept.text()
-    dialog.include_pairs.setChecked(True)
+    dialog.format_buttons[ExportFormat.RAW].setChecked(True)
+    assert "chỉ RAW" in w.bottom_bar.kept.text()
+    dialog.format_buttons[ExportFormat.RAW_JPEG].setChecked(True)
     assert "gồm JPEG kèm" in w.bottom_bar.kept.text()
 
 
@@ -174,7 +177,7 @@ def test_client_export_asks_which_list(qtbot, env: dict, monkeypatch) -> None:  
     assert w.open_export_dialog(client_list=True) is None
 
 
-def test_include_pairs_survives_reopening_and_matches_the_bar(qtbot, env: dict) -> None:  # noqa: F811
+def test_format_survives_reopening_and_matches_the_bar(qtbot, env: dict) -> None:  # noqa: F811
     """Review CR11-04."""
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
@@ -182,14 +185,14 @@ def test_include_pairs_survives_reopening_and_matches_the_bar(qtbot, env: dict) 
     w.set_flag("keep")
     dialog = w.open_export_dialog()
     qtbot.addWidget(dialog)
-    dialog.include_pairs.setChecked(False)
+    dialog.format_buttons[ExportFormat.JPEG].setChecked(True)
     dialog.close()
     again = w.open_export_dialog()
     qtbot.addWidget(again)
-    assert not again.include_pairs.isChecked() and w.settings.value("export/include_pairs", True, bool) is False
-    assert "gồm JPEG kèm" not in w.bottom_bar.kept.text()
+    assert again.format_buttons[ExportFormat.JPEG].isChecked() and w.settings.value("export/format") == "jpeg"
+    assert "chỉ JPEG" in w.bottom_bar.kept.text()
     w._update_counts()  # a fresh refresh reads the same setting
-    assert "gồm JPEG kèm" not in w.bottom_bar.kept.text()
+    assert "chỉ JPEG" in w.bottom_bar.kept.text()
     w.close()
 
     from app.export.copy_export import Selection, estimated_bytes, select_ids
@@ -198,8 +201,8 @@ def test_include_pairs_survives_reopening_and_matches_the_bar(qtbot, env: dict) 
     w2 = _window(qtbot, env)  # same settings file, new window
     _import(qtbot, w2, env["photos"])  # reopens the same session
     conn = w2.project.conn
-    size = estimated_bytes(conn, select_ids(conn, Selection.KEEP), include_pairs=False)
-    assert w2.bottom_bar.kept.text() == f"Đã chọn 1 ảnh ({size_text(size)})"
+    size = estimated_bytes(conn, select_ids(conn, Selection.KEEP), fmt=ExportFormat.JPEG)
+    assert w2.bottom_bar.kept.text() == f"Đã chọn 1 ảnh ({size_text(size)}, chỉ JPEG)"
     dialog2 = w2.open_export_dialog()
     qtbot.addWidget(dialog2)
-    assert not dialog2.include_pairs.isChecked()
+    assert dialog2.format_buttons[ExportFormat.JPEG].isChecked()

@@ -1,9 +1,10 @@
 """Part 3 Task 1 — compatibility baseline: what today's export plans for every kind of photo and scope.
 
-The golden values below are the export of Parts 1–2 (``include_pairs=True``, the default). Task 3 runs the same
-expectations against the new planner (Imported + RAW_JPEG + one folder): the equivalence claim covers
-``include_pairs=True`` only (review CR-P3-D03). ``GOLDEN_INCLUDE_PAIRS_FALSE`` records the old "off" behaviour,
-which the new options replace (documented difference, not an equivalence)."""
+The golden values below were recorded from the export of Parts 1–2 (``include_pairs=True``, the default) and
+passed against that code (commit 4199202). Since Task 3 the same expectations run against the new planner's default
+(Imported + RAW_JPEG + one folder): the equivalence claim covers ``include_pairs=True`` only (review CR-P3-D03).
+``GOLDEN_INCLUDE_PAIRS_FALSE`` records the old "off" behaviour (it passed against the old code too), which the new
+options replace — a documented difference, not an equivalence (tests/unit/test_export_plan.py)."""
 
 from __future__ import annotations
 
@@ -57,7 +58,7 @@ def fx(tmp_path: Path):  # noqa: ANN201
 
 @pytest.mark.parametrize("scope", list(GOLDEN))
 def test_today_plan_matches_golden(fx, scope: Selection) -> None:  # noqa: ANN001
-    plan = plan_export(fx.project, _scope_ids(fx, scope), fx.dest, include_pairs=True)
+    plan = plan_export(fx.project, _scope_ids(fx, scope), fx.dest)
     assert snapshot(plan) == GOLDEN[scope]
 
 
@@ -67,16 +68,11 @@ def test_keep_never_lists_rejected_or_undecided(fx) -> None:  # noqa: ANN001
     assert fx.files["pair"][1] not in ids  # the pair's JPEG comes with its RAW, it is not a photo of its own
 
 
-def test_today_include_pairs_false_golden(fx) -> None:  # noqa: ANN001
-    plan = plan_export(fx.project, _scope_ids(fx, Selection.KEEP), fx.dest, include_pairs=False)
-    assert snapshot(plan) == GOLDEN_INCLUDE_PAIRS_FALSE
-
-
 def test_today_collision_and_already_present(fx) -> None:  # noqa: ANN001
     fx.dest.mkdir()
     write_file(fx.dest / "DSC_0001.NEF", 999, 1000)  # a different file of the same name
     (fx.dest / "DSC_0003.NEF").write_bytes((fx.root / "DSC_0003.NEF").read_bytes())  # an identical copy
-    plan = plan_export(fx.project, _scope_ids(fx, Selection.KEEP), fx.dest, include_pairs=True)
+    plan = plan_export(fx.project, _scope_ids(fx, Selection.KEEP), fx.dest)
     snap = snapshot(plan)
     assert ("DSC_0001.NEF", "DSC_0001 (1).NEF") in snap["copies"]
     assert ("DSC_0001.JPG", "DSC_0001 (1).JPG") in snap["copies"]  # the pair keeps one stem
@@ -91,7 +87,7 @@ def _tables(conn: sqlite3.Connection) -> dict[str, list[tuple]]:
 
 def test_export_changes_nothing_but_destination(fx) -> None:  # noqa: ANN001
     before_db, before_files = _tables(fx.project.conn), tree_digest(fx.root)
-    plan = plan_export(fx.project, _scope_ids(fx, Selection.KEEP), fx.dest, include_pairs=True)
+    plan = plan_export(fx.project, _scope_ids(fx, Selection.KEEP), fx.dest)
     result = run_export(plan)
     assert len(result.copied) == 7 and not result.failed
     assert _tables(fx.project.conn) == before_db

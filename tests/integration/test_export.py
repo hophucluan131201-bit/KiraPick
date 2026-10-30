@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from app.export.formats import ExportFormat
 from app.export.copy_export import ExportError, Selection, plan_export, run_export, select_assets
 from app.ingest.fingerprint import full_sha256
 from app.storage import decisions
@@ -74,14 +75,11 @@ def test_export_copies_without_touching_or_overwriting(setup: tuple[Project, Pat
     assert len(json.loads(result.manifest_json.read_text(encoding="utf-8"))["files"]) == 3
 
 
-def test_keep_folders_layout(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
+def test_source_subfolders_are_not_reproduced(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
+    """"Giữ cấu trúc thư mục con" was removed (Part 3, review Q1): one folder, names made unique."""
     p, _, _ = setup
-    plan = plan_export(p, [r[0] for r in p.conn.execute("SELECT id FROM assets")], tmp_path / "out", keep_folders=True)
-    assert sorted(i.dest_relative for i in plan.items) == [
-        "Ngày 1/DSC_0001.jpg", "Ngày 1/sub/DSC_0002.jpg", "Ngày 2/DSC_0001.jpg",
-    ]
-    run_export(plan)
-    assert (tmp_path / "out" / "Ngày 1" / "sub" / "DSC_0002.jpg").is_file()
+    plan = plan_export(p, [r[0] for r in p.conn.execute("SELECT id FROM assets")], tmp_path / "out")
+    assert sorted(i.dest_relative for i in plan.items) == ["DSC_0001 (1).jpg", "DSC_0001.jpg", "DSC_0002.jpg"]
 
 
 def test_file_created_after_planning_is_not_overwritten(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:
@@ -129,8 +127,8 @@ def test_raw_jpeg_pair_exported_together_with_shared_stem(tmp_path: Path, public
         (dest / "ISS.JPG").write_bytes(b"x")  # forces a new stem for BOTH files of the pair
         plan = plan_export(p, select_assets(p, Selection.KEEP), dest)
         assert sorted(i.dest_relative for i in plan.items) == ["ISS (1).JPG", "ISS (1).NEF"]
-        assert all(i.flag == "keep" for i in plan.items)  # the RAW's decision applies to its JPEG
-        assert [i.dest_relative for i in plan_export(p, [raw_id], tmp_path / "o2", include_pairs=False).items] == ["ISS.NEF"]
+        assert all(plan.photos[i.photo_id].flag == "keep" for i in plan.items)  # the RAW's decision applies to its JPEG
+        assert [i.dest_relative for i in plan_export(p, [raw_id], tmp_path / "o2", fmt=ExportFormat.RAW).items] == ["ISS.NEF"]
 
 
 def test_re_export_skips_identical_files_instead_of_duplicating(setup: tuple[Project, Path, Path], tmp_path: Path) -> None:

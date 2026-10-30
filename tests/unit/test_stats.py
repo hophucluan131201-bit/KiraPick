@@ -9,6 +9,7 @@ import pytest
 
 from app.storage import decisions
 from app.storage.project import Project
+from app.export.formats import ExportFormat
 from app.storage.stats import Counts, counts
 
 MB = 1_000_000
@@ -38,9 +39,9 @@ def test_pair_counts_once_and_size_follows_option(conn: sqlite3.Connection) -> N
     raw = _add(conn, "DSC_1.NEF", 30 * MB, "raw", g)
     _add(conn, "DSC_1.JPG", 10 * MB, "raster", g)
     decisions.set_flag(conn, raw, "keep")
-    assert counts(conn, include_pairs=True) == Counts(total=1, keep=1, reject=0, undecided=0, errors=0,
+    assert counts(conn, ExportFormat.RAW_JPEG) == Counts(total=1, keep=1, reject=0, undecided=0, errors=0,
                                                       keep_bytes=40 * MB)
-    assert counts(conn, include_pairs=False).keep_bytes == 30 * MB
+    assert counts(conn, ExportFormat.RAW).keep_bytes == 30 * MB
 
 
 def test_broken_pair_and_jpeg_only(conn: sqlite3.Connection) -> None:
@@ -49,7 +50,7 @@ def test_broken_pair_and_jpeg_only(conn: sqlite3.Connection) -> None:
     plain = _add(conn, "DSC_3.JPG", 5 * MB)
     for a in (orphan, plain):
         decisions.set_flag(conn, a, "keep")
-    c = counts(conn, include_pairs=True)
+    c = counts(conn, ExportFormat.RAW_JPEG)
     assert (c.total, c.keep, c.keep_bytes) == (2, 2, 13 * MB)
 
 
@@ -59,7 +60,7 @@ def test_undecided_excludes_errors(conn: sqlite3.Connection) -> None:
     _add(conn, "gone.jpg", MB, status="missing")  # not shown in the grid: not counted at all
     decisions.set_flag(conn, ok1, "keep")
     decisions.set_flag(conn, ok2, "reject")
-    c = counts(conn, include_pairs=True)
+    c = counts(conn, ExportFormat.RAW_JPEG)
     assert (c.total, c.keep, c.reject, c.undecided, c.errors) == (4, 1, 1, 1, 1)
     assert ok3
 
@@ -69,7 +70,7 @@ def test_pair_member_missing_on_disk_status_is_not_in_the_size(conn: sqlite3.Con
     raw = _add(conn, "DSC_4.NEF", 30 * MB, "raw", g)
     _add(conn, "DSC_4.JPG", 10 * MB, "raster", g, status="missing")  # the export would skip it
     decisions.set_flag(conn, raw, "keep")
-    assert counts(conn, include_pairs=True).keep_bytes == 30 * MB
+    assert counts(conn, ExportFormat.RAW_JPEG).keep_bytes == 30 * MB
 
 
 def test_counts_match_what_the_grid_shows(conn: sqlite3.Connection) -> None:
@@ -82,11 +83,11 @@ def test_counts_match_what_the_grid_shows(conn: sqlite3.Connection) -> None:
     _add(conn, "B.JPG", 1, "raster", _pair(conn))
     _add(conn, "C.JPG", 1)
     shown = conn.execute(_QUERY + _FILTER_SQL[Filter.ALL], {"min_rating": 0, "target_id": None}).fetchall()
-    assert counts(conn, include_pairs=True).total == len(shown) == 3
+    assert counts(conn, ExportFormat.RAW_JPEG).total == len(shown) == 3
 
 
 def test_empty_session(conn: sqlite3.Connection) -> None:
-    assert counts(conn, include_pairs=True) == Counts(0, 0, 0, 0, 0, 0)
+    assert counts(conn, ExportFormat.RAW_JPEG) == Counts(0, 0, 0, 0, 0, 0)
 
 
 def test_jpeg_whose_raw_went_missing_is_shown_and_counted(conn: sqlite3.Connection) -> None:
@@ -99,7 +100,7 @@ def test_jpeg_whose_raw_went_missing_is_shown_and_counted(conn: sqlite3.Connecti
     decisions.set_flag(conn, jpg, "keep")
     shown = [r["id"] for r in conn.execute(_QUERY + _FILTER_SQL[Filter.ALL], {"min_rating": 0, "target_id": None})]
     assert shown == [jpg]
-    c = counts(conn, include_pairs=True)
+    c = counts(conn, ExportFormat.RAW_JPEG)
     assert (c.total, c.keep, c.keep_bytes) == (1, 1, 10 * MB)
 
 
@@ -114,7 +115,7 @@ def test_counts_contract_errors_overlap_decisions(conn: sqlite3.Connection) -> N
     decisions.set_flag(conn, ok, "keep")
     decisions.set_flag(conn, broken_kept, "keep")
     decisions.set_flag(conn, broken_rejected, "reject")
-    c = counts(conn, include_pairs=True)
+    c = counts(conn, ExportFormat.RAW_JPEG)
     assert (c.total, c.keep, c.reject, c.undecided, c.errors) == (4, 2, 1, 0, 3)
     assert c.total == c.keep + c.reject + c.undecided + 1  # one error without a decision
     assert c.keep_bytes == MB  # an unreadable file is not exported, so not in the size
@@ -127,6 +128,7 @@ def test_group_of_three_and_several_kept_members_are_not_counted_twice(conn: sql
     _add(conn, "F.HEIC", 5 * MB, "raster", g)
     decisions.set_flag(conn, raw, "keep")
     decisions.set_flag(conn, jpg, "keep")  # a decision on the hidden JPEG too (e.g. from before pairing)
-    assert counts(conn, include_pairs=True).keep_bytes == 45 * MB
-    assert counts(conn, include_pairs=False).keep_bytes == 40 * MB  # the export copies both kept files
-    assert counts(conn, include_pairs=True).keep == 1  # one photo in the grid
+    assert counts(conn, ExportFormat.RAW_JPEG).keep_bytes == 45 * MB
+    assert counts(conn, ExportFormat.RAW).keep_bytes == 30 * MB  # the group is one photo: its RAW, once
+    assert counts(conn, ExportFormat.JPEG).keep_bytes == 10 * MB
+    assert counts(conn, ExportFormat.RAW_JPEG).keep == 1  # one photo in the grid

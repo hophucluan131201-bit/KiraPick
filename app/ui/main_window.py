@@ -95,7 +95,7 @@ from app.ui.top_bar import CELL_DEFAULT, TopBar
 from app.ui.bottom_bar import BottomBar
 from app.ui.layout_controller import LayoutController
 from app.ui import gc_guard, shutdown
-from app.ui.export_dialog import INCLUDE_PAIRS_KEY
+from app.ui.export_dialog import export_format
 from app.storage.stats import Counts, counts
 from app.storage.workflow import STEPS, StepState, steps
 from app.ui.review_dialog import ReviewDialog
@@ -1813,13 +1813,13 @@ class MainWindow(QMainWindow):
         self._update_counts()
 
     def _update_counts(self) -> None:
-        """Bottom bar: photos Chọn / Loại / undecided, export size (follows "Kèm JPEG"), marking (app.storage.stats)."""
-        include_pairs = self.settings.value(INCLUDE_PAIRS_KEY, True, bool)
+        """Bottom bar: photos Chọn / Loại / undecided, export size (follows ② Định dạng), marking (app.storage.stats)."""
+        fmt = export_format(self.settings)
         if self.project is None:
-            self.bottom_bar.set_counts(Counts(0, 0, 0, 0, 0, 0), include_pairs, 0)
+            self.bottom_bar.set_counts(Counts(0, 0, 0, 0, 0, 0), fmt, 0)
             return
         marked = 0 if self.in_compare() else len(self.selected_records())  # Compare: keys act on one photo
-        self.bottom_bar.set_counts(counts(self.project.conn, include_pairs), include_pairs, marked)
+        self.bottom_bar.set_counts(counts(self.project.conn, fmt), fmt, marked)
 
     def _update_empty_state(self) -> None:
         if self.in_compare():
@@ -2345,7 +2345,8 @@ class MainWindow(QMainWindow):
                               settings=self.settings)
         dialog.gate = self._gate
         dialog.run_recorded.connect(self.refresh_steps)  # ✓ Xuất ảnh as soon as an export is recorded
-        dialog.include_pairs.toggled.connect(lambda _on: self._update_counts())  # size follows "Kèm JPEG"
+        for rb in dialog.format_buttons.values():  # size follows ② Định dạng (after the dialog stored the choice)
+            rb.toggled.connect(lambda on: on and self._update_counts())
         dialog.show()
         return dialog
 

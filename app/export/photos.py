@@ -39,6 +39,13 @@ class Photo:
     favorite: bool
 
 
+def _kind(media_kind: str, relative_path: str) -> str:
+    """The import's media kind decides RAW; among rasters the extension tells JPEG from other."""
+    if media_kind == "raw":
+        return "raw"
+    return "jpeg" if file_kind(relative_path) == "jpeg" else "other"
+
+
 def _time(text: str | None) -> datetime | None:
     try:
         return datetime.fromisoformat(text) if text else None
@@ -68,7 +75,7 @@ def load_photos(conn: sqlite3.Connection, photo_ids: list[int]) -> list[Photo]:
             rows += conn.execute(_FILE_SQL + " WHERE a.pair_group_id = ? AND a.id != ? AND a.status = 'ok' "
                                  "ORDER BY a.id", (p["pair_group_id"], photo_id)).fetchall()
         rows = [r for r in rows if r is not None]
-        files = tuple(PhotoFile(r["id"], file_kind(r["relative_path"]) or "other",
+        files = tuple(PhotoFile(r["id"], _kind(r["media_kind"], r["relative_path"]),
                                 Path(r["root_path"]) / Path(r["relative_path"]), r["relative_path"],
                                 Path(r["root_path"]), int(r["size"]), r["quick_hash"]) for r in rows)
         meta = next((r for r in rows if r["capture_time"]), rows[0] if rows else None)
@@ -80,6 +87,6 @@ def load_photos(conn: sqlite3.Connection, photo_ids: list[int]) -> list[Photo]:
     return out
 
 
-_FILE_SQL = """SELECT a.id, a.relative_path, a.size, a.quick_hash, a.capture_time, a.subsec, a.make, a.model,
+_FILE_SQL = """SELECT a.id, a.relative_path, a.media_kind, a.size, a.quick_hash, a.capture_time, a.subsec, a.make, a.model,
                       s.root_path
                FROM assets a JOIN sources s ON s.id = a.source_id"""

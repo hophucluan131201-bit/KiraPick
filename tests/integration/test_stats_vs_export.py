@@ -9,6 +9,7 @@ import pytest
 from app.export.copy_export import Selection, plan_export, run_export, select_assets
 from app.storage import decisions
 from app.storage.project import Project
+from app.export.formats import ExportFormat
 from app.storage.stats import SHOWN_PHOTO_SQL, counts
 from app.workers.import_job import ImportJob
 from tests.integration.test_import_job import _photo
@@ -32,17 +33,16 @@ def shoot(tmp_path: Path):  # noqa: ANN201
         yield project, root, ids
 
 
-@pytest.mark.parametrize("include_pairs", [True, False])
-def test_size_equals_the_export_plan(shoot, tmp_path: Path, include_pairs: bool) -> None:  # noqa: ANN001
+@pytest.mark.parametrize("fmt", list(ExportFormat))
+def test_size_equals_the_export_plan(shoot, tmp_path: Path, fmt: ExportFormat) -> None:  # noqa: ANN001
     project, _root, ids = shoot
     conn = project.conn
     for name in ("A.jpg", "A_x.jpg", "C.jpg", "D.jpg"):  # A_x: a kept hidden member; C: JPEG whose RAW is missing
         decisions.set_flag(conn, ids[name], "keep")
     decisions.set_flag(conn, ids["E.jpg"], "keep")
     conn.execute("UPDATE assets SET status = 'error' WHERE id = ?", (ids["E.jpg"],))  # kept, now unreadable
-    plan = plan_export(project, select_assets(project, Selection.KEEP), tmp_path / f"out{include_pairs}",
-                       include_pairs=include_pairs)
-    assert counts(conn, include_pairs).keep_bytes == plan.total_bytes > 0
+    plan = plan_export(project, select_assets(project, Selection.KEEP), tmp_path / f"out{fmt.value}", fmt=fmt)
+    assert counts(conn, fmt).keep_bytes == plan.total_bytes > 0
 
 
 def test_jpeg_fallback_grid_keep_export(shoot, tmp_path: Path) -> None:  # noqa: ANN001

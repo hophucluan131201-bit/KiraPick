@@ -26,6 +26,10 @@ from enum import Enum
 from pathlib import Path, PurePosixPath
 
 from app.core.errors import KiraPickError
+from app.export.formats import ExportFormat, wanted_kinds
+from app.export.layout import Layout
+from app.export.photos import Photo, PhotoFile, load_photos
+from app.export.sources import SourceSpec
 from app.ingest.fingerprint import quick_fingerprint
 from app.storage.project import Project
 
@@ -45,29 +49,81 @@ class Selection(str, Enum):
     COLLECTION = "collection"  # a client's pick list
 
 
+class IssueStatus(str, Enum):
+    MISSING = "missing"  # the file is no longer on disk
+    MISSING_FORMAT = "missing_format"  # the photo has no file of the chosen format
+    NOT_MATCHED = "not_matched"
+    CONTENT_DIFFERS = "content_differs"
+    AMBIGUOUS = "ambiguous"
+    PATH_TOO_LONG = "path_too_long"
+
+
 @dataclass(frozen=True, slots=True)
-class ExportItem:
-    asset_id: int
+class SourceIdentity:
+    """A source file as it was when planned; checked again before it is copied."""
+    size: int
+    mtime_ns: int
+    sha256: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExportOp:
+    """One file copy."""
+    photo_id: int
+    asset_id: int  # the imported file of that kind (the photo's primary when the kind was not imported)
+    kind: str
     source: Path
+    source_relative: str
+    folder: str  # "" = the destination folder itself
     dest_relative: str  # POSIX path relative to the destination folder
     size: int
-    flag: str | None
-    rating: int
-    favorite: bool
-    capture_time: str | None
-    camera: str | None
+    match: str  # imported | content | time | manual
+    identity: SourceIdentity
+    maybe_present: bool = False  # the target seems to hold this file already (checked fully when copying)
+
+
+@dataclass(frozen=True, slots=True)
+class ExportIssue:
+    photo_id: int
+    stem: str
+    kind: str | None
+    status: IssueStatus
+    detail: str
+    source_relative: str | None = None
+    candidates: tuple[object, ...] = ()
 
 
 @dataclass(slots=True)
 class ExportPlan:
     destination: Path
-    items: list[ExportItem]
-    missing: list[str] = field(default_factory=list)  # selected files no longer on disk
+    operations: list[ExportOp]
+    issues: list[ExportIssue] = field(default_factory=list)
     already_present: list[str] = field(default_factory=list)  # identical copy already at the destination
+    photos: dict[int, Photo] = field(default_factory=dict)
+
+    @property
+    def items(self) -> list[ExportOp]:
+        """The copies to make (the name callers used before Part 3)."""
+        return self.operations
+
+    @property
+    def missing(self) -> list[str]:
+        """Selected files no longer on disk (path relative to their source folder)."""
+        return [i.source_relative or i.stem for i in self.issues if i.status is IssueStatus.MISSING]
 
     @property
     def total_bytes(self) -> int:
-        return sum(i.size for i in self.items)
+        return sum(op.size for op in self.operations)
+
+    @property
+    def photos_planned(self) -> int:
+        return len({op.photo_id for op in self.operations})
+
+    def counts(self) -> dict[IssueStatus, int]:
+        out: dict[IssueStatus, int] = {}
+        for issue in self.issues:
+            out[issue.status] = out.get(issue.status, 0) + 1
+        return out
 
 
 @dataclass(slots=True)
@@ -173,92 +229,85 @@ def _choose_stem(
         n += 1
 
 
+_KIND_LABEL = {"raw": "RAW", "jpeg": "JPEG"}
+
+
 def plan_export(
     project: Project,
     asset_ids: list[int],
     destination: Path,
     *,
-    include_pairs: bool = True,
-    keep_folders: bool = False,
+    source: SourceSpec | None = None,
+    fmt: ExportFormat = ExportFormat.RAW_JPEG,
+    layout: Layout = Layout.SINGLE,
+    confirmations: dict[tuple[int, str], Path] | None = None,
 ) -> ExportPlan:
+    """What an export would copy, and what it cannot (Part 3 spec §3.5). Disk access: ``stat`` of the sources and of
+    existing targets, and the quick fingerprint of a target that may already hold the file."""
+    source = source or SourceSpec()
+    if source.mode != "imported":
+        raise ExportError("xuất từ nguồn khác chưa có trong bản này")
+    if layout is not Layout.SINGLE:
+        raise ExportError("xuất theo chủ thể chưa có trong bản này")
     dest = _validate_destination(project, destination)
-    conn = project.conn
     plan = ExportPlan(dest, [])
     taken: set[str] = set()
-    for asset_id, group_ids in export_groups(conn, asset_ids, include_pairs=include_pairs):
-        members = []
-        for gid in group_ids:
-            r = conn.execute(
-                """SELECT a.id, a.relative_path, a.capture_time, a.make, a.model, s.root_path, d.flag,
-                          COALESCE(d.rating, 0) AS rating, COALESCE(d.favorite, 0) AS favorite
-                   FROM assets a JOIN sources s ON s.id = a.source_id
-                   LEFT JOIN decisions d ON d.asset_id = ? AND d.subject_id IS NULL
-                   WHERE a.id = ?""",
-                (asset_id, gid),  # decisions of the pair's primary photo apply to the pair
-            ).fetchone()
-            src = Path(r["root_path"]) / Path(r["relative_path"])
-            if not src.is_file() or src.is_symlink():
-                plan.missing.append(r["relative_path"])
-                continue
-            members.append((r, src))
-        if not members:
+    seen: set[int] = set()
+    wanted = wanted_kinds(fmt, external=False)
+    for photo in load_photos(project.conn, asset_ids):
+        if photo.photo_id in seen:
+            continue  # a file of a photo already planned (a pair's JPEG selected with its RAW)
+        seen.update(f.asset_id for f in photo.files)
+        plan.photos[photo.photo_id] = photo
+        files = [f for f in photo.files if f.kind in wanted]
+        if not files:
+            for kind in sorted(wanted - {"other"}):
+                plan.issues.append(ExportIssue(photo.photo_id, photo.stem, kind, IssueStatus.MISSING_FORMAT,
+                                               f"Thiếu {_KIND_LABEL[kind]}"))
             continue
-        first_rel = PurePosixPath(members[0][0]["relative_path"])
-        parent = ""
-        if keep_folders:
-            source_name = Path(members[0][0]["root_path"]).name
-            parent = str(PurePosixPath(source_name, first_rel.parent))
-        stem = first_rel.stem
-        suffixes = [PurePosixPath(m[0]["relative_path"]).suffix for m in members]
-        free, present = _choose_stem(dest, parent, stem, [(sfx, m[1]) for sfx, m in zip(suffixes, members)], taken)
-        for i, ((r, src), suffix) in enumerate(zip(members, suffixes)):
-            rel = str(PurePosixPath(parent, free + suffix)) if parent else free + suffix
-            taken.add(rel.casefold())
-            if i in present:
-                plan.already_present.append(rel)
+        present = []
+        for f in files:
+            if not f.path.is_file() or f.path.is_symlink():
+                plan.issues.append(ExportIssue(photo.photo_id, photo.stem, f.kind, IssueStatus.MISSING,
+                                               "không còn trên ổ đĩa", f.relative_path))
                 continue
-            camera = " ".join(filter(None, [r["make"], r["model"]])) or None
-            plan.items.append(ExportItem(
-                r["id"], src, rel, src.stat().st_size, r["flag"], int(r["rating"]), bool(r["favorite"]),
-                r["capture_time"], camera,
-            ))
+            present.append(f)
+        if present:
+            _plan_folder(plan, photo, present, "", taken)
     return plan
 
 
-def export_groups(conn: sqlite3.Connection, asset_ids: list[int], *,
-                  include_pairs: bool) -> list[tuple[int, list[int]]]:
-    """The files an export copies, per photo: (photo id, [its id, then the other ok files of its pair group]).
-
-    The single source of truth for "which files": plan_export copies exactly these (minus files gone from
-    disk) and the bottom bar's size estimate sums their sizes. A file is listed once even when several
-    files of one group are selected."""
-    out: list[tuple[int, list[int]]] = []
-    seen: set[int] = set()
-    for asset_id in asset_ids:
-        if asset_id in seen:
+def _plan_folder(plan: ExportPlan, photo: Photo, files: list[PhotoFile], folder: str, taken: set[str]) -> None:
+    """The files of one photo into one folder, under one stem (a pair stays a pair)."""
+    stem = PurePosixPath(files[0].relative_path).stem
+    suffixes = [PurePosixPath(f.relative_path).suffix for f in files]
+    free, present = _choose_stem(plan.destination, folder, stem, [(sfx, f.path) for sfx, f in zip(suffixes, files)],
+                                 taken)
+    for i, (f, suffix) in enumerate(zip(files, suffixes)):
+        rel = str(PurePosixPath(folder, free + suffix)) if folder else free + suffix
+        taken.add(rel.casefold())
+        if i in present:
+            plan.already_present.append(rel)
             continue
-        row = conn.execute("SELECT pair_group_id FROM assets WHERE id = ?", (asset_id,)).fetchone()
-        if row is None:
-            continue
-        group_ids = [asset_id]
-        if include_pairs and row[0] is not None:
-            group_ids += [r[0] for r in conn.execute(
-                "SELECT id FROM assets WHERE pair_group_id = ? AND id != ? AND status = 'ok' ORDER BY id",
-                (row[0], asset_id))]
-        seen.update(group_ids)
-        out.append((asset_id, group_ids))
-    return out
+        st = f.path.stat()
+        plan.operations.append(ExportOp(
+            photo.photo_id, f.asset_id, f.kind, f.path, f.relative_path, folder, rel, st.st_size, "imported",
+            SourceIdentity(st.st_size, st.st_mtime_ns),
+        ))
 
 
-def estimated_bytes(conn: sqlite3.Connection, asset_ids: list[int], *, include_pairs: bool) -> int:
-    """Bytes an export of these photos would copy, from the sizes recorded at import (no disk access)."""
-    files = [f for _, group in export_groups(conn, asset_ids, include_pairs=include_pairs) for f in group]
+def estimated_bytes(conn: sqlite3.Connection, asset_ids: list[int], *, fmt: ExportFormat) -> int:
+    """Bytes an export of these photos would copy from the imported folders into one folder, from the sizes recorded at
+    import (no disk access): the files plan_export picks."""
     total = 0
-    for start in range(0, len(files), 500):
-        chunk = files[start:start + 500]
-        total += conn.execute(f"SELECT COALESCE(SUM(size), 0) FROM assets WHERE id IN ({','.join('?' * len(chunk))})",
-                              chunk).fetchone()[0]
-    return int(total)
+    seen: set[int] = set()
+    wanted = wanted_kinds(fmt, external=False)
+    for photo in load_photos(conn, asset_ids):
+        if photo.photo_id in seen:
+            continue
+        seen.update(f.asset_id for f in photo.files)
+        total += sum(f.size for f in photo.files if f.kind in wanted)
+    return total
 
 
 def _copy_exclusive(src: Path, dest_root: Path, rel: str) -> str:
@@ -295,7 +344,7 @@ def run_export(
     result = ExportResult()
     plan.destination.mkdir(parents=True, exist_ok=True)
     total = len(plan.items)
-    done_items: list[tuple[ExportItem, str]] = []
+    done_items: list[tuple[ExportOp, str]] = []
     for i, item in enumerate(plan.items, 1):
         if should_cancel is not None and should_cancel():
             result.cancelled = True
@@ -313,20 +362,21 @@ def run_export(
         if progress is not None:
             progress(i, total)
     if done_items:
-        result.manifest_csv, result.manifest_json = _write_manifests(plan.destination, done_items)
+        result.manifest_csv, result.manifest_json = _write_manifests(plan.destination, done_items, plan.photos)
     return result
 
 
-def _write_manifests(dest: Path, done: list[tuple[ExportItem, str]]) -> tuple[Path, Path]:
+def _write_manifests(dest: Path, done: list[tuple[ExportOp, str]], photos: dict[int, Photo]) -> tuple[Path, Path]:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    rows = [
-        {
-            "exported_as": actual, "source_path": str(item.source), "flag": item.flag or "",
-            "rating": item.rating, "favorite": item.favorite, "capture_time": item.capture_time or "",
-            "camera": item.camera or "", "size_bytes": item.size,
-        }
-        for item, actual in done
-    ]
+    rows = []
+    for item, actual in done:
+        photo = photos.get(item.photo_id)
+        rows.append({
+            "exported_as": actual, "source_path": str(item.source), "flag": (photo.flag if photo else None) or "",
+            "rating": photo.rating if photo else 0, "favorite": photo.favorite if photo else False,
+            "capture_time": photo.capture_time.isoformat() if photo and photo.capture_time else "",
+            "camera": (photo.camera if photo else None) or "", "size_bytes": item.size,
+        })
     folder = dest / MANIFEST_DIR
     folder.mkdir(exist_ok=True)
     csv_path = folder / f"kirapick_export_{stamp}.csv"
