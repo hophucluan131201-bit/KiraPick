@@ -264,27 +264,20 @@ def plan_export(
     seen: set[int] = set()
     wanted = wanted_kinds(fmt, external=False)
     photos = load_photos(conn, asset_ids)
-    folders_of: dict[int, list[str]] = {}
+    names: dict[int, str] = {}
+    members: dict[int, tuple[int, ...]] = {}
     if layout is Layout.SUBJECTS:
         names = subject_folders(conn)
-        stats = LayoutStats(analysed=analysed(conn))
-        plan.layout_stats = stats
+        plan.layout_stats = LayoutStats(analysed=analysed(conn))
         members = photo_subjects(conn, photos)
-        for photo in photos:
-            subjects = [names[s] for s in members.get(photo.photo_id, ()) if s in names]
-            if not subjects:
-                if has_suggestion(conn, photo):
-                    stats.unknown_suggested += 1
-                else:
-                    stats.unknown_other += 1
-            elif len(subjects) > 1:
-                stats.multi_subject += 1
-            folders_of[photo.photo_id] = sorted(subjects, key=str.casefold) or [UNKNOWN_FOLDER]
     for photo in photos:
         if photo.photo_id in seen:
             continue  # a file of a photo already planned (a pair's JPEG selected with its RAW)
         seen.update(f.asset_id for f in photo.files)
         plan.photos[photo.photo_id] = photo
+        folders = [""]
+        if plan.layout_stats is not None:
+            folders = _subject_folders_of(conn, plan.layout_stats, photo, members, names)
         files = [f for f in photo.files if f.kind in wanted]
         if not files:
             for kind in sorted(wanted - {"other"}):
@@ -299,11 +292,26 @@ def plan_export(
                 continue
             present.append(f)
         if present:
-            for folder in folders_of.get(photo.photo_id, [""]):
+            for folder in folders:
                 _plan_folder(plan, photo, present, folder, taken)
                 if plan.layout_stats is not None:
                     plan.layout_stats.per_folder[folder] = plan.layout_stats.per_folder.get(folder, 0) + 1
     return plan
+
+
+def _subject_folders_of(conn: sqlite3.Connection, stats: LayoutStats, photo: Photo,
+                        members: dict[int, tuple[int, ...]], names: dict[int, str]) -> list[str]:
+    """The subject folders of one photo (each subject's, or "Chưa xác định"), counted in ``stats``."""
+    subjects = sorted((names[s] for s in members.get(photo.photo_id, ()) if s in names), key=str.casefold)
+    if not subjects:
+        if has_suggestion(conn, photo):
+            stats.unknown_suggested += 1
+        else:
+            stats.unknown_other += 1
+        return [UNKNOWN_FOLDER]
+    if len(subjects) > 1:
+        stats.multi_subject += 1
+    return subjects
 
 
 def _plan_folder(plan: ExportPlan, photo: Photo, files: list[PhotoFile], folder: str, taken: set[str]) -> None:

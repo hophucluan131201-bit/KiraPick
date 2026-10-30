@@ -70,7 +70,9 @@ def load_photos(conn: sqlite3.Connection, photo_ids: list[int]) -> list[Photo]:
         p = primaries.get(photo_id)
         if p is None:
             continue
-        rows = [conn.execute(_FILE_SQL + " WHERE a.id = ? AND a.status = 'ok'", (photo_id,)).fetchone()]
+        # The photo's own file whatever its read status (as the export before Part 3: an unreadable file is still
+        # copied); the other files of its pair group only when readable.
+        rows = [conn.execute(_FILE_SQL + " WHERE a.id = ?", (photo_id,)).fetchone()]
         if p["pair_group_id"] is not None:
             rows += conn.execute(_FILE_SQL + " WHERE a.pair_group_id = ? AND a.id != ? AND a.status = 'ok' "
                                  "ORDER BY a.id", (p["pair_group_id"], photo_id)).fetchall()

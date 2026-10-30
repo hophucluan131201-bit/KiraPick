@@ -132,3 +132,12 @@ def test_bottom_bar_follows_format(fx) -> None:  # noqa: ANN001
     for fmt in ExportFormat:
         assert counts(conn, fmt).keep_bytes == estimated_bytes(conn, kept, fmt=fmt)
     assert counts(conn, ExportFormat.RAW).keep_bytes == 3 * 500_000 - 500_000 + 300_000  # 2 pair RAWs + DSC_0003
+
+
+def test_marked_unreadable_photo_is_still_copied(fx) -> None:  # noqa: ANN001
+    """Before Part 3 a marked photo (scope IDS) the import could not decode (status 'error') was still copied: the
+    file exists, only its preview failed. The new planner keeps that (self-review of batch A)."""
+    conn = fx.project.conn
+    conn.execute("UPDATE assets SET status = 'error' WHERE id = ?", (fx.ids["jpeg_only"],))
+    plan = plan_export(fx.project, [fx.ids["jpeg_only"]], fx.dest)
+    assert _names(plan) == ["DSC_0004.JPG"] and plan.issues == []

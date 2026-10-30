@@ -204,3 +204,15 @@ def test_single_layout_unchanged_by_subjects(fx) -> None:  # noqa: ANN001
     _occ(conn, fx.ids["raw_only"], _subject(conn, "Mai"))
     plan = plan_export(fx.project, [fx.ids["raw_only"]], fx.dest)
     assert _folders(plan) == {"": ["DSC_0003.NEF"]}
+
+
+def test_stats_count_a_pair_once_when_both_halves_are_selected(fx) -> None:  # noqa: ANN001
+    conn = fx.project.conn
+    raw, jpg = fx.files["pair"]
+    plan = plan_export(fx.project, [raw, jpg], fx.dest, layout=Layout.SUBJECTS)
+    assert plan.layout_stats.unknown_other == 1 and plan.layout_stats.per_folder == {UNKNOWN_FOLDER: 1}
+    mai, lan = _subject(conn, "Mai"), _subject(conn, "Lan")
+    _occ(conn, raw, mai)
+    _occ(conn, raw, lan)
+    plan = plan_export(fx.project, [raw, jpg], fx.dest, layout=Layout.SUBJECTS)
+    assert plan.layout_stats.multi_subject == 1
