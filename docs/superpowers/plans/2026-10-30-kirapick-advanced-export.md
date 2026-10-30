@@ -14,8 +14,8 @@ compute, per photo, its files (`photos.py`), the wanted kinds (`formats.py`), wh
 **Tech Stack:** Python 3.12/3.13, PySide6 6.12, SQLite (schema v7, unchanged), pytest + pytest-qt, ExifRead
 (`app.ingest.metadata`).
 
-**Spec:** `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 2). Plan rev 2 (design
-checkpoint 1 corrections CR-P3-D01…D04 and the source-revalidation case). Section numbers below
+**Spec:** `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 3). Plan rev 3 (design
+checkpoint 1 corrections CR-P3-D01…D04, source revalidation, and the rev 2 notes RV-P3-D2-01…04). Section numbers below
 (§3.3 …) refer to it.
 
 ## Global Constraints
@@ -33,8 +33,13 @@ checkpoint 1 corrections CR-P3-D01…D04 and the source-revalidation case). Sect
 - Folder names: forbidden `< > : " / \ | ? *` and control chars → `_`; reserved `CON PRN AUX NUL COM1–9 LPT1–9`
   (also with extension) → suffix `_`; max 60 chars; NFC; **no letter and no digit after sanitising → `Chủ thể <id>`**;
   duplicates → ` (#<id>)`; reserved folder `Chưa xác định`; target absolute path ≤ 259 chars.
-- Subject membership: `assignment IN ('auto','manual')`; `subject_id` resolved through `subjects.merged_into` to the
-  surviving subject (≤ 32 steps; cycle / missing row → unresolved).
+- Subject membership: `assignment IN ('auto','manual')`; an occurrence may still reference an old (merged) subject:
+  its `subject_id` is resolved through `subjects.merged_into` to the final subject with `merged_into IS NULL`
+  (≤ 32 steps; cycle / missing row → unresolved); only that final unmerged subject names a destination folder.
+- Source modes are exclusive: in External mode every copied file comes from the external root; nothing is taken from
+  the imported root to fill a gap.
+- Match words: `content` = equal full SHA-256 of the compared files; `time` = same name + capture time ≤ 2.0 s + same
+  camera (evidence, not proof); `manual` = user's choice; `imported`.
 - Other rasters (TIFF/PNG/HEIC): copied only by Imported + RAW_JPEG; never indexed / matched externally; not part of
   JPEG; no conversion anywhere.
 - Default options: Source = imported, Format = RAW + JPEG, Layout = one folder; QSettings keys `export/source`,
@@ -185,6 +190,7 @@ checkpoint 1 corrections CR-P3-D01…D04 and the source-revalidation case). Sect
     unknown_other: int, analysed: bool)` exposed as `ExportPlan.layout_stats`
 
 - [ ] **Step 1:** Tests: `test_membership_auto_manual_only` (suggested ignored; `none` ignored);
+  `test_merged_subject_never_gets_a_folder` (`subject_folders` lists only subjects with `merged_into IS NULL`);
   `test_merged_subject_resolves_to_survivor` (an occurrence left on subject 5 with `merged_into = 9` → folder of 9;
   chain 5 → 9 → 12 → 12; same photo through 5 and 12 → one folder; cycle 5 ↔ 9 and a missing row → unresolved →
   `Chưa xác định` when it is the only assignment); `test_merge_subjects_leaves_no_stale_reference` (after
@@ -239,7 +245,11 @@ compatibility proof); STOP for external review.
   `HashCancelled`); `test_hash_opens_read_only` (file mode 0o444 on POSIX; still hashed);
   `test_not_called_on_gui_thread` is enforced in Tasks 9/10 (assert `QThread.currentThread() is not
   QApplication.instance().thread()` inside a monkeypatched `sha256_file` during GUI tests).
-- [ ] **Step 2:** FAIL. **Step 3:** Implement with `os.scandir(follow_symlinks=False)`, iterative stack.
+- [ ] **Step 2:** FAIL. **Step 3:** Implement an iterative walk with `os.scandir(path)`; for each `DirEntry` skip
+  `entry.is_symlink()`, `os.path.isjunction(entry.path)`, and (Windows) `entry.stat(follow_symlinks=False)
+  .st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT`; recurse only into `entry.is_dir(follow_symlinks=False)`,
+  index only `entry.is_file(follow_symlinks=False)`. Test addition: `test_junction_and_reparse_point_skipped`
+  (Windows CI: a junction made with `mklink /J` via `subprocess`; skipped elsewhere).
   **Step 4:** PASS. **Step 5:** Commit `"Export: read-only scan of another folder (part 3 task 5)"`.
 
 ### Task 6: External matching and manual confirmation — risk: high
@@ -278,8 +288,12 @@ compatibility proof); STOP for external review.
   (`DSC_0001 (1).NEF`, `DSC_0001-Edit.NEF`); `test_counter_restart_three_times` (Review Focus);
   `test_manual_confirmation` (ambiguous + confirmed path → matched / manual; a path not among candidates ignored);
   `test_external_root_is_the_imported_folder` (Review Focus); `test_metadata_read_only_for_candidates` (counting
-  `read_meta` calls = number of cross-format candidates); `test_plan_external_twelve_shapes_smoke` (RAW_JPEG external:
-  JPEG imported + RAW on card → both copied; RAW absent → only JPEG, note "chỉ có JPEG").
+  `read_meta` calls = number of cross-format candidates); `test_external_mode_takes_files_only_from_the_card`
+  (RAW_JPEG external: JPEG imported, the card holds only the RAW → only the card's RAW copied, issue note "JPEG không
+  có tại nguồn được chọn", the imported JPEG is never a source; the card holds RAW and JPEG → both copied from the card,
+  the JPEG matched by content against the imported JPEG; the card holds only the JPEG → only that JPEG copied, note
+  "RAW không có tại nguồn được chọn"); `test_no_operation_reads_from_the_imported_root_in_external_mode` (every
+  `ExportOp.source` is inside the external root).
 - [ ] **Step 2:** FAIL. **Step 3:** Implement. **Step 4:** PASS.
 - [ ] **Step 5:** Commit `"Export: matching files on another folder (part 3 task 6)"`.
 
@@ -306,6 +320,9 @@ compatibility proof); STOP for external review.
   `test_already_present_requires_full_hash` (target with same size + head/tail but a different middle byte → copied
   as ` (1)`, original untouched; identical target → `already_present` with its sha256 in the manifest);
   `test_already_present_reverified` (target modified after planning → copied as ` (1)`, original untouched);
+  `test_manifest_match_words` (`content`, `time`, `manual`, `imported` exactly as spec §3.9);
+  `test_revalidation_limit_is_documented` (a time-matched source rewritten with equal size, restored mtime and the
+  same EXIF is copied — pins the stated limit so a future change to it is deliberate);
   `test_source_changed_before_copy[imported|content|time|manual]` (size or mtime changed after planning or after the
   confirmation → `source_changed`, nothing written); `test_source_replaced_same_size_and_mtime` (content-matched
   source rewritten with `os.utime` restoring mtime → streamed SHA-256 differs → our target removed,

@@ -1,6 +1,6 @@
 # KiraPick Part 3 — Advanced Export: technical design
 
-Status: **design checkpoint** (rev 2, 2026-10-30; rev 1 → rev 2 delta in §10) — for external review. No code is written before this specification
+Status: **approved with notes** (rev 3, 2026-10-30: rev 2 + clarifications RV-P3-D2-01…04; deltas in §10, §11) — for external review. No code is written before this specification
 and its plan (`docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md`) are approved. Nothing is released.
 
 Inputs: owner answers (2026-10-30), external review "Part 3 — Architecture Review: APPROVED WITH CHANGES"
@@ -98,8 +98,15 @@ Each stage is a pure function of its inputs plus read-only disk access, testable
 With an imported source the wanted files are the photo's own files of those kinds. With an external source (3.3) the
 wanted files are the kinds selected, looked up on the external source — **including kinds that were not imported**
 (import JPEG, take RAW from the card). For RAW_JPEG with an external source: wanted kinds = `raw` and `jpeg`; a photo
-needs at least one of them matched; the other, when absent, is noted "chỉ có RAW" / "chỉ có JPEG" (informational,
-not an error). `other` files are only ever copied from the imported source (documented limitation).
+needs at least one of them matched; the other, when absent, is noted "JPEG không có tại nguồn được chọn" / "RAW
+không có tại nguồn được chọn" (informational, not an error). `other` files are only ever copied from the imported
+source (documented limitation).
+
+**Source modes are exclusive (RV-P3-D2-01).** Imported and External are two independent modes. In External mode every
+file actually copied comes from the external root; the imported root is only *read* to identify photos (database
+rows) and, for content matches, as the reference whose bytes an external file must equal. KiraPick never fills a gap
+on the external root with a file from the imported root: if the card holds only the RAW of a photo, External +
+RAW_JPEG copies that RAW alone and reports "JPEG không có tại nguồn được chọn", even when the JPEG was imported.
 
 Other rasters, explicitly (D10):
 - Imported + RAW_JPEG copies standalone TIFF / PNG / HEIC photos and `other` files of a pair group, as today
@@ -118,8 +125,12 @@ Other rasters, explicitly (D10):
 
 `SourceMode.EXTERNAL`: the user picks one folder (card, drive). Contract:
 
-1. **Scan** (worker thread, read-only, cancellable, progress): recursive `os.scandir`; does not follow symlinks or
-   junctions; skips hidden/system folders and `_kirapick_danh_sach`; refuses a root that is the session folder or is
+1. **Scan** (worker thread, read-only, cancellable, progress): iterative walk with `os.scandir(path)`; every
+   `DirEntry` is checked without following links — skipped when `entry.is_symlink()`, when `os.path.isjunction`
+   (Python ≥ 3.12) is true, or when `entry.stat(follow_symlinks=False).st_file_attributes` has
+   `stat.FILE_ATTRIBUTE_REPARSE_POINT` (Windows; covers junctions, mount points, cloud placeholders); a directory is
+   entered only when `entry.is_dir(follow_symlinks=False)`, a file indexed only when `entry.is_file(follow_symlinks=
+   False)` (RV-P3-D2-02); skips hidden/system folders and `_kirapick_danh_sach`; refuses a root that is the session folder or is
    inside the export destination (and the destination may not be inside the external root — no copying a card into
    itself). Index: `stem.casefold() → [ExternalFile(path, kind, size)]` for supported extensions only. No file is
    opened during the scan.
@@ -168,8 +179,10 @@ Other rasters, explicitly (D10):
   `suggested` and `none` do not count (D5).
 - **Merged subjects — resolution**: `merge_subjects` (app/identity/actions.py) moves every occurrence of the dropped
   subject to the kept one and deletes the dropped row, so occurrences normally reference surviving subjects only.
-  Defensively (older sessions, an interrupted merge), `resolve(subject_id)` follows `subjects.merged_into` until a row
-  with `merged_into IS NULL` (at most 32 steps; a cycle or a missing row → unresolved). An unresolved occurrence does
+  Defensively (older sessions, an interrupted merge), an occurrence may still reference an old subject:
+  `resolve(subject_id)` follows `subjects.merged_into` until a row with `merged_into IS NULL` (at most 32 steps; a
+  cycle or a missing row → unresolved). **Only that final, unmerged subject names a destination folder**; a subject
+  with `merged_into` set never gets a folder of its own (RV-P3-D2-04). An unresolved occurrence does
   not make the photo a member of anything; if it was the photo's only assignment the photo goes to `Chưa xác định`.
   A photo whose occurrences resolve to the same subject twice gets one folder (set semantics).
 - A photo with one or more subjects is placed in **each** subject's folder (D4) — one operation per (file, subject).
@@ -282,6 +295,25 @@ cancelled or partly failed, as CSV (UTF-8 with BOM) and JSON, file name `kirapic
   file (streamed source + one read of the target).
 - Cost: a same-format external export reads each matched source once at planning and once while copying (the copy
   stream). The preview shows "Đang kiểm tra nội dung … n / m file" with the scan progress; cancel stops it.
+
+**What each match method proves (RV-P3-D2-03).** The manifest's `match` column and the preview use these words:
+- `content` — the external file's bytes are identical to the imported file's bytes (equal full SHA-256). It proves
+  byte identity of the two files compared, nothing more.
+- `time` — same base name, capture times within 2.0 s and the same camera (when known). It is **evidence**, not proof,
+  that a RAW and a JPEG come from the same shot: two different frames taken within 2 s on one camera with the same
+  counter value cannot occur normally, but a renamed file can imitate it. The preview labels it "khớp theo giờ chụp".
+- `manual` — the user's choice of one candidate; no claim by KiraPick.
+- `imported` — the imported file itself.
+
+**Limits of source revalidation (RV-P3-D2-03).** Where the plan computed a SHA-256 (`content` matches, resolved
+duplicates), the copy stream must reproduce it: any change of bytes after planning is detected. Where it did not
+(`imported`, `time`, `manual`), revalidation compares size and `mtime_ns` (and, for `time`, re-reads capture time and
+camera from the copied file): a file rewritten in place to different bytes with the same size, a restored mtime and
+the same metadata would not be detected. Hashing every such source at planning would close this gap at the cost of
+reading each file one extra time (for 1 000 RAW files of 25 MB on a 90 MB/s card reader ≈ 4.6 min before the copy can
+start). Rev 3 does not add it: the case needs deliberate tampering between preview and copy, and the copy itself
+records the SHA-256 of what was really copied in the manifest. It is listed as a known limit; a "kiểm tra kỹ nguồn
+trước khi chép" option can be added later without changing the design.
 
 ## 4. UX — Export dialog
 
@@ -439,3 +471,12 @@ tree, EXIF reads only for candidates; no Qt-thread block > 100 ms during scan / 
 | CR-P3-D04.2 merged subjects | occurrences resolve through `merged_into` to the surviving subject (≤ 32 steps; cycle / missing → unresolved); `merge_subjects` normally leaves none | §3.4, §6.4, plan Task 4 |
 | Additional safety case | source identity (size, mtime_ns, sha256 when known) recorded at plan / confirmation; revalidated before and during the copy; time matches re-read from the copied file; `source_changed` status | D12, §3.6, §3.7, §6.6, plan Task 7 |
 | Q1–Q3 | answered | §9 |
+
+## 11. Rev 2 → rev 3 clarifications (design rev 2 review: APPROVED WITH NOTES)
+
+| Note | Clarification | Sections |
+|---|---|---|
+| RV-P3-D2-01 | Imported and External are exclusive modes; in External every copied file comes from the external root; no gap filled from the imported root (card with RAW only → RAW only + "JPEG không có tại nguồn được chọn") | §3.2, plan Task 6 |
+| RV-P3-D2-02 | Scanner: `os.scandir(path)` and per-`DirEntry` checks (symlink, junction, reparse point); no `follow_symlinks` argument to `scandir` | §3.3.1, plan Task 5 |
+| RV-P3-D2-03 | `content` = byte identity of the compared files; `time` = evidence of the same shot, not proof; revalidation limit stated with its cost; planning-time hashing of every source considered and not adopted in rev 3 | §3.9, plan Task 7 |
+| RV-P3-D2-04 | Global constraints aligned: occurrences may reference a merged subject; resolved through `merged_into`; only the final unmerged subject names a folder | §3.4, plan Global Constraints / Task 4 |
