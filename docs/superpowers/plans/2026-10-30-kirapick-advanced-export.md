@@ -14,7 +14,7 @@ compute, per photo, its files (`photos.py`), the wanted kinds (`formats.py`), wh
 **Tech Stack:** Python 3.12/3.13, PySide6 6.12, SQLite (schema v7, unchanged), pytest + pytest-qt, ExifRead
 (`app.ingest.metadata`).
 
-**Spec:** `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 3). Plan rev 3 (design
+**Spec:** `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 4). Plan rev 4 (rev 4: Checkpoint A v2 notes RV-P3-B-01…03, spec §12; design
 checkpoint 1 corrections CR-P3-D01…D04, source revalidation, and the rev 2 notes RV-P3-D2-01…04). Section numbers below
 (§3.3 …) refer to it.
 
@@ -295,6 +295,10 @@ compatibility proof); STOP for external review.
   "RAW không có tại nguồn được chọn"); `test_no_operation_reads_from_the_imported_root_in_external_mode` (every
   `ExportOp.source` is inside the external root).
 - [ ] **Step 2:** FAIL. **Step 3:** Implement. **Step 4:** PASS.
+- [ ] **Step 1b (rev 4, RV-P3-B-03):** `Match.reference_asset_id`; tests `test_input_order_raw_jpeg_same_match`
+  ([RAW, JPEG] / [JPEG, RAW] / shuffled scan order → same operations and references),
+  `test_counter_restart_two_photos_same_stem` (two imported photos `DSC_0001` from two shoots → each its own card
+  file), `test_one_card_file_valid_for_two_photos_is_ambiguous`, `test_scan_order_does_not_matter`.
 - [ ] **Step 5:** Commit `"Export: matching files on another folder (part 3 task 6)"`.
 
 ### Task 7: Copy verification, manifest v2, retry — risk: high
@@ -335,6 +339,12 @@ compatibility proof); STOP for external review.
   `test_manifest_rows_cover_ops_and_issues` (every op and every issue has a row; external root written as folder
   name only); `test_export_runs_counts_subject_duplicates` (files count includes duplicates, photos distinct).
 - [ ] **Step 2:** FAIL. **Step 3:** Implement. **Step 4:** PASS.
+- [ ] **Step 1b (rev 4, RV-P3-B-01/02):** copy groups (spec §12). Tests `test_pair_both_present_identical`,
+  `test_pair_one_identical_one_different` (whole pair under `stem (1)`, existing files untouched),
+  `test_pair_both_different`, `test_pair_one_missing_at_destination`, `test_pair_name_taken_after_preview` (race →
+  whole pair relocated, only our files removed); `ExportPlan.estimated_bytes` / `worst_case_bytes`;
+  `test_free_space_rechecked_before_extra_copy` (free space measured below the group's bytes → `failed`, nothing
+  written, nothing overwritten).
 - [ ] **Step 5:** Commit `"Export: verified copies, manifest v2 and retry (part 3 task 7)"`.
 
 ### Task 8: Copy file names — risk: low

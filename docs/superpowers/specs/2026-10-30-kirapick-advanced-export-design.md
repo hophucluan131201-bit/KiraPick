@@ -1,6 +1,6 @@
 # KiraPick Part 3 — Advanced Export: technical design
 
-Status: **approved with notes** (rev 3, 2026-10-30: rev 2 + clarifications RV-P3-D2-01…04; deltas in §10, §11) — for external review. No code is written before this specification
+Status: **approved with notes** (rev 4, 2026-10-30: rev 3 + Checkpoint A v2 notes RV-P3-B-01…03; deltas in §10, §11, §12) — for external review. No code is written before this specification
 and its plan (`docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md`) are approved. Nothing is released.
 
 Inputs: owner answers (2026-10-30), external review "Part 3 — Architecture Review: APPROVED WITH CHANGES"
@@ -480,3 +480,46 @@ tree, EXIF reads only for candidates; no Qt-thread block > 100 ms during scan / 
 | RV-P3-D2-02 | Scanner: `os.scandir(path)` and per-`DirEntry` checks (symlink, junction, reparse point); no `follow_symlinks` argument to `scandir` | §3.3.1, plan Task 5 |
 | RV-P3-D2-03 | `content` = byte identity of the compared files; `time` = evidence of the same shot, not proof; revalidation limit stated with its cost; planning-time hashing of every source considered and not adopted in rev 3 | §3.9, plan Task 7 |
 | RV-P3-D2-04 | Global constraints aligned: occurrences may reference a merged subject; resolved through `merged_into`; only the final unmerged subject names a folder | §3.4, plan Global Constraints / Task 4 |
+
+## 12. Rev 3 → rev 4 (Checkpoint A v2: APPROVED WITH NOTES — RV-P3-B-01…03)
+
+**RV-P3-B-01 — RAW/JPEG pair at an occupied destination.** The files of one photo planned into one folder form a
+*copy group* (consecutive operations with the same `photo_id` and `folder`). The planner gives every member one stem
+(`_choose_stem`, unchanged). `run_export` handles a group as a unit:
+1. each member's source is revalidated (§3.6); a changed or unreadable member is reported alone, the others go on;
+2. every `maybe_present` member's target is compared by full SHA-256 with its source;
+3. if every such member is identical and every other member's planned name is still free, the group is written under
+   the planned stem (identical members `already_present`);
+4. otherwise — one member differs, both differ, or a planned name was taken by another program after the preview —
+   the **whole group** is written under the smallest new stem `stem (n)` that is free on disk for every member and is
+   not planned for another operation; members found identical are copied again under that stem (the pair stays
+   complete and together), with the note "cặp được chép dưới tên mới vì ở đích đã có file cùng tên khác nội dung".
+   A create that fails because the name appeared meanwhile removes only the files this group already created and tries
+   the next stem. Existing destination files are never renamed, overwritten or removed.
+5. An outcome where one member ends at the existing name and the other under a new name is never produced by choice;
+   if the group cannot be written (not enough space, path too long, source failure) each member's status says so and
+   members already verified identical stay `already_present` — the manifest note "cặp không đầy đủ ở đích" marks the
+   photo whenever its members do not all end with the same stem.
+
+**RV-P3-B-02 — disk space.** `ExportPlan.estimated_bytes` = bytes of the operations whose target does not seem
+present (`to_copy`): the copy if every "có vẻ đã có sẵn" target proves identical. `ExportPlan.worst_case_bytes` =
+bytes of all operations: each operation is copied at most once, so this bounds the copy even when every seemingly
+present target differs and every affected pair is copied again (B-01 step 4). `total_bytes` remains as the estimate
+(old name) and is not described as an upper bound. The preview shows the estimate and, when larger, the worst case.
+Before writing each copy group `run_export` measures the free space at the destination again; if it is smaller than
+the group's bytes, the group's operations are `failed` with "Không đủ dung lượng trống ở đích" and nothing of that
+group is written. Space is never made by overwriting or removing a destination file.
+
+**RV-P3-B-03 — photo identity for external matching.** The legacy identity is kept: a photo is the first id given
+(Checkpoint A, `LEGACY_PAIR_IDENTITY`); its decisions (Keep, rating, favourite) are read from the database for that
+id. The matching reference is explicit and stable: `Match.reference_asset_id` is the imported asset of the wanted kind
+(`content` match: its bytes) or, when the photo has no imported file of that kind, the photo's primary asset (`time`
+match: its capture time and camera). External files have no identity of their own beyond their path; nothing about a
+photo (decision, pair, order) is inferred from the order of the scan. Two different photos with the same base name
+are matched independently; a time match is only valid for one photo: when one external file is the only valid
+candidate of two or more photos, each of them becomes `ambiguous` ("file này khớp với nhiều ảnh") instead of copying
+one file for several photos. Tests pin the input order [RAW, JPEG] / [JPEG, RAW] and the counter restarts.
+
+**Manifest (§3.7) precision.** The JSON file carries the header (`app_version`, `exported_at`, `options`, `counts`)
+and the rows; the CSV file holds the rows only (one header line of column names), so spreadsheet programs read it
+directly; an extra last column `note` carries the B-01 notes. A manifest is written for every run that started.
