@@ -4,13 +4,20 @@ Offscreen, QTest.mouseMove delivers Enter / MouseMove synchronously. On the real
 operating-system cursor and Windows posts the mouse messages: they reach the widget 20–50 ms later through the event
 loop (CI diagnostic run 40964432140, scripts/diag_compare_hover.py), and Windows drops a move back to the position it
 last reported. A test asserting right after one QTest.mouseMove then sees the state before the move.
-move_pointer moves straight to the target (from beside it when the pointer already rests there, as a hand would) and
-returns once the target widget has really received the MouseMove; it never calls app internals. When nothing
-arrives, ``last_diag`` says why (popup, mouse grabber, active window, widget under the cursor) for the assertion.
+
+Beta readiness BR-01 (CI runs 41154503576, 41157679507, diagnostic S8): the FIRST move of the pointer inside a window
+that has just opened produces only Enter, no MouseMove — whatever moves it (QTest, QCursor.setPos, SendInput, after
+parking outside, after activating the window: 0 of 10 each); a second move inside the window does (10 of 10). A real
+hand sends many moves, so the app is not affected; a test that moves once was. move_pointer therefore moves like a
+hand: when the target's window has not delivered a MouseMove yet, or the pointer already rests on the goal, it first
+moves to a point a few pixels away INSIDE the target widget, then onto the goal. It returns once the target widget has
+really received a MouseMove; it never calls app internals. When nothing arrives, ``last_diag`` says why (popup, mouse
+grabber, active window, widget under the cursor) for the assertion.
 """
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable
 
 from PySide6.QtCore import QDeadlineTimer, QEvent, QObject, QPoint
@@ -19,6 +26,24 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget
 
 last_diag = ""
+_moved_windows: weakref.WeakSet[QWidget] = weakref.WeakSet()  # windows that have delivered a MouseMove
+_watcher: QObject | None = None
+
+
+class _Watch(QObject):
+    """Remembers every window that has delivered a MouseMove (installed once, for the whole test session)."""
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt override
+        if event.type() == QEvent.Type.MouseMove and isinstance(obj, QWidget):
+            _moved_windows.add(obj.window())
+        return False
+
+
+def _watch() -> None:
+    global _watcher
+    if _watcher is None:
+        _watcher = _Watch()
+        QApplication.instance().installEventFilter(_watcher)
 
 
 class _Seen(QObject):
@@ -64,20 +89,19 @@ def _move(widget: QWidget, pos: QPoint, step: Callable[[QPoint], None], timeout_
     global last_diag
     goal = widget.mapToGlobal(pos)
     app = QApplication.instance()
+    _watch()
     seen = _Seen(widget)
     app.installEventFilter(seen)
     try:
-        if QCursor.pos() == goal:
-            # The pointer already rests on the target, typically because the previous test's window was at the same
-            # place: on Windows a window opened under a resting pointer gets Enter but no MouseMove until the pointer
-            # leaves it. A hand comes from outside: park the OS cursor just outside the window, let the Leave
-            # arrive, then move in.
-            frame = widget.window().frameGeometry()
-            outside = QPoint(frame.left() - 12, frame.center().y()) if frame.left() > 40 else \
-                QPoint(frame.center().x(), frame.bottom() + 12)
-            QCursor.setPos(outside)
-            _wait(lambda: False, 60)
-            seen.moved = False
+        if widget.window() not in _moved_windows or QCursor.pos() == goal:
+            # The first move inside a newly opened window brings only Enter, and a move back to where the pointer
+            # rests is dropped: come in like a hand, through a point a few pixels away inside the target itself.
+            near = next((pos + d for d in (QPoint(-4, -4), QPoint(4, 4), QPoint(-4, 4), QPoint(4, -4))
+                         if widget.rect().contains(pos + d) and widget.mapToGlobal(pos + d) != QCursor.pos()), None)
+            if near is not None:
+                step(widget.mapToGlobal(near))
+                _wait(lambda: widget.window() in _moved_windows, 300)
+                seen.moved = False
         step(goal)
         _wait(lambda: seen.moved, timeout_ms)
         if not seen.moved:

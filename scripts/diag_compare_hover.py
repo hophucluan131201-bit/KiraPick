@@ -311,7 +311,8 @@ def main() -> int:
     wc = WindowCount()
     app.installEventFilter(wc)
     s8 = {}
-    for variant in ("qtest", "activate_then_qtest", "qtest_two_steps", "send_input", "send_input_after_outside"):
+    for variant in ("qtest", "activate_then_qtest", "qtest_two_steps", "harness_near_then_goal", "send_input",
+                    "send_input_after_outside"):
         hits, any_moves, active = 0, 0, 0
         for n in range(10):
             QCursor.setPos(QPoint(60 + 800, 60 + 450))
@@ -337,6 +338,9 @@ def main() -> int:
             if variant == "qtest_two_steps":
                 QTest.mouseMove(target, target.rect().center() - QPoint(40, 40))
                 QTest.qWait(40)
+            if variant == "harness_near_then_goal":  # what tests/gui/pointer.py does since BR-01
+                QTest.mouseMove(target, target.rect().center() - QPoint(4, 4))
+                QTest.qWait(300)
             if variant.startswith("send_input"):
                 send_input(goal)
             else:
