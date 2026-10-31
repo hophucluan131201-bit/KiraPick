@@ -1,12 +1,22 @@
 # KiraPick beta — Bảng kiểm tra trên Windows của chủ dự án (BR-03)
 
-Làm trên máy của bạn (Windows 10/11, bản KiraPick beta được cài từ bản build mà bạn đã đồng ý). **Chưa phát hành beta
-cho tới khi bảng này làm xong và được duyệt.** Với mỗi dòng ghi **Đạt** / **Lỗi** (+ ảnh chụp màn hình app nếu lỗi;
-không cần gửi ảnh chụp của bạn). Mất khoảng 60–90 phút.
+Làm trên máy của bạn (Windows 10/11), với **bản thử nội bộ** build từ commit `423074b` theo
+`docs/internal-test-build.md` — chỉ sau khi bạn cho phép build. Với mỗi dòng ghi **Đạt** / **Lỗi** (+ ảnh chụp màn
+hình app nếu lỗi; không cần gửi ảnh chụp của bạn). Mất khoảng 60–90 phút.
+
+> **Bảng này là kiểm tra chấp nhận, KHÔNG phải lệnh phát hành.** Làm xong và "Đạt" hết nghĩa là bản thử dùng được
+> trên máy bạn. Phát hành beta (gắn tag, đăng bản cài lên GitHub) là một quyết định riêng: cần báo cáo quyết định
+> phát hành sau bước này và **lệnh phát hành rõ ràng** của bạn.
 
 ## 0. Chuẩn bị (10 phút)
 
-- Một **thẻ nhớ thật** của buổi chụp RAW + JPEG (máy Nikon), và đầu đọc thẻ.
+- Một **thẻ nhớ dùng để thử** có ảnh RAW + JPEG (máy Nikon), và đầu đọc thẻ. **Mọi file trên thẻ phải được sao lưu
+  sang chỗ khác trước** (chép cả thư mục DCIM vào ổ cứng). Các bước có **rút thẻ khi đang chạy** (2.3, 6.3, 7.2) chỉ
+  làm với thẻ thử này — không bao giờ với thẻ duy nhất đang chứa ảnh của khách. Rút thẻ khi máy đang đọc là việc
+  KiraPick chỉ đọc, nhưng bản thân thẻ/đầu đọc vẫn có thể gặp sự cố; vì vậy cần bản sao lưu.
+- **Sao lưu dữ liệu KiraPick hiện tại** (bản 2.2.1 bạn đang dùng): đóng KiraPick, chép thư mục
+  `%LOCALAPPDATA%\KiraPick` (dán vào thanh địa chỉ File Explorer) sang chỗ khác. Bản thử nâng cấp dữ liệu phiên lên
+  v7 (xem K1 trong `docs/beta-release-checklist.md`).
 - Trên máy: chép **chỉ các file JPEG** của thẻ vào một thư mục, ví dụ `D:\Test\JPEG_buoi1`. Không chép RAW.
 - Một thư mục trống để xuất, ví dụ `D:\Test\Xuat`.
 - **Chụp "dấu vân tay" của thẻ và thư mục gốc trước khi thử** (để chứng minh không file gốc nào bị đổi). Mở PowerShell
@@ -32,9 +42,9 @@ không cần gửi ảnh chụp của bạn). Mất khoảng 60–90 phút.
 
 | # | Làm | Kết quả đúng | Đạt / Lỗi |
 |---|---|---|---|
-| 2.1 | Cùng các ảnh đã Chọn: ① **Thư mục đã nhập** · ② **RAW + JPEG** · đích `D:\Test\Xuat\Nhap` | Chỉ có JPEG (vì thư mục đã nhập không có RAW); tab "Cần xem lại" ghi "Thiếu …" hoặc không có RAW để chép | |
+| 2.1 | Cùng các ảnh đã Chọn: ① **Thư mục đã nhập** · ② **RAW + JPEG** · đích `D:\Test\Xuat\Nhap` | Chỉ chép các `.JPG` (thư mục đã nhập chỉ có JPEG, nên "RAW + JPEG" ở đây là đúng "những file đã nhập"); **không** có cảnh báo thiếu RAW — điều đó là đúng, không phải lỗi | |
 | 2.2 | ① **Nguồn khác** (thẻ) · ② **RAW + JPEG** · đích `D:\Test\Xuat\The` | Cả `.NEF` và `.JPG` đều lấy **từ thẻ**; JPEG ghi "giống hệt nội dung" | |
-| 2.3 | Rút thẻ, mở lại hộp thoại Xuất với ① Nguồn khác | Báo "không tìm thấy thư mục nguồn …"; app không treo | |
+| 2.3 | (Thẻ thử đã sao lưu) Rút thẻ, mở lại hộp thoại Xuất với ① Nguồn khác | Báo "không tìm thấy thư mục nguồn …"; app không treo | |
 
 ## 3. Định dạng: Chỉ RAW / Chỉ JPEG / RAW + JPEG
 
@@ -65,7 +75,7 @@ không cần gửi ảnh chụp của bạn). Mất khoảng 60–90 phút.
 |---|---|---|---|
 | 6.1 | Tab **📋 Tên ảnh đã Chọn** → Sao chép tên ảnh → dán vào Notepad/Zalo | Mỗi ảnh một dòng, không có đuôi; cặp RAW+JPEG chỉ một dòng | |
 | 6.2 | Tick **Kèm đuôi file** → sao chép lại | Có đuôi (`.NEF` cho cặp) | |
-| 6.3 | Rút thẻ rồi sao chép tên ảnh | Vẫn được, ngay lập tức | |
+| 6.3 | (Thẻ thử đã sao lưu) Rút thẻ rồi sao chép tên ảnh | Vẫn được, ngay lập tức | |
 | 6.4 | Nếu có hai ảnh khác nhau trùng tên (hai buổi chụp) | Dòng cảnh báo "⚠ Có ảnh khác nhau trùng tên" | |
 
 ## 7. Dừng, rút thẻ, thử lại, danh sách xuất
@@ -73,7 +83,7 @@ không cần gửi ảnh chụp của bạn). Mất khoảng 60–90 phút.
 | # | Làm | Kết quả đúng | Đạt / Lỗi |
 |---|---|---|---|
 | 7.1 | Xuất nhiều RAW (≥ 50) từ thẻ; trong lúc chép bấm **Dừng** | Dừng ngay; thư mục đích **không có file dở dang** (mọi file mở được); cặp RAW+JPEG không bị lẻ | |
-| 7.2 | Xuất lại; giữa chừng **rút thẻ** | Báo "Nguồn không còn truy cập được"; các file đã chép mở được; app không treo | |
+| 7.2 | (Chỉ với thẻ thử đã sao lưu) Xuất lại; giữa chừng **rút thẻ** | Báo "Nguồn không còn truy cập được"; các file đã chép mở được; app không treo | |
 | 7.3 | Cắm thẻ, bấm **Thử lại các file chưa chép** | Chỉ chép phần còn thiếu; không tạo file "(1)" | |
 | 7.4 | Mở thư mục `_kirapick_danh_sach` trong thư mục đích → file `.csv` bằng Excel | Mỗi file có một dòng: copied / already_present / failed / not_started …, có cột sha256 | |
 | 7.5 | Xuất lần nữa vào cùng thư mục | "có vẻ đã có sẵn"; chép xong: "đã có sẵn, giống hệt từng byte" | |
@@ -104,7 +114,19 @@ Compare-Object (Import-Csv D:\Test\jpeg_truoc.csv) (Import-Csv D:\Test\jpeg_sau.
 | 9.1 | Hai lệnh `Compare-Object` **không in ra gì** (không file nào bị đổi, thêm hay xoá trên thẻ và thư mục gốc) | |
 | 9.2 | Lần sau cắm thẻ, Windows **không** hỏi "quét và sửa lỗi thẻ" | |
 
+## 10. Ghi thêm cho quyết định phát hành
+
+| # | Ghi lại | Giá trị |
+|---|---|---|
+| 10.1 | Dòng `GUI-thread GC` cuối cùng trong `kirapick.log` sau bước 8 (cho K2) | |
+| 10.2 | Ở bước 8, có lần nào bấm P/X trong So sánh thấy app khựng rõ (≈ ⅓ giây) không? Nếu có: ảnh nào, mấy lần | |
+| 10.3 | Máy: Windows 10 hay 11, CPU, RAM, card đồ hoạ, tỉ lệ màn hình (100 % / 125 % / 150 %) | |
+| 10.4 | Dòng tiêu đề cửa sổ KiraPick (tên + số phiên bản) và tên file bộ cài / zip bạn đã cài | |
+
 ## Gửi lại
 
-Gửi bảng này (Đạt / Lỗi), ảnh chụp màn hình app ở các dòng Lỗi, và file `kirapick.log` (trong
-`%LOCALAPPDATA%\KiraPick\logs`). Không gửi ảnh chụp của bạn.
+Gửi bảng này (Đạt / Lỗi), ảnh chụp màn hình app ở các dòng Lỗi, file `kirapick.log` (trong
+`%LOCALAPPDATA%\KiraPick\logs`), và mục 10. Không gửi ảnh chụp của bạn.
+
+**Sau khi gửi:** mình viết báo cáo quyết định phát hành beta (rủi ro còn lại, K2, ngoại lệ 331 ms, B4–B6). Bạn đọc
+rồi mới ra lệnh phát hành hoặc không. Hoàn thành bảng này **không** tự động là đồng ý phát hành.
