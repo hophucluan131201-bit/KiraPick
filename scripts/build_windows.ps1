@@ -78,6 +78,12 @@ $savedInit = Get-Content $initFile -Raw -Encoding UTF8
 $suffix = @{ directml = ""; cuda = "a"; openvino = "b" }[$Edition]
 [IO.File]::WriteAllText((Join-Path $Root $editionFile), ($savedEdition -replace 'EDITION = "directml"', "EDITION = `"$Edition`""))
 [IO.File]::WriteAllText((Join-Path $Root $initFile), ($savedInit -replace '__version__ = "([^"]+)"', "__version__ = `"`$1$suffix`""))
+# An internal test build carries the edition suffix in the exe's version strings too (KiraPick.exe properties).
+$versionInfoFile = "packaging\version_info.txt"
+$savedVersionInfo = Get-Content $versionInfoFile -Raw -Encoding UTF8
+if ($suffix -and $savedInit -match '__version__ = "[^"]*\.dev') {
+    [IO.File]::WriteAllText((Join-Path $Root $versionInfoFile), ($savedVersionInfo -replace "(StringStruct\('(FileVersion|ProductVersion)', '[^']+)'", "`${1}$suffix'"))
+}
 $env:KIRAPICK_EDITION = $Edition
 try {
 
@@ -175,8 +181,9 @@ $guide = Join-Path $Root "packaging\notes\HUONG_DAN_CAI_DAT.txt"
 # A development version (".dev") is an internal test build: its own installer identity (packaging\installer.iss),
 # its own file names, the Setup.exe only (no portable zip).
 $internal = $version -like "*.dev*"
-$setupBase = if ($internal) { "KiraPick-InternalTest-$version-Setup" } else { "KiraPick-Setup-$version" }
-$bundleName = if ($internal) { "KiraPick-InternalTest-$version-BoCai.zip" } else { "KiraPick-$version-BoCai.zip" }
+$internalName = if ($Edition -eq "cuda") { "KiraPick-InternalTest-CUDA" } else { "KiraPick-InternalTest" }
+$setupBase = if ($internal) { "$internalName-$version-Setup" } else { "KiraPick-Setup-$version" }
+$bundleName = if ($internal) { "$internalName-$version-BoCai.zip" } else { "KiraPick-$version-BoCai.zip" }
 $numeric = ((([regex]::Matches($version, "\d+") | Select-Object -First 3 | ForEach-Object { $_.Value }) + @("0", "0", "0")) | Select-Object -First 3) -join "."
 $portable = Join-Path $out "KiraPick-$version-portable.zip"
 if ($Edition -eq "cuda" -or $internal) { $portable = $null }  # > 2 GB: GitHub cannot host it; the installer slices can
@@ -224,4 +231,5 @@ if ($env:GITHUB_ACTIONS -eq "true") {  # provenance, readable through the API (a
 } finally {
     [IO.File]::WriteAllText((Join-Path $Root $editionFile), $savedEdition)
     [IO.File]::WriteAllText((Join-Path $Root $initFile), $savedInit)
+    [IO.File]::WriteAllText((Join-Path $Root $versionInfoFile), $savedVersionInfo)
 }

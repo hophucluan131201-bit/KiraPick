@@ -84,68 +84,96 @@ jobs:
             $r = Get-Content dist/selftest.json -Raw | ConvertFrom-Json
             Write-Host ("::notice title=self-test (${{ matrix.edition }})::ok=" + $r.ok + " version=" + $r.version + " edition=" + $r.edition + " steps=" + ($r.steps -join " | ") + " gpu=" + ($r.gpu | ConvertTo-Json -Compress -Depth 3))
           }
-      - name: Internal test build — installation safety check (official 2.2.1 first, then the test build)
-        if: github.event_name == 'workflow_dispatch' && matrix.edition == 'directml'
+      - name: Internal test build — installation safety check (official release first, then the test build)
+        if: github.event_name == 'workflow_dispatch' && (matrix.edition == 'directml' || matrix.edition == 'cuda')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          EDITION: ${{ matrix.edition }}
         run: |
           $setup = Get-ChildItem dist/installer -Filter "KiraPick-InternalTest-*-Setup.exe" | Select-Object -First 1
           if (-not $setup) { Write-Host "::notice title=install check::not an internal test build: skipped"; exit 0 }
           $failed = @(); $lines = @()
           # One summary notice at the end (GitHub shows at most 10 notices per step)
           function Check($ok, $what) { if ($ok) { $script:lines += "PASS $what" } else { $script:lines += "FAIL $what"; $script:failed += $what }; Write-Host ("{0} {1}" -f $(if ($ok) { "PASS" } else { "FAIL" }), $what) }
+          $cuda = $env:EDITION -eq "cuda"
+          # The official release the owner has for this edition, and this build's own identity
+          $offTag = if ($cuda) { "v2.2.0a" } else { "v2.2.1" }
+          $offVer = $offTag.Substring(1)
+          $intGuid = if ($cuda) { "{D51C8A47-2B9E-4E63-8F0A-6C3E9B17D284}" } else { "{3B7D2E91-6A4C-4F18-9E25-C81A0D6F4B72}" }
+          $intDir = if ($cuda) { "KiraPick-InternalTest-CUDA" } else { "KiraPick-InternalTest" }
+          $intName = if ($cuda) { "KiraPick Internal Test CUDA" } else { "KiraPick Internal Test" }
+          $intVer = if ($cuda) { "3.0.0b1.dev1a" } else { "3.0.0b1.dev1" }
+          # The other internal test build (the owner may have it installed): it must stay untouched
+          $otherGuid = if ($cuda) { "{3B7D2E91-6A4C-4F18-9E25-C81A0D6F4B72}" } else { "{D51C8A47-2B9E-4E63-8F0A-6C3E9B17D284}" }
+          $otherDir = if ($cuda) { "KiraPick-InternalTest" } else { "KiraPick-InternalTest-CUDA" }
           $progs = Join-Path $env:LOCALAPPDATA "Programs"
           $uninst = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
-          $offKey = "$uninst\{6F2C9B1E-4E57-4C3A-9D2B-5A8C1E7F3B10}_is1"
-          $intKey = "$uninst\{3B7D2E91-6A4C-4F18-9E25-C81A0D6F4B72}_is1"
-          # 1. The official KiraPick 2.2.1 as a user has it (public release asset; nothing is published)
-          gh release download v2.2.1 --repo "${{ github.repository }}" -p "KiraPick-2.2.1-BoCai.zip" -D off
-          Expand-Archive off/KiraPick-2.2.1-BoCai.zip off/x
-          $offSetup = Get-ChildItem off/x -Recurse -Filter "KiraPick-Setup-2.2.1.exe" | Select-Object -First 1
+          $offKey = Join-Path $uninst "{6F2C9B1E-4E57-4C3A-9D2B-5A8C1E7F3B10}_is1"
+          $intKey = Join-Path $uninst "${intGuid}_is1"
+          $otherKey = Join-Path $uninst "${otherGuid}_is1"
+          # 1. The official KiraPick as a user has it (public release asset; nothing is published)
+          if ($cuda) {
+            gh release download $offTag --repo "${{ github.repository }}" -p "KiraPick-Setup-$offVer*" -D off/x
+          } else {
+            gh release download $offTag --repo "${{ github.repository }}" -p "KiraPick-$offVer-BoCai.zip" -D off
+            Expand-Archive "off/KiraPick-$offVer-BoCai.zip" off/x
+          }
+          $offSetup = Get-ChildItem off/x -Recurse -Filter "KiraPick-Setup-$offVer.exe" | Select-Object -First 1
           Start-Process $offSetup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          Remove-Item -Recurse -Force off  # disk space (the CUDA release is about 3 GB)
           $offExe = Join-Path $progs "KiraPick\KiraPick.exe"
-          Check ((Test-Path $offExe) -and (Test-Path $offKey)) "official 2.2.1 installed at $offExe"
+          Check ((Test-Path $offExe) -and (Test-Path $offKey)) "official $offVer installed at $offExe"
           $offHash = (Get-FileHash $offExe).Hash
           $offVersion = (Get-ItemProperty $offKey).DisplayVersion
+          # The other internal test build, simulated: its folder and its uninstall entry
+          $otherExe = Join-Path $progs "$otherDir\KiraPick.exe"
+          New-Item -ItemType Directory -Force (Split-Path $otherExe) | Out-Null
+          Set-Content $otherExe "other internal test build (simulated)"
+          New-Item -Force $otherKey | Out-Null
+          New-ItemProperty $otherKey -Name DisplayVersion -Value "other-internal-test" -Force | Out-Null
+          $otherHash = (Get-FileHash $otherExe).Hash
           # 2. Existing user data: a sentinel session and learning file (must stay byte-identical)
           $data = Join-Path $env:LOCALAPPDATA "KiraPick"
           New-Item -ItemType Directory -Force (Join-Path $data "sessions\sentinel"), (Join-Path $data "learning") | Out-Null
           Set-Content (Join-Path $data "sessions\sentinel\project.snorlu.db") "sentinel v5 database bytes"
           Set-Content (Join-Path $data "learning\sentinel.json") "{}"
-          reg add "HKCU\Software\KiraPick\KiraPick" /v "export/format" /d "raw_jpeg" /f | Out-Null  # settings as 2.2.1 leaves them
+          reg add "HKCU\Software\KiraPick\KiraPick" /v "export/format" /d "raw_jpeg" /f | Out-Null  # settings as 2.2.x leaves them
           function DataState { (Get-ChildItem -Recurse -File $data | Get-FileHash | ForEach-Object { "$($_.Path)=$($_.Hash)" }) -join ";" }
           $dataBefore = DataState
           $settingsBefore = (reg query "HKCU\Software\KiraPick" /s 2>$null) -join ";"
           # 3. The internal test build, silently (as the owner will, with the wizard)
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           Start-Sleep -Seconds 5
-          $intExe = Join-Path $progs "KiraPick-InternalTest\KiraPick.exe"
+          $intExe = Join-Path $progs "$intDir\KiraPick.exe"
           Check (Test-Path $intExe) "internal test installed at $intExe"
           $k = Get-ItemProperty $intKey -ErrorAction SilentlyContinue
-          Check ($k -ne $null) "own uninstall entry {3B7D2E91-...}_is1: '$($k.DisplayName)' version '$($k.DisplayVersion)' at '$($k.InstallLocation)'"
-          Check ($k.DisplayVersion -eq "3.0.0b1.dev1") "installer version 3.0.0b1.dev1"
+          Check ($k -ne $null -and $k.DisplayName -like "$intName*") "own uninstall entry ${intGuid}_is1: '$($k.DisplayName)' version '$($k.DisplayVersion)' at '$($k.InstallLocation)'"
+          Check ($k.DisplayVersion -eq $intVer) "installer version $intVer"
           Check ((Get-ItemProperty $offKey -ErrorAction SilentlyContinue).DisplayVersion -eq $offVersion) "official uninstall entry unchanged ($offVersion)"
-          Check ((Test-Path $offExe) -and ((Get-FileHash $offExe).Hash -eq $offHash)) "official KiraPick.exe 2.2.1 unchanged"
+          Check ((Test-Path $offExe) -and ((Get-FileHash $offExe).Hash -eq $offHash)) "official KiraPick.exe $offVer unchanged"
+          Check ((Test-Path $otherExe) -and ((Get-FileHash $otherExe).Hash -eq $otherHash) -and ((Get-ItemProperty $otherKey -ErrorAction SilentlyContinue).DisplayVersion -eq "other-internal-test")) "other internal test build ($otherDir, ${otherGuid}_is1) unchanged"
           Check (-not (Get-Process KiraPick -ErrorAction SilentlyContinue)) "no KiraPick process started by the installer"
           Check ((DataState) -eq $dataBefore) "user data (sessions, learning) unchanged by installing: no migration"
           Check (((reg query "HKCU\Software\KiraPick" /s 2>$null) -join ";") -eq $settingsBefore) "app settings unchanged by installing"
           $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
           $links = (Get-ChildItem $menu -Filter "*KiraPick*" | ForEach-Object Name) -join ", "
-          Check ($links -match "KiraPick Internal Test" -and $links -match "(^|, )KiraPick\.lnk") "Start menu: $links"
+          Check ($links -match ([regex]::Escape("$intName.lnk")) -and $links -match "(^|, )KiraPick\.lnk") "Start menu: $links"
           # 4. The installed test app: version and offline self-test (network blocked inside the app)
           $ver = (Get-Item $intExe).VersionInfo
-          Check ($ver.ProductVersion -eq "3.0.0b1.dev1") "KiraPick.exe ProductVersion '$($ver.ProductVersion)' FileVersion '$($ver.FileVersion)'"
+          Check ($ver.ProductVersion -eq $intVer) "KiraPick.exe ProductVersion '$($ver.ProductVersion)' FileVersion '$($ver.FileVersion)'"
           $report = Join-Path $PWD "installed-selftest.json"
           $p = Start-Process $intExe -ArgumentList "--self-test", "`"$report`"" -Wait -PassThru
           $r = if (Test-Path $report) { Get-Content $report -Raw | ConvertFrom-Json } else { $null }
-          Check ($p.ExitCode -eq 0 -and $r.ok -eq $true -and $r.version -eq "3.0.0b1.dev1" -and @($r.network_attempts).Count -eq 0) "installed self-test ok=$($r.ok) version=$($r.version) network_attempts=$(@($r.network_attempts).Count) providers=$($r.onnxruntime.providers -join '/')"
+          Check ($p.ExitCode -eq 0 -and $r.ok -eq $true -and $r.version -eq $intVer -and $r.edition -eq $env:EDITION -and @($r.network_attempts).Count -eq 0) "installed self-test ok=$($r.ok) version=$($r.version) edition=$($r.edition) network_attempts=$(@($r.network_attempts).Count) providers=$($r.onnxruntime.providers -join '/') gpu=$($r.gpu.device)"
+          if ($cuda) { Check (@($r.onnxruntime.providers) -contains "CUDAExecutionProvider") "CUDA provider present in the installed build (this runner has no NVIDIA card: the run itself uses the CPU)" }
           Check ((DataState) -eq $dataBefore) "user data unchanged after the self-test"
-          # 5. Uninstall the test build: the official one and the data stay
-          Start-Process (Join-Path $progs "KiraPick-InternalTest\unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          # 5. Uninstall the test build: the official one, the other test build and the data stay
+          Start-Process (Join-Path $progs "$intDir\unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           for ($i = 0; $i -lt 60 -and (Test-Path $intExe); $i++) { Start-Sleep -Seconds 1 }
           Check (-not (Test-Path $intExe) -and -not (Test-Path $intKey)) "internal test uninstalled"
-          Check ((Test-Path $offExe) -and ((Get-FileHash $offExe).Hash -eq $offHash) -and (Test-Path $offKey)) "official 2.2.1 still installed and unchanged after uninstalling the test build"
+          Check ((Test-Path $offExe) -and ((Get-FileHash $offExe).Hash -eq $offHash) -and (Test-Path $offKey)) "official $offVer still installed and unchanged after uninstalling the test build"
+          Check ((Test-Path $otherExe) -and ((Get-FileHash $otherExe).Hash -eq $otherHash) -and (Test-Path $otherKey)) "other internal test build still there after uninstalling this one"
           Check ((DataState) -eq $dataBefore) "user data unchanged after uninstalling"
           # 6. The owner's backup / restore script, with Windows PowerShell 5 as on the owner's PC
           $bk = Join-Path $env:RUNNER_TEMP "SaoLuu"

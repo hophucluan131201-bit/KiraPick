@@ -10,6 +10,9 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
+#ifndef Edition
+  #define Edition "directml"
+#endif
 #ifndef NumericVersion
   #define NumericVersion "0.0.0.0"
 #endif
@@ -21,7 +24,13 @@
 ; and uninstall entry, so it installs beside the official KiraPick and never replaces it; it does not start the app
 ; after installing (no session is opened, nothing is migrated by the installer).
 #define InternalTest Pos(".dev", AppVersion) > 0
-#if InternalTest
+#if InternalTest && Edition == "cuda"
+  ; The CUDA internal test has an identity of its own too: it never replaces the DirectML internal test.
+  #define AppName "KiraPick Internal Test CUDA"
+  #define AppIdValue "{{D51C8A47-2B9E-4E63-8F0A-6C3E9B17D284}"
+  #define InstallDirName "KiraPick-InternalTest-CUDA"
+  #define OutputName "KiraPick-InternalTest-CUDA-" + AppVersion + "-Setup"
+#elif InternalTest
   #define AppName "KiraPick Internal Test"
   #define AppIdValue "{{3B7D2E91-6A4C-4F18-9E25-C81A0D6F4B72}"
   #define InstallDirName "KiraPick-InternalTest"
