@@ -92,8 +92,9 @@ jobs:
         run: |
           $setup = Get-ChildItem dist/installer -Filter "KiraPick-InternalTest-*-Setup.exe" | Select-Object -First 1
           if (-not $setup) { Write-Host "::notice title=install check::not an internal test build: skipped"; exit 0 }
-          $failed = @()
-          function Check($ok, $what) { if ($ok) { Write-Host "::notice title=install check PASS::$what" } else { Write-Host "::notice title=install check FAIL::$what"; $script:failed += $what } }
+          $failed = @(); $lines = @()
+          # One summary notice at the end (GitHub shows at most 10 notices per step)
+          function Check($ok, $what) { if ($ok) { $script:lines += "PASS $what" } else { $script:lines += "FAIL $what"; $script:failed += $what }; Write-Host ("{0} {1}" -f $(if ($ok) { "PASS" } else { "FAIL" }), $what) }
           $progs = Join-Path $env:LOCALAPPDATA "Programs"
           $uninst = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
           $offKey = "$uninst\{6F2C9B1E-4E57-4C3A-9D2B-5A8C1E7F3B10}_is1"
@@ -112,6 +113,7 @@ jobs:
           New-Item -ItemType Directory -Force (Join-Path $data "sessions\sentinel"), (Join-Path $data "learning") | Out-Null
           Set-Content (Join-Path $data "sessions\sentinel\project.snorlu.db") "sentinel v5 database bytes"
           Set-Content (Join-Path $data "learning\sentinel.json") "{}"
+          reg add "HKCU\Software\KiraPick\KiraPick" /v "export/format" /d "raw_jpeg" /f | Out-Null  # settings as 2.2.1 leaves them
           function DataState { (Get-ChildItem -Recurse -File $data | Get-FileHash | ForEach-Object { "$($_.Path)=$($_.Hash)" }) -join ";" }
           $dataBefore = DataState
           $settingsBefore = (reg query "HKCU\Software\KiraPick" /s 2>$null) -join ";"
@@ -145,8 +147,19 @@ jobs:
           Check (-not (Test-Path $intExe) -and -not (Test-Path $intKey)) "internal test uninstalled"
           Check ((Test-Path $offExe) -and ((Get-FileHash $offExe).Hash -eq $offHash) -and (Test-Path $offKey)) "official 2.2.1 still installed and unchanged after uninstalling the test build"
           Check ((DataState) -eq $dataBefore) "user data unchanged after uninstalling"
-          Write-Host "::notice title=install check::$($failed.Count) failed"
-          if ($failed.Count) { exit 1 }
+          # 6. The owner's backup / restore script, with Windows PowerShell 5 as on the owner's PC
+          $bk = Join-Path $env:RUNNER_TEMP "SaoLuu"
+          $out = powershell -NoProfile -ExecutionPolicy Bypass -File scripts/owner_backup.ps1 -Destination $bk 2>&1 | Out-String
+          $made = @(Get-ChildItem $bk -Directory -ErrorAction SilentlyContinue)
+          Check ($LASTEXITCODE -eq 0 -and $made.Count -eq 1 -and (Test-Path (Join-Path $made[0].FullName "KiraPick\sessions\sentinel\project.snorlu.db")) -and (Test-Path (Join-Path $made[0].FullName "kirapick-settings.reg")) -and $out -match "SHA-256") "backup script: one new dated folder with sessions + settings, SHA-256 verified"
+          $again = powershell -NoProfile -ExecutionPolicy Bypass -File scripts/owner_backup.ps1 -Destination $bk 2>&1 | Out-String
+          Check (@(Get-ChildItem $bk -Directory).Count -eq 2 -and (Test-Path (Join-Path $made[0].FullName "KiraPick"))) "backup script: a second backup is a new folder, the first is not overwritten"
+          Add-Content (Join-Path $data "sessions\sentinel\project.snorlu.db") "changed by the test version"  # as a v7 upgrade would
+          $rs = powershell -NoProfile -ExecutionPolicy Bypass -File scripts/owner_backup.ps1 -Restore $made[0].FullName 2>&1 | Out-String
+          $aside = @(Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "KiraPick.truoc-khoi-phuc-*")
+          Check ($LASTEXITCODE -eq 0 -and (DataState).Replace($data, "") -eq $dataBefore.Replace($data, "") -and $aside.Count -eq 1) "restore script: data back byte-identical, the replaced data kept aside ($($aside.Name))"
+          Write-Host "::notice title=install check summary ($($failed.Count) failed)::$($lines -join '%0A')"
+          if ($failed.Count) { Write-Host "::notice title=install check FAILED::$($failed -join '%0A')"; exit 1 }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
