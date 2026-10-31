@@ -18,6 +18,10 @@ function State([string]$root) {
     (Get-ChildItem -Recurse -File $root | Sort-Object FullName | ForEach-Object {
         "$($_.FullName.Substring($root.Length))=$((Get-FileHash $_.FullName).Hash)" }) -join ";"
 }
+function Siblings([string]$pattern) {
+    # -like, not -Filter: a Windows -Filter "KiraPick.*" also matches the folder "KiraPick" itself
+    @(Get-ChildItem $env:LOCALAPPDATA -Directory | Where-Object { $_.Name -like $pattern })
+}
 function Run-Tool([string[]]$toolArgs) {
     $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $tool @toolArgs 2>&1 | Out-String
     return @{ code = $LASTEXITCODE; out = $out }
@@ -49,7 +53,7 @@ $p = Start-Process $fake -ArgumentList "-n", "30", "127.0.0.1" -PassThru -Window
 Start-Sleep -Seconds 1
 $r = Run-Tool @("-Restore", $first[0].FullName)
 Stop-Process -Id $p.Id -Force; Start-Sleep -Seconds 1
-Check ($r.code -ne 0 -and (State $data) -eq $original -and @(Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "KiraPick.*").Count -eq 0) "restore refused while KiraPick.exe runs, nothing changed"
+Check ($r.code -ne 0 -and $r.out -match "đang chạy" -and (State $data) -eq $original -and (Siblings "KiraPick.*").Count -eq 0) "restore refused while KiraPick.exe runs, nothing changed"
 
 # 5. Restore when names for this second (and the next ones) are taken
 Add-Content (Join-Path $data "sessions\a\project.snorlu.db") "upgraded to v7 by the test build"
@@ -64,7 +68,7 @@ for ($s = 0; $s -lt 15; $s++) {
 }
 $takenState = ($taken | ForEach-Object { State $_ }) -join "|"
 $r = Run-Tool @("-Restore", $first[0].FullName)
-$asides = @(Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "KiraPick.truoc-khoi-phuc-*" | Where-Object { $taken -notcontains $_.FullName })
+$asides = @(Siblings "KiraPick.truoc-khoi-phuc-*" | Where-Object { $taken -notcontains $_.FullName })
 Check ($r.code -eq 0 -and (State $data) -eq $original -and $asides.Count -eq 1 -and $asides[0].Name -match "-\d+$" -and
        (State $asides[0].FullName) -eq $changed -and (($taken | ForEach-Object { State $_ }) -join "|") -eq $takenState) "restore with taken names: data restored, previous data kept as $($asides[0].Name), the 15 existing folders untouched"
 Check ((reg query "HKCU\Software\KiraPick\KiraPick" /v "export/include_pairs" 2>$null | Out-String) -match "false") "restore: settings re-imported"
@@ -72,13 +76,13 @@ Check ((reg query "HKCU\Software\KiraPick\KiraPick" /v "export/include_pairs" 2>
 # 6. Restore that fails half-way (a backup file locked by another program): nothing deleted or overwritten
 Add-Content (Join-Path $data "sessions\a\project.snorlu.db") "changed again"
 $before = State $data
-$asidesBefore = @(Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "KiraPick.*" | ForEach-Object { "$($_.Name)=$(State $_.FullName)" }) -join "|"
+$asidesBefore = @(Siblings "KiraPick.*" | ForEach-Object { "$($_.Name)=$(State $_.FullName)" }) -join "|"
 $locked = Join-Path $first[0].FullName "KiraPick\sessions\a\project.snorlu.db"
 $lock = [IO.File]::Open($locked, "Open", "Read", "None")
 try { $r = Run-Tool @("-Restore", $first[0].FullName) } finally { $lock.Close() }
-$failedCopies = @(Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "KiraPick.khoi-phuc-loi-*")
-$asidesAfter = @(Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "KiraPick.*" | Where-Object { $_.Name -notlike "KiraPick.khoi-phuc-loi-*" } | ForEach-Object { "$($_.Name)=$(State $_.FullName)" }) -join "|"
-Check ($r.code -ne 0 -and $r.out -match "KHÔNG thành công") "failed restore reported: $((($r.out -split "`n") | Where-Object { $_ -match 'KHÔNG' } | Select-Object -First 1).Trim())"
+$failedCopies = @(Siblings "KiraPick.khoi-phuc-loi-*")
+$asidesAfter = @(Siblings "KiraPick.*" | Where-Object { $_.Name -notlike "KiraPick.khoi-phuc-loi-*" } | ForEach-Object { "$($_.Name)=$(State $_.FullName)" }) -join "|"
+Check ($r.code -ne 0 -and $r.out -match "KHÔNG thành công") "failed restore reported: $((($r.out -split "`n") | Where-Object { $_ -cmatch 'KHÔNG thành công' } | Select-Object -First 1).Trim())"
 Check ((State $data) -eq $before) "failed restore: the data from before is back in place, byte-identical"
 Check ($failedCopies.Count -le 1 -and $asidesAfter -eq $asidesBefore) "failed restore: half copy kept aside ($($failedCopies.Name)), earlier folders untouched"
 Check ((State $first[0].FullName) -eq $firstState) "failed restore: the backup itself untouched"
