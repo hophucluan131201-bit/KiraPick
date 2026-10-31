@@ -235,6 +235,8 @@ jobs:
           if (Test-Path diag.jsonl) { Write-Host "::notice title=diag::$((Get-Content diag.jsonl | Measure-Object).Count) scenarios written (artifact)" }
           $s7 = (Get-Content diag.log | Where-Object { $_ -match "^S7 " } | Select-Object -Last 1)
           if ($s7) { Write-Host "::notice title=diag S7 (resting inside a new window; MouseMove delivered)::$s7" }
+          $s8 = (Get-Content diag.log | Where-Object { $_ -match "^S8 " } | Select-Object -Last 1)
+          if ($s8) { Write-Host "::notice title=diag S8 (ways to move into a window opened under the pointer)::$s8" }
           exit $code
       - name: Snap sizes and per-monitor DPI scale (real Windows platform)
         if: always()

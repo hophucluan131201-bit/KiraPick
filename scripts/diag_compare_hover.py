@@ -265,9 +265,96 @@ def main() -> int:
             v.deleteLater()
             QApplication.processEvents()
         summary[variant] = f"{sum(got)}/{len(got)}"
-    app.removeEventFilter(count)
     out.write(json.dumps({"scenario": "S7_resting_inside_new_window", "moved": summary}) + "\n")
     print("S7", json.dumps(summary))
+
+    # S8: which way of moving DOES reach a window opened under a resting pointer? Counts MouseMoves on the target and
+    # on any widget of the window; the cursor before / after; whether the window is the active (foreground) one.
+    import ctypes
+
+    def send_input(point: QPoint) -> None:
+        """A hardware-like absolute mouse move through the Windows input queue (SendInput), as a real mouse sends."""
+        if sys.platform != "win32":
+            QCursor.setPos(point)
+            return
+        user32 = ctypes.windll.user32
+        width, height = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+
+        class MouseInput(ctypes.Structure):
+            _fields_ = [("dx", ctypes.c_long), ("dy", ctypes.c_long), ("mouseData", ctypes.c_ulong),
+                        ("dwFlags", ctypes.c_ulong), ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.c_size_t)]
+
+        class Input(ctypes.Structure):
+            _fields_ = [("type", ctypes.c_ulong), ("mi", MouseInput), ("pad", ctypes.c_byte * 8)]
+
+        scale = QGuiApplication.primaryScreen().devicePixelRatio() if QGuiApplication.primaryScreen() else 1.0
+        x = int(point.x() * scale * 65535 / max(1, width - 1))
+        y = int(point.y() * scale * 65535 / max(1, height - 1))
+        inp = Input(0, MouseInput(x, y, 0, 0x0001 | 0x8000, 0, 0))  # MOVE | ABSOLUTE
+        user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(Input))
+
+    class WindowCount(QObject):
+        def __init__(self) -> None:
+            super().__init__()
+            self.window: QWidget | None = None
+            self.target: QObject | None = None
+            self.target_moves = self.window_moves = 0
+
+        def eventFilter(self, obj, event) -> bool:  # noqa: ANN001, N802
+            if event.type() == QEvent.Type.MouseMove and isinstance(obj, QWidget) and self.window is not None:
+                if obj.window() is self.window:
+                    self.window_moves += 1
+                if obj is self.target:
+                    self.target_moves += 1
+            return False
+
+    wc = WindowCount()
+    app.installEventFilter(wc)
+    s8 = {}
+    for variant in ("qtest", "activate_then_qtest", "qtest_two_steps", "send_input", "send_input_after_outside"):
+        hits, any_moves, active = 0, 0, 0
+        for n in range(10):
+            QCursor.setPos(QPoint(60 + 800, 60 + 450))
+            QTest.qWait(80)
+            v = CompareView()
+            v.resize(1600, 900)
+            v.move(60, 60)
+            v.show()
+            QTest.qWaitForWindowExposed(v)
+            v.show_records([_record(p, asset_id=i + 1) for i, p in enumerate(photos)], {}, 2)
+            QTest.qWait(150)
+            target = v.tile(3).viewer.viewport()
+            goal = target.mapToGlobal(target.rect().center())
+            wc.window, wc.target, wc.target_moves, wc.window_moves = v, target, 0, 0
+            if variant == "activate_then_qtest":
+                v.raise_()
+                v.activateWindow()
+                QTest.qWaitForWindowActive(v, 1000)
+            if variant == "send_input_after_outside":
+                send_input(QPoint(v.frameGeometry().center().x(), v.frameGeometry().bottom() + 12))
+                QTest.qWait(80)
+            active += v.isActiveWindow()
+            if variant == "qtest_two_steps":
+                QTest.mouseMove(target, target.rect().center() - QPoint(40, 40))
+                QTest.qWait(40)
+            if variant.startswith("send_input"):
+                send_input(goal)
+            else:
+                QTest.mouseMove(target, target.rect().center())
+            deadline = time.perf_counter() + 0.5
+            while wc.target_moves == 0 and time.perf_counter() < deadline:
+                QTest.qWait(5)
+            hits += wc.target_moves > 0
+            any_moves += wc.window_moves > 0
+            v.wait_idle(10000)
+            v.close()
+            v.deleteLater()
+            QApplication.processEvents()
+        s8[variant] = f"target {hits}/10, window {any_moves}/10, active {active}/10"
+    app.removeEventFilter(wc)
+    app.removeEventFilter(count)
+    out.write(json.dumps({"scenario": "S8_ways_to_move_into_a_new_window", "result": s8}) + "\n")
+    print("S8", json.dumps(s8))
     out.close()
     return 0
 
