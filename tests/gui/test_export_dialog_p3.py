@@ -316,3 +316,103 @@ def test_large_imported_plan_runs_in_the_background(qtbot, fx, monkeypatch: pyte
     wait_plan(qtbot, dialog)
     assert len(dialog.plan.operations) == 7 and dialog.plan.options["source"] == "imported"
     settle_threads(qtbot, dialog)
+
+
+# --- BR-04: large previews stay complete and actionable ---------------------------------------------------------------
+
+def _large(tmp_path: Path, n: int):  # noqa: ANN202
+    from tests.perf.test_export_perf import _session
+
+    return _session(tmp_path, n)
+
+
+def _stamp(i: int) -> str:
+    return f"2026:10:25 {10 + i // 3600:02d}:{i // 60 % 60:02d}:{i % 60:02d}"
+
+
+def test_more_than_50_unsure_matches_are_all_reachable(qtbot, tmp_path: Path) -> None:  # noqa: ANN001
+    project, _root, _ids = _large(tmp_path, 120)
+    card = tmp_path / "card"
+    for i in range(0, 120):  # two RAWs within 2 s of every photo: 120 unsure matches
+        exif_file(card / "A" / f"DSC_{i:05d}.NEF", _stamp(i), seed=i)
+        exif_file(card / "B" / f"DSC_{i:05d}.NEF", _stamp(i), seed=i + 1000)
+    try:
+        dialog = ExportDialog(project, [], settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+        qtbot.addWidget(dialog)
+        dialog.dest.setText(str(tmp_path / "out"))
+        dialog.format_buttons[ExportFormat.RAW].setChecked(True)
+        dialog.external_path.setText(str(card))
+        dialog.source_external.setChecked(True)
+        wait_plan(qtbot, dialog)
+        assert len(dialog.plan.issues) == 120 and dialog.plan.operations == []
+        assert "120 không chắc" in dialog.preview_tabs.tabText(1)
+        assert not dialog.issue_pager.property("pager").isHidden() and dialog.issue_pager.text() == "1–50 / 120"
+        seen, pages = set(), 0
+        while True:
+            pages += 1
+            for r in range(dialog.issue_table.rowCount()):
+                assert isinstance(dialog.issue_table.cellWidget(r, 4), QPushButton)  # every row on every page
+                seen.add(dialog._issue_rows[r].photo_id)
+            if not dialog.issue_next.isEnabled():
+                break
+            dialog.issue_next.click()
+        assert pages == 3 and len(seen) == 120 and dialog.issue_pager.text() == "101–120 / 120"
+        chosen = dialog._issue_rows[5]
+        dialog.use_candidate(5, 1)  # on the last page
+        wait_plan(qtbot, dialog)
+        assert len(dialog.plan.operations) == 1 and dialog.plan.operations[0].photo_id == chosen.photo_id
+        assert dialog.issue_page == 2 and dialog.issue_pager.text() == "101–119 / 119"  # stays where the user was
+        settle_threads(qtbot, dialog)
+    finally:
+        project.close()
+
+
+def test_more_than_300_operations_are_paged(qtbot, tmp_path: Path) -> None:  # noqa: ANN001
+    project, _root, _ids = _large(tmp_path, 450)
+    try:
+        dialog = ExportDialog(project, [], settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+        qtbot.addWidget(dialog)
+        dialog.dest.setText(str(tmp_path / "out"))
+        dialog.refresh()
+        wait_plan(qtbot, dialog)  # 450 > IMPORTED_SYNC_LIMIT: planned in the plan thread
+        assert dialog.preview_tabs.tabText(0) == "Sẽ chép (450)" and dialog.plan_table.rowCount() == 200
+        assert dialog.plan_pager.text() == "1–200 / 450" and not dialog.plan_prev.isEnabled()
+        dialog.plan_next.click()
+        assert dialog.plan_pager.text() == "201–400 / 450"
+        dialog.plan_next.click()
+        assert dialog.plan_pager.text() == "401–450 / 450" and dialog.plan_table.rowCount() == 50
+        assert not dialog.plan_next.isEnabled()
+        assert dialog.plan_table.item(49, 0).text().startswith("DSC_00449")
+        settle_threads(qtbot, dialog)
+    finally:
+        project.close()
+
+
+def test_copy_names_responsive_while_the_source_is_unreachable(qtbot, tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    import time
+
+    project, _root, _ids = _large(tmp_path, 2000)
+    slow = SlowScan(monkeypatch, slow_calls=100)  # a card that never answers
+    card = tmp_path / "card"
+    card.mkdir()
+    try:
+        dialog = ExportDialog(project, [], settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+        qtbot.addWidget(dialog)
+        dialog.dest.setText(str(tmp_path / "out"))
+        dialog.external_path.setText(str(card))
+        dialog.source_external.setChecked(True)
+        assert slow.started.wait(10) and dialog.scanning
+        dialog.tabs.setCurrentWidget(dialog.names_tab)
+        t0 = time.perf_counter()
+        dialog.copy_names_button.click()
+        ms = (time.perf_counter() - t0) * 1000
+        assert len(QGuiApplication.clipboard().text().splitlines()) == 2000 and dialog.scanning
+        assert ms < 1000, f"{ms:.0f} ms"
+        dialog.external_path.setText(str(tmp_path / "rút thẻ"))  # a folder that is not there at all
+        dialog.refresh()
+        QGuiApplication.clipboard().clear()
+        dialog.copy_names_button.click()
+        assert len(QGuiApplication.clipboard().text().splitlines()) == 2000
+        settle_threads(qtbot, dialog)
+    finally:
+        project.close()

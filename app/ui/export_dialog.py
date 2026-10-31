@@ -65,8 +65,8 @@ from app.ui import theme
 from app.ui.jobs import ExportPlanThread, ExportThread, PlanRequest
 from app.ui.shutdown import Gate
 
-_PREVIEW_ROWS = 300
-MAX_PICKERS = 50  # candidate pickers built at once (widgets are slow); the next ones appear once these are decided
+PLAN_PAGE_ROWS = 200  # rows per page of "Sẽ chép"
+ISSUE_PAGE_ROWS = 50  # rows per page of "Cần xem lại": every unsure row of a page gets its picker (widgets are slow)
 # More photos than this: the imported-folder plan runs in the plan thread too (spec §5). Measured per photo: Linux VM
 # 0.07 ms, Windows CI 0.14 ms (1 000 photos: 140 ms > 100 ms) → 300 photos stay ≤ ~45 ms on the GUI thread.
 IMPORTED_SYNC_LIMIT = 300
@@ -163,7 +163,10 @@ class ExportDialog(QDialog):
         self._pending_root: Path | None = None
         self._hashes = HashCache()  # one per dialog and source folder (spec §3.9)
         self.confirmations: dict[tuple[int, str], Path] = {}  # the user's choices for unsure matches (memory only)
-        self._issue_rows: list[ExportIssue] = []
+        self._issue_rows: list[ExportIssue] = []  # the issues on the page shown (use_candidate's row is in it)
+        self._all_issues: list[ExportIssue] = []  # unsure first, then the others
+        self.plan_page = self.issue_page = 0
+        self._keep_pages = False  # a confirmation re-plans: stay on the same page of "Cần xem lại"
         self._retry_pending = False
         self.scanning = False
 
@@ -321,8 +324,14 @@ class ExportDialog(QDialog):
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             table.setMinimumHeight(120)
         self.table = self.plan_table  # the name used before Part 3
-        self.preview_tabs.addTab(self.plan_table, "Sẽ chép (0)")
-        self.preview_tabs.addTab(self.issue_table, "Cần xem lại (0)")
+        plan_page, self.plan_pager, self.plan_prev, self.plan_next = self._paged(self.plan_table)
+        issue_page, self.issue_pager, self.issue_prev, self.issue_next = self._paged(self.issue_table)
+        self.plan_prev.clicked.connect(lambda: self.show_plan_page(self.plan_page - 1))
+        self.plan_next.clicked.connect(lambda: self.show_plan_page(self.plan_page + 1))
+        self.issue_prev.clicked.connect(lambda: self.show_issue_page(self.issue_page - 1))
+        self.issue_next.clicked.connect(lambda: self.show_issue_page(self.issue_page + 1))
+        self.preview_tabs.addTab(plan_page, "Sẽ chép (0)")
+        self.preview_tabs.addTab(issue_page, "Cần xem lại (0)")
         layout.addWidget(self.preview_tabs, 1)
 
         self.summary = QLabel()
@@ -386,6 +395,32 @@ class ExportDialog(QDialog):
             self.collection.setCurrentIndex(self.collection.findData(collection_id))
             self.radios[Selection.COLLECTION].setChecked(True)
         self.refresh()
+
+    @staticmethod
+    def _paged(table: QTableWidget) -> tuple[QWidget, QLabel, QPushButton, QPushButton]:
+        """A preview table with a "‹ Trước · 1–50 / 437 · Sau ›" row under it (hidden when one page is enough)."""
+        page = QWidget()
+        box = QVBoxLayout(page)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.addWidget(table, 1)
+        row = QHBoxLayout()
+        prev, label, nxt = QPushButton("‹ Trước"), QLabel(), QPushButton("Sau ›")
+        row.addWidget(prev)
+        row.addWidget(label, 1, Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(nxt)
+        pager = QWidget()
+        pager.setLayout(row)
+        pager.hide()
+        box.addWidget(pager)
+        label.setProperty("pager", pager)
+        return page, label, prev, nxt
+
+    @staticmethod
+    def _set_pager(label: QLabel, prev: QPushButton, nxt: QPushButton, page: int, size: int, total: int) -> None:
+        label.property("pager").setVisible(total > size)
+        label.setText(f"{page * size + 1}–{min(total, (page + 1) * size)} / {total}" if total else "")
+        prev.setEnabled(page > 0)
+        nxt.setEnabled((page + 1) * size < total)
 
     # ------------------------------------------------------------------ choices
     @property
@@ -460,6 +495,9 @@ class ExportDialog(QDialog):
         self._generation += 1  # any result still on its way is for an older choice
         self._cancel_plans()
         self.plan = None
+        if not self._keep_pages:
+            self.plan_page = self.issue_page = 0
+        self._keep_pages = False
         self._set_scanning(False)
         self._clear_preview()
         ids = self._ids()
@@ -566,7 +604,10 @@ class ExportDialog(QDialog):
     def _clear_preview(self) -> None:
         self.plan_table.setRowCount(0)
         self.issue_table.setRowCount(0)
-        self._issue_rows = []
+        self._issue_rows, self._all_issues = [], []
+        for label, prev, nxt in ((self.plan_pager, self.plan_prev, self.plan_next),
+                                 (self.issue_pager, self.issue_prev, self.issue_next)):
+            self._set_pager(label, prev, nxt, 0, 1, 0)
         self.preview_tabs.setTabText(0, "Sẽ chép (0)")
         self.preview_tabs.setTabText(1, "Cần xem lại (0)")
 
@@ -579,8 +620,6 @@ class ExportDialog(QDialog):
         if plan.already_present:
             lines.append(f"{len(plan.already_present)} file có vẻ đã có sẵn ở đích → khi chép sẽ so toàn bộ nội dung: "
                          "giống hệt thì bỏ qua, khác thì chép thành tên mới (không ghi đè).")
-        if len(plan.operations) > _PREVIEW_ROWS:
-            lines.append(f"(bảng chỉ hiện {_PREVIEW_ROWS} file đầu)")
         missing = sum(1 for i in plan.issues if i.status is IssueStatus.MISSING)
         if missing and not self.source_external.isChecked():
             lines.append(f"<span style='color:{theme.ERROR}'>{missing} file không còn trên ổ đĩa sẽ bị bỏ qua.</span>")
@@ -647,8 +686,20 @@ class ExportDialog(QDialog):
         return out
 
     def _fill_plan_table(self, plan: ExportPlan) -> None:
+        self.show_plan_page(self.plan_page)
+        self.preview_tabs.setTabText(0, f"Sẽ chép ({len(plan.operations)})")
+
+    def show_plan_page(self, page: int) -> None:
+        if self.plan is None:
+            return
+        total = len(self.plan.operations)
+        self.plan_page = max(0, min(page, (total - 1) // PLAN_PAGE_ROWS if total else 0))
+        start = self.plan_page * PLAN_PAGE_ROWS
+        self._fill_plan_rows(self.plan, self.plan.operations[start:start + PLAN_PAGE_ROWS])
+        self._set_pager(self.plan_pager, self.plan_prev, self.plan_next, self.plan_page, PLAN_PAGE_ROWS, total)
+
+    def _fill_plan_rows(self, plan: ExportPlan, shown: list) -> None:  # noqa: ANN001
         self.plan_table.setUpdatesEnabled(False)
-        shown = plan.operations[:_PREVIEW_ROWS]
         self.plan_table.setRowCount(len(shown))
         for r, op in enumerate(shown):
             photo = plan.photos.get(op.photo_id)
@@ -665,23 +716,35 @@ class ExportDialog(QDialog):
                     dest_item.setForeground(Qt.GlobalColor.yellow)  # renamed to avoid overwriting
                     dest_item.setToolTip("Đã có file trùng tên ở đích → đặt tên mới, không ghi đè")
             self.plan_table.setItem(r, 2, dest_item)
+        self.plan_table.scrollToTop()
         self.plan_table.setUpdatesEnabled(True)
-        self.preview_tabs.setTabText(0, f"Sẽ chép ({len(plan.operations)})")
 
     def _fill_issue_table(self, plan: ExportPlan) -> None:
-        self.issue_table.setUpdatesEnabled(False)
         unsure = [i for i in plan.issues if i.status is IssueStatus.AMBIGUOUS]  # the ones the user can act on first
-        self._issue_rows = (unsure + [i for i in plan.issues if i.status is not IssueStatus.AMBIGUOUS])[:_PREVIEW_ROWS]
+        self._all_issues = unsure + [i for i in plan.issues if i.status is not IssueStatus.AMBIGUOUS]
+        self.show_issue_page(self.issue_page)  # the same page after a confirmation re-plans (clamped)
+        n = len(unsure)
+        self.preview_tabs.setTabText(1, f"Cần xem lại ({len(plan.issues)})" + (f" · {n} không chắc" if n else ""))
+
+    def show_issue_page(self, page: int) -> None:
+        total = len(self._all_issues)
+        self.issue_page = max(0, min(page, (total - 1) // ISSUE_PAGE_ROWS if total else 0))
+        start = self.issue_page * ISSUE_PAGE_ROWS
+        self._issue_rows = self._all_issues[start:start + ISSUE_PAGE_ROWS]
+        self._fill_issue_rows()
+        self._set_pager(self.issue_pager, self.issue_prev, self.issue_next, self.issue_page, ISSUE_PAGE_ROWS, total)
+
+    def _fill_issue_rows(self) -> None:
+        self.issue_table.setUpdatesEnabled(False)
+        self.issue_table.setRowCount(0)  # drops the previous page's pickers
         self.issue_table.setRowCount(len(self._issue_rows))
-        pickers = 0
         for r, issue in enumerate(self._issue_rows):
             self.issue_table.setItem(r, 0, QTableWidgetItem("Ghi chú" if _note_only(issue)
                                                             else ISSUE_LABELS[issue.status]))
             self.issue_table.setItem(r, 1, QTableWidgetItem(issue.stem))
             self.issue_table.setItem(r, 2, QTableWidgetItem(_KIND_LABELS.get(issue.kind, "")))
             candidates = [c for c in issue.candidates if isinstance(c, Candidate)]
-            if issue.status is IssueStatus.AMBIGUOUS and candidates and pickers < MAX_PICKERS:
-                pickers += 1
+            if issue.status is IssueStatus.AMBIGUOUS and candidates:
                 box = QComboBox()
                 for c in candidates:
                     box.addItem(_candidate_text(c))
@@ -690,20 +753,19 @@ class ExportDialog(QDialog):
                 use = QPushButton("Dùng file này")
                 use.clicked.connect(lambda _c=False, row=r, b=box: self.use_candidate(row, b.currentIndex()))
                 self.issue_table.setCellWidget(r, 4, use)
-            elif issue.status is IssueStatus.AMBIGUOUS and candidates:
-                self.issue_table.setItem(r, 3, QTableWidgetItem(
-                    f"{issue.detail} · {len(candidates)} file ứng viên (chọn được sau khi xử lý các dòng trên)"))
             else:
                 self.issue_table.setItem(r, 3, QTableWidgetItem(issue.detail))
+        self.issue_table.scrollToTop()
         self.issue_table.setUpdatesEnabled(True)
-        self.preview_tabs.setTabText(1, f"Cần xem lại ({len(plan.issues)})")
 
     def use_candidate(self, row: int, candidate: int) -> None:
-        """"Dùng file này": the user's choice for an unsure match, for this dialog only (spec §3.3 point 6)."""
+        """"Dùng file này" on ``row`` of the page shown: the user's choice for an unsure match, for this dialog only
+        (spec §3.3 point 6)."""
         issue = self._issue_rows[row]
         chosen = [c for c in issue.candidates if isinstance(c, Candidate)][candidate]
         if issue.kind is not None:
             self.confirmations[(issue.photo_id, issue.kind)] = chosen.path
+        self._keep_pages = True
         self.refresh()
 
     # ------------------------------------------------------------------ names
