@@ -3,8 +3,8 @@
 Làm trên máy của bạn (Windows 10/11), với **bản thử nội bộ KiraPick Internal Test 3.0.0b1.dev1**: bộ cài
 `KiraPick-InternalTest-3.0.0b1.dev1-Setup.exe` + `KiraPick-InternalTest-3.0.0b1.dev1-Setup-1.bin` (cùng nằm trong
 `KiraPick-InternalTest-3.0.0b1.dev1-BoCai.zip`), build từ mã nguồn `423074b` + commit chỉ đổi số phiên bản `d694511`
-(chi tiết, kích thước và SHA-256: `review_internal_build.txt`). **Chỉ cài sau khi bản build được duyệt** và sau khi
-làm xong `docs/internal-test-preflight.md` (sao lưu). Với mỗi dòng ghi **Đạt** / **Lỗi** (+ ảnh chụp màn
+(chi tiết, kích thước và SHA-256: `review_internal_build.txt`). Bản build đã được duyệt (2026-10-31). Cài theo
+`docs/owner-install-instructions.md` (kiểm tra SHA-256 của bộ cài và của script sao lưu, sao lưu, cài, kiểm tra GPU). Với mỗi dòng ghi **Đạt** / **Lỗi** (+ ảnh chụp màn
 hình app nếu lỗi; không cần gửi ảnh chụp của bạn). Mất khoảng 60–90 phút.
 
 > **Bảng này là kiểm tra chấp nhận, KHÔNG phải lệnh phát hành.** Làm xong và "Đạt" hết nghĩa là bản thử dùng được
@@ -130,6 +130,7 @@ Compare-Object (Import-Csv D:\Test\jpeg_truoc.csv) (Import-Csv D:\Test\jpeg_sau.
 | 10.1 | Dòng `GUI-thread GC` cuối cùng trong `kirapick.log` sau bước 8 (cho K2) | |
 | 10.2 | Ở bước 8, có lần nào bấm P/X trong So sánh thấy app khựng rõ (≈ ⅓ giây) không? Nếu có: ảnh nào, mấy lần | |
 | 10.3 | Máy: Windows 10 hay 11, CPU, RAM, card đồ hoạ, tỉ lệ màn hình (100 % / 125 % / 150 %) | |
+| 10.5 | **Card đồ hoạ (DirectML):** gửi `D:\Test\selftest.json` (bước 5 của `docs/owner-install-instructions.md`); trong lúc 📊 phân tích AI, Task Manager → Performance → GPU có tăng không? Nếu app dùng CPU, chép dòng `"note"` trong file | |
 | 10.4 | Dòng tiêu đề cửa sổ KiraPick (tên + số phiên bản) và tên file bộ cài / zip bạn đã cài | |
 
 ## Gửi lại

@@ -21,7 +21,9 @@
 ## Các bước bắt buộc trước khi chạy bản thử
 
 1. **Đóng mọi KiraPick đang chạy** (cả 2.2.1). Kiểm tra trong Task Manager không còn `KiraPick.exe`.
-2. **Sao lưu đầy đủ bằng script** (chép `scripts/owner_backup.ps1` về máy):
+2. **Sao lưu đầy đủ bằng script** — tải đúng bản đã kiểm thử (v2, commit `7265d2b`, SHA-256
+   `96306f5dd04844322306a73da5089e293ea3588d015e87fa5a6d5ad6ab179c26`) theo bước 2 của
+   `docs/owner-install-instructions.md`:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\owner_backup.ps1 -Destination D:\KiraPick-SaoLuu
    ```
