@@ -1,9 +1,9 @@
 # Bản thử nội bộ cho chủ dự án — commit `423074b`
 
 > **Cập nhật 2026-10-31 — ĐÃ BUILD theo lệnh của chủ dự án (Q1 có, Q2 commit chỉ đổi phiên bản `3.0.0b1.dev1`, Q3
-> Setup.exe).** Nhánh tạm `internal-build/3.0.0b1.dev1`: `423074b` → `d694511` (chỉ số phiên bản) → `a33a476` / `bc5dd29`
+> Setup.exe).** Nhánh tạm `internal-build/3.0.0b1.dev1`: `423074b` → `d694511` (chỉ số phiên bản) → `a33a476` / `bc5dd29` / `23f8746`
 > (đóng gói tách biệt: AppId, thư mục, lối tắt, mục gỡ cài đặt riêng; không mở app sau khi cài; kiểm tra cài đặt
-> trên CI; script sao lưu). Bản build: run 41221596148 (`bc5dd29`). Chi tiết và bằng chứng: `review_internal_build.txt`;
+> trên CI; script sao lưu). Bản build ứng viên: run 41224104483 (`23f8746`). Chi tiết và bằng chứng: `review_internal_build.txt`;
 > trước khi cài: `docs/internal-test-preflight.md`. Phần dưới là hướng dẫn gốc (trước khi build).
 
 
