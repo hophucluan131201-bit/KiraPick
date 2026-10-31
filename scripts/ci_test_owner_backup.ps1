@@ -1,6 +1,9 @@
 ﻿# CI test of scripts/owner_backup.ps1 with Windows PowerShell 5 on a throwaway runner (never on a user's PC: it writes
 # test data into %LOCALAPPDATA%\KiraPick). One line per check, a summary notice at the end, exit 1 on any failure.
-$ErrorActionPreference = "Stop"
+# Continue: in Windows PowerShell 5 a native command's stderr would otherwise stop this script (the tool reports its
+# refusals on stderr on purpose); every outcome is checked explicitly instead.
+$ErrorActionPreference = "Continue"
+trap { Write-Host "::notice title=owner_backup.ps1 tests ABORTED::$($_.Exception.Message) at line $($_.InvocationInfo.ScriptLineNumber)"; exit 2 }
 $tool = Join-Path $PSScriptRoot "owner_backup.ps1"
 $data = Join-Path $env:LOCALAPPDATA "KiraPick"
 $bk = Join-Path $env:RUNNER_TEMP "SaoLuu"
