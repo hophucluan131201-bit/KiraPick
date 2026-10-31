@@ -215,6 +215,59 @@ def main() -> int:
     out.write(json.dumps({"scenario": "S6_new_window_per_test", "available": [avail.x(), avail.y(), avail.width(),
                           avail.height()] if avail else None, "runs": runs}, ensure_ascii=False) + "\n")
     print("S6", runs[0], runs[-1])
+
+    # S7 (beta readiness BR-01): a new window opened while the OS cursor rests INSIDE it, not on the target — what the
+    # intermittent test failures show (cursor at the previous test's tile centre). Does a move to the target deliver a
+    # MouseMove (a) straight away, (b) after parking the cursor outside the window first, (c) with QCursor.setPos?
+    class Count(QObject):
+        def __init__(self) -> None:
+            super().__init__()
+            self.target: QObject | None = None
+            self.moves = 0
+
+        def eventFilter(self, obj, event) -> bool:  # noqa: ANN001, N802
+            if obj is self.target and event.type() == QEvent.Type.MouseMove:
+                self.moves += 1
+            return False
+
+    count = Count()
+    app.installEventFilter(count)
+    summary = {}
+    for variant in ("qtest_no_park", "qtest_park_outside", "os_cursor_no_park"):
+        got = []
+        for n in range(10):
+            QCursor.setPos(QPoint(60 + 800, 60 + 450))  # where the new window's middle will be
+            QTest.qWait(80)
+            v = CompareView()
+            v.resize(1600, 900)
+            v.move(60, 60)
+            v.show()
+            QTest.qWaitForWindowExposed(v)
+            v.show_records([_record(p, asset_id=i + 1) for i, p in enumerate(photos)], {}, 2)
+            QTest.qWait(150)
+            target = v.tile(3).viewer.viewport() if v.tile(3) is not None else v.page
+            goal = target.mapToGlobal(target.rect().center())
+            count.target, count.moves = target, 0
+            if variant == "qtest_park_outside":
+                frame = v.frameGeometry()
+                QCursor.setPos(QPoint(frame.center().x(), frame.bottom() + 12))
+                QTest.qWait(60)
+            if variant == "os_cursor_no_park":
+                QCursor.setPos(goal)
+            else:
+                QTest.mouseMove(target, target.rect().center())
+            deadline = time.perf_counter() + 0.5
+            while count.moves == 0 and time.perf_counter() < deadline:
+                QTest.qWait(5)
+            got.append(count.moves > 0)
+            v.wait_idle(10000)
+            v.close()
+            v.deleteLater()
+            QApplication.processEvents()
+        summary[variant] = f"{sum(got)}/{len(got)}"
+    app.removeEventFilter(count)
+    out.write(json.dumps({"scenario": "S7_resting_inside_new_window", "moved": summary}) + "\n")
+    print("S7", json.dumps(summary))
     out.close()
     return 0
 

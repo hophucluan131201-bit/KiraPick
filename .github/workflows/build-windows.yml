@@ -204,18 +204,19 @@ jobs:
           }
           Write-Host "::notice title=gui-export::files failed: $failed of $($gui.Count)"
           exit $failed
-      - name: Compare GUI on the real Windows platform, 2 more rounds (hover / routing stability)
+      - name: Compare GUI on the real Windows platform, 5 more rounds (hover / routing stability; BR-01)
         if: always()
-        timeout-minutes: 30
+        timeout-minutes: 45
         shell: pwsh
         env:
           QT_QPA_PLATFORM: windows
+          KIRAPICK_COMPARE_ROUNDS: "5"
           COLUMNS: "1500"
           KIRAPICK_EXIT_WATCHDOG: "60"
         run: |
           . scripts/ci_report.ps1
           $failed = 0
-          for ($i = 1; $i -le 2; $i++) {
+          for ($i = 1; $i -le $env:KIRAPICK_COMPARE_ROUNDS; $i++) {
             $code = Invoke-Pytest -Log "rep_$i.log" -Title "compare repeat $i" -TimeoutSec 600 -PytestArgs @(
               "tests/gui/test_compare_view.py", "tests/gui/test_compare_window.py", "tests/gui/test_compare_actions.py",
               "tests/gui/test_compare_overlay.py", "tests/gui/test_compare_final.py")
@@ -232,6 +233,8 @@ jobs:
           $code = $LASTEXITCODE
           if ($code -ne 0) { Write-Host "::notice title=diag exit::exit $code; $((Get-Content diag.log | Select-Object -Last 15) -join ' | ')" }
           if (Test-Path diag.jsonl) { Write-Host "::notice title=diag::$((Get-Content diag.jsonl | Measure-Object).Count) scenarios written (artifact)" }
+          $s7 = (Get-Content diag.log | Where-Object { $_ -match "^S7 " } | Select-Object -Last 1)
+          if ($s7) { Write-Host "::notice title=diag S7 (resting inside a new window; MouseMove delivered)::$s7" }
           exit $code
       - name: Snap sizes and per-monitor DPI scale (real Windows platform)
         if: always()
@@ -267,6 +270,21 @@ jobs:
             $all = @(Get-Content perf.jsonl)
             for ($i = 0; $i -lt $all.Count; $i += 4) { Write-Host "::notice title=perf::$(($all[$i..([Math]::Min($i + 3, $all.Count - 1))]) -join ' || ')" }
           }
+      - name: Performance variance (BR-02; the three tests 5 times each, then median / p95 / worst across runs)
+        if: always()
+        timeout-minutes: 60
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          KIRAPICK_PERF_OUT: variance.jsonl
+        run: |
+          $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+          $mem = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+          Write-Host "::notice title=runner::$($cpu.Name) | $($cpu.NumberOfCores) cores / $($cpu.NumberOfLogicalProcessors) threads | $mem GB RAM | $env:ImageOS $env:ImageVersion"
+          for ($i = 1; $i -le 5; $i++) {
+            python -m pytest -q -p no:cacheprovider -m perf "tests/perf/test_compare_perf.py::test_compare_on_a_large_session" "tests/perf/test_grid_perf.py::test_sustained_culling[10000]" "tests/perf/test_grid_perf.py::test_long_session_gc_and_memory" *>&1 | Select-Object -Last 3
+          }
+          python scripts/perf_variance.py variance.jsonl
       - name: Shutdown and worker stress (not reproduced in N runs is not proof)
         if: always()
         shell: pwsh
