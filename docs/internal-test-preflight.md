@@ -13,6 +13,11 @@
   cài không mở app. Chỉ khi bạn mở/nhập một thư mục trong bản thử thì phiên của thư mục đó mới được nâng cấp.
 - **Sau khi nâng cấp, KiraPick 2.2.1 không mở được phiên đó nữa** (báo lỗi "SchemaTooNewError"). Gỡ bản thử hay
   cài lại 2.2.1 **không** đưa phiên về như cũ.
+- **Bộ nhớ học cũng bị nâng cấp (phát hiện 2026-11-01).** Lần đầu mở, bản thử nâng cấp
+  `%LOCALAPPDATA%\KiraPick\learning\learning.db` (những gì app học từ các lần bạn sửa nhóm người, Giữ/Loại, sao, ❤)
+  từ v6 lên v7. Sau đó KiraPick 2.2.1 **không đọc được** bộ nhớ học này và **không báo gì**: nó chỉ ghi vào nhật ký và
+  phân nhóm / chấm "hợp gu" bằng mức mặc định. Vì vậy, sau khi thử xong, muốn dùng 2.2.1 làm việc thật thì **phải
+  khôi phục bản sao lưu** (bước 9 của hướng dẫn cài) — kể cả khi bạn chưa mở thư mục ảnh thật nào bằng bản thử.
 - **Quay lại = khôi phục bản sao lưu.** KiraPick tự để lại một bản `project.snorlu.db.v5.bak` trước khi nâng cấp,
   nhưng hãy dựa vào bản sao lưu đầy đủ của bạn (bên dưới). Bản thử không bao giờ ghi vào thư mục sao lưu nằm ngoài
   `%LOCALAPPDATA%`.

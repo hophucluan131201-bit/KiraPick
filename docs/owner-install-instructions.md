@@ -77,7 +77,10 @@ Performance → GPU: ghi lại GPU có chạy không (mục 10.3).
 
 Start Menu → **Gỡ cài đặt KiraPick Internal Test**. KiraPick 2.2.1 vẫn còn, dữ liệu vẫn còn.
 
-## Bước 9 — Khôi phục (nếu muốn 2.2.1 mở lại các thư mục đã mở bằng bản thử)
+## Bước 9 — Khôi phục (BẮT BUỘC trước khi dùng lại 2.2.1 cho việc thật)
+
+Bản thử đã nâng cấp bộ nhớ học (`learning.db`) mà 2.2.1 không đọc được; không khôi phục thì 2.2.1 âm thầm dùng mức
+mặc định khi phân nhóm người và chấm "hợp gu". Khôi phục cũng đưa các phiên thư mục ảnh về như trước.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File D:\KiraPick-SaoLuu\owner_backup.ps1 -Restore D:\KiraPick-SaoLuu\<ngày-giờ>
