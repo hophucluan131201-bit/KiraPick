@@ -358,7 +358,7 @@ enough embedded preview (50 ms median), one DNG falls back to the demosaic (262 
 140 → 340 → 140 → 340 px at 200 %: 6 / 6 / **0** / 6 decodes for 6 visible cards, 6 HD files made once (the second
 340 step re-reads the cached HD files, 30 ms; the photos are not read again).
 
-## Part 3 — Advanced Export (2026-10-30) — status: Batches A and B approved (Checkpoints A v2, B); Batch C (Tasks 9–11) implemented and tested; waits for the final Part 3 review and the owner's Windows acceptance
+## Part 3 — Advanced Export (2026-10-30) — status: CODE REVIEW COMPLETE (PART 3 APPROVED WITH NOTES, 2026-10-31); beta readiness BR-01…BR-04 done, waits for external review and the owner's Windows acceptance (`docs/owner-acceptance-checklist.md`)
 
 Spec `docs/superpowers/specs/2026-10-30-kirapick-advanced-export-design.md` (rev 4), plan
 `docs/superpowers/plans/2026-10-30-kirapick-advanced-export.md` (rev 4). Not released: no tag, no installer, no build,
