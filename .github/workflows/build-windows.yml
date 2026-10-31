@@ -84,6 +84,69 @@ jobs:
             $r = Get-Content dist/selftest.json -Raw | ConvertFrom-Json
             Write-Host ("::notice title=self-test (${{ matrix.edition }})::ok=" + $r.ok + " version=" + $r.version + " edition=" + $r.edition + " steps=" + ($r.steps -join " | ") + " gpu=" + ($r.gpu | ConvertTo-Json -Compress -Depth 3))
           }
+      - name: Internal test build — installation safety check (official 2.2.1 first, then the test build)
+        if: github.event_name == 'workflow_dispatch' && matrix.edition == 'directml'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $setup = Get-ChildItem dist/installer -Filter "KiraPick-InternalTest-*-Setup.exe" | Select-Object -First 1
+          if (-not $setup) { Write-Host "::notice title=install check::not an internal test build: skipped"; exit 0 }
+          $failed = @()
+          function Check($ok, $what) { if ($ok) { Write-Host "::notice title=install check PASS::$what" } else { Write-Host "::notice title=install check FAIL::$what"; $script:failed += $what } }
+          $progs = Join-Path $env:LOCALAPPDATA "Programs"
+          $uninst = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
+          $offKey = "$uninst\{6F2C9B1E-4E57-4C3A-9D2B-5A8C1E7F3B10}_is1"
+          $intKey = "$uninst\{3B7D2E91-6A4C-4F18-9E25-C81A0D6F4B72}_is1"
+          # 1. The official KiraPick 2.2.1 as a user has it (public release asset; nothing is published)
+          gh release download v2.2.1 --repo "${{ github.repository }}" -p "KiraPick-2.2.1-BoCai.zip" -D off
+          Expand-Archive off/KiraPick-2.2.1-BoCai.zip off/x
+          $offSetup = Get-ChildItem off/x -Recurse -Filter "KiraPick-Setup-2.2.1.exe" | Select-Object -First 1
+          Start-Process $offSetup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          $offExe = Join-Path $progs "KiraPick\KiraPick.exe"
+          Check ((Test-Path $offExe) -and (Test-Path $offKey)) "official 2.2.1 installed at $offExe"
+          $offHash = (Get-FileHash $offExe).Hash
+          $offVersion = (Get-ItemProperty $offKey).DisplayVersion
+          # 2. Existing user data: a sentinel session and learning file (must stay byte-identical)
+          $data = Join-Path $env:LOCALAPPDATA "KiraPick"
+          New-Item -ItemType Directory -Force (Join-Path $data "sessions\sentinel"), (Join-Path $data "learning") | Out-Null
+          Set-Content (Join-Path $data "sessions\sentinel\project.snorlu.db") "sentinel v5 database bytes"
+          Set-Content (Join-Path $data "learning\sentinel.json") "{}"
+          function DataState { (Get-ChildItem -Recurse -File $data | Get-FileHash | ForEach-Object { "$($_.Path)=$($_.Hash)" }) -join ";" }
+          $dataBefore = DataState
+          $settingsBefore = (reg query "HKCU\Software\KiraPick" /s 2>$null) -join ";"
+          # 3. The internal test build, silently (as the owner will, with the wizard)
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          Start-Sleep -Seconds 5
+          $intExe = Join-Path $progs "KiraPick-InternalTest\KiraPick.exe"
+          Check (Test-Path $intExe) "internal test installed at $intExe"
+          $k = Get-ItemProperty $intKey -ErrorAction SilentlyContinue
+          Check ($k -ne $null) "own uninstall entry {3B7D2E91-...}_is1: '$($k.DisplayName)' version '$($k.DisplayVersion)' at '$($k.InstallLocation)'"
+          Check ($k.DisplayVersion -eq "3.0.0b1.dev1") "installer version 3.0.0b1.dev1"
+          Check ((Get-ItemProperty $offKey -ErrorAction SilentlyContinue).DisplayVersion -eq $offVersion) "official uninstall entry unchanged ($offVersion)"
+          Check ((Test-Path $offExe) -and ((Get-FileHash $offExe).Hash -eq $offHash)) "official KiraPick.exe 2.2.1 unchanged"
+          Check (-not (Get-Process KiraPick -ErrorAction SilentlyContinue)) "no KiraPick process started by the installer"
+          Check ((DataState) -eq $dataBefore) "user data (sessions, learning) unchanged by installing: no migration"
+          Check (((reg query "HKCU\Software\KiraPick" /s 2>$null) -join ";") -eq $settingsBefore) "app settings unchanged by installing"
+          $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+          $links = (Get-ChildItem $menu -Filter "*KiraPick*" | ForEach-Object Name) -join ", "
+          Check ($links -match "KiraPick Internal Test" -and $links -match "(^|, )KiraPick\.lnk") "Start menu: $links"
+          # 4. The installed test app: version and offline self-test (network blocked inside the app)
+          $ver = (Get-Item $intExe).VersionInfo
+          Check ($ver.ProductVersion -eq "3.0.0b1.dev1") "KiraPick.exe ProductVersion '$($ver.ProductVersion)' FileVersion '$($ver.FileVersion)'"
+          $report = Join-Path $PWD "installed-selftest.json"
+          $p = Start-Process $intExe -ArgumentList "--self-test", "`"$report`"" -Wait -PassThru
+          $r = if (Test-Path $report) { Get-Content $report -Raw | ConvertFrom-Json } else { $null }
+          Check ($p.ExitCode -eq 0 -and $r.ok -eq $true -and $r.version -eq "3.0.0b1.dev1" -and @($r.network_attempts).Count -eq 0) "installed self-test ok=$($r.ok) version=$($r.version) network_attempts=$(@($r.network_attempts).Count) providers=$($r.onnxruntime.providers -join '/')"
+          Check ((DataState) -eq $dataBefore) "user data unchanged after the self-test"
+          # 5. Uninstall the test build: the official one and the data stay
+          Start-Process (Join-Path $progs "KiraPick-InternalTest\unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          for ($i = 0; $i -lt 60 -and (Test-Path $intExe); $i++) { Start-Sleep -Seconds 1 }
+          Check (-not (Test-Path $intExe) -and -not (Test-Path $intKey)) "internal test uninstalled"
+          Check ((Test-Path $offExe) -and ((Get-FileHash $offExe).Hash -eq $offHash) -and (Test-Path $offKey)) "official 2.2.1 still installed and unchanged after uninstalling the test build"
+          Check ((DataState) -eq $dataBefore) "user data unchanged after uninstalling"
+          Write-Host "::notice title=install check::$($failed.Count) failed"
+          if ($failed.Count) { exit 1 }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -91,6 +154,7 @@ jobs:
           path: |
             dist/installer/*
             dist/selftest.json
+            installed-selftest.json
           retention-days: 30
       - name: Publish release
         if: github.event_name == 'push'

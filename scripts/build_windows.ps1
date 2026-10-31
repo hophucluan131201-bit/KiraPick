@@ -172,8 +172,14 @@ Copy-Item "LICENSE.md", "THIRD_PARTY_NOTICES.md", "docs\model-licenses.md" $note
 Copy-Item "packaging\notes\HUONG_DAN_CAI_DAT.txt", "LICENSE.md" $dist
 
 $guide = Join-Path $Root "packaging\notes\HUONG_DAN_CAI_DAT.txt"
+# A development version (".dev") is an internal test build: its own installer identity (packaging\installer.iss),
+# its own file names, the Setup.exe only (no portable zip).
+$internal = $version -like "*.dev*"
+$setupBase = if ($internal) { "KiraPick-InternalTest-$version-Setup" } else { "KiraPick-Setup-$version" }
+$bundleName = if ($internal) { "KiraPick-InternalTest-$version-BoCai.zip" } else { "KiraPick-$version-BoCai.zip" }
+$numeric = ((([regex]::Matches($version, "\d+") | Select-Object -First 3 | ForEach-Object { $_.Value }) + @("0", "0", "0")) | Select-Object -First 3) -join "."
 $portable = Join-Path $out "KiraPick-$version-portable.zip"
-if ($Edition -eq "cuda") { $portable = $null }  # > 2 GB: GitHub cannot host it; the installer slices can
+if ($Edition -eq "cuda" -or $internal) { $portable = $null }  # > 2 GB: GitHub cannot host it; the installer slices can
 if ($portable) {
     Compress-Archive -Path $dist -DestinationPath $portable
     Write-Host "Bản giải nén là chạy: $portable"
@@ -181,15 +187,17 @@ if ($portable) {
 
 $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
           "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $iscc -and $internal) { throw "Bản thử nội bộ cần Inno Setup 6 (Setup.exe)" }
 if (-not $iscc) {
     Write-Host "Chưa có Inno Setup 6 nên chưa tạo được file Setup.exe (winget install --id JRSoftware.InnoSetup -e)." -ForegroundColor Yellow
 } else {
     $slice = if ($Edition -eq "cuda") { "/DSliceSize=1800000000" } else { "/DSliceSize=max" }
-    Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "/DEdition=$Edition", $slice, "packaging\installer.iss")
-    $setup = Join-Path $out "KiraPick-Setup-$version.exe"
-    $bundle = Join-Path $out "KiraPick-$version-BoCai.zip"
+    Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "/DNumericVersion=$numeric.0", "/DEdition=$Edition", $slice, "packaging\installer.iss")
+    $setup = Join-Path $out "$setupBase.exe"
+    if (-not (Test-Path $setup)) { throw "Không thấy $setupBase.exe" }
+    $bundle = Join-Path $out $bundleName
     # Small Setup.exe + its data file(s) (.bin); they must stay together in one folder.
-    $slices = @(Get-ChildItem $out -Filter "KiraPick-Setup-$version-*.bin" | ForEach-Object { $_.FullName })
+    $slices = @(Get-ChildItem $out -Filter "$setupBase-*.bin" | ForEach-Object { $_.FullName })
     if (-not $slices) { throw "Không thấy file dữ liệu .bin của bộ cài" }
     if ($Edition -eq "cuda") {
         # Too big for one zip on GitHub (2 GB per file): publish Setup.exe + its .bin slices + the guide.
@@ -201,6 +209,18 @@ if (-not $iscc) {
     }
 }
 Get-ChildItem $out | Format-Table Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB) } } | Out-String | Write-Host
+if ($env:GITHUB_ACTIONS -eq "true") {  # provenance, readable through the API (artifacts are not)
+    foreach ($f in Get-ChildItem $out -File) {
+        Write-Host ("::notice title=artifact {0}::{1} bytes sha256 {2}" -f $f.Name, $f.Length, (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower())
+    }
+    $identity = Join-Path $out "installer-identity.iss"
+    if (Test-Path $identity) {
+        $keys = Get-Content $identity | Where-Object { $_ -match "^(AppId|AppName|AppVersion|AppVerName|DefaultDirName|OutputBaseFilename|UninstallDisplayName|VersionInfoVersion|VersionInfoTextVersion)=" }
+        Write-Host ("::notice title=installer identity (as compiled)::" + ($keys -join " | "))
+        $run = @(Get-Content $identity | Where-Object { $_ -match "^\[Run\]" }).Count
+        Write-Host "::notice title=installer [Run] sections::$run (0 = the app is not started after installing)"
+    }
+}
 } finally {
     [IO.File]::WriteAllText((Join-Path $Root $editionFile), $savedEdition)
     [IO.File]::WriteAllText((Join-Path $Root $initFile), $savedInit)

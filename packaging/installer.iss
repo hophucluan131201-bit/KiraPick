@@ -10,19 +10,36 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
+#ifndef NumericVersion
+  #define NumericVersion "0.0.0.0"
+#endif
 #ifndef SliceSize
   #define SliceSize "max"
 #endif
-#define AppName "KiraPick"
 #define SourceDir "..\dist\KiraPick"
+; A development version (".dev", e.g. 3.0.0b1.dev1) is an INTERNAL TEST build: its own AppId, name, folder, shortcuts
+; and uninstall entry, so it installs beside the official KiraPick and never replaces it; it does not start the app
+; after installing (no session is opened, nothing is migrated by the installer).
+#define InternalTest Pos(".dev", AppVersion) > 0
+#if InternalTest
+  #define AppName "KiraPick Internal Test"
+  #define AppIdValue "{{3B7D2E91-6A4C-4F18-9E25-C81A0D6F4B72}"
+  #define InstallDirName "KiraPick-InternalTest"
+  #define OutputName "KiraPick-InternalTest-" + AppVersion + "-Setup"
+#else
+  #define AppName "KiraPick"
+  #define AppIdValue "{{6F2C9B1E-4E57-4C3A-9D2B-5A8C1E7F3B10}"
+  #define InstallDirName "KiraPick"
+  #define OutputName "KiraPick-Setup-" + AppVersion
+#endif
 
 [Setup]
-AppId={{6F2C9B1E-4E57-4C3A-9D2B-5A8C1E7F3B10}
+AppId={#AppIdValue}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=KiraPick
-DefaultDirName={localappdata}\Programs\{#AppName}
+DefaultDirName={localappdata}\Programs\{#InstallDirName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -31,10 +48,17 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir=..\dist\installer
-OutputBaseFilename=KiraPick-Setup-{#AppVersion}
+OutputBaseFilename={#OutputName}
 SetupIconFile=kirapick.ico
 UninstallDisplayIcon={app}\KiraPick.exe
+#if InternalTest
+UninstallDisplayName={#AppName} {#AppVersion}
+VersionInfoVersion={#NumericVersion}
+VersionInfoTextVersion={#AppVersion}
+VersionInfoProductTextVersion={#AppVersion}
+#else
 UninstallDisplayName={#AppName}
+#endif
 Compression=lzma2/max
 SolidCompression=yes
 DiskSpanning=yes
@@ -64,5 +88,12 @@ Name: "{autoprograms}\Hướng dẫn {#AppName}"; Filename: "{app}\docs\HUONG_DA
 Name: "{autoprograms}\Gỡ cài đặt {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\KiraPick.exe"; Tasks: desktopicon
 
+#if !InternalTest
 [Run]
 Filename: "{app}\KiraPick.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+#endif
+
+#if InternalTest
+; The script as compiled, kept beside the installer as evidence of the identity used (internal builds only).
+#expr SaveToFile(AddBackslash(SourcePath) + "..\dist\installer\installer-identity.iss")
+#endif
