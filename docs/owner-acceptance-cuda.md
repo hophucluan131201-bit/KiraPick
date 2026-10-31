@@ -133,16 +133,23 @@ https://raw.githubusercontent.com/hophucluan131201-bit/KiraPick/7265d2bd709d42d7
 
 ## 6. Xác nhận app thật sự dùng card NVIDIA (CUDA)
 
-Bước này không mở thư mục ảnh nào và không đụng dữ liệu của bạn.
+Bài tự kiểm tra **chép vài ảnh** từ `D:\Test\SoSanh-CUDA` vào một thư mục tạm, rồi chạy đủ các bước AI trên
+những bản chép đó bằng card đồ hoạ.
+- Ảnh trong `D:\Test\SoSanh-CUDA` chỉ được đọc, không bị sửa.
+- Không phiên làm việc nào của bạn bị mở hay bị nâng cấp.
 
 ```powershell
-Start-Process "$env:LOCALAPPDATA\Programs\KiraPick-InternalTest-CUDA\KiraPick.exe" -ArgumentList '--self-test', 'D:\Test\selftest-cuda.json' -Wait
+Start-Process "$env:LOCALAPPDATA\Programs\KiraPick-InternalTest-CUDA\KiraPick.exe" -ArgumentList '--self-test', 'D:\Test\selftest-cuda.json', 'D:\Test\SoSanh-CUDA' -Wait
 Get-Content D:\Test\selftest-cuda.json
 ```
 
+Phải ghi **đủ ba phần**: `--self-test`, đường dẫn file kết quả, và thư mục ảnh. Nếu thiếu thư mục ảnh, bài kiểm tra
+chỉ chạy bằng CPU, và kết quả không cho biết card NVIDIA có được dùng hay không.
+
 Kết quả **đạt** khi có **tất cả** những điều sau:
 
-- `"ok": true`, `"version": "3.0.0b1.dev1a"`, `"edition": "cuda"`, `"network_attempts": []`.
+- `"ok": true`, `"version": "3.0.0b1.dev1a"`, `"edition": "cuda"`, `"network_attempts": []`, và
+  `"sample_photos"` có tên vài ảnh.
 - `"providers"` có `"CUDAExecutionProvider"`.
 - Phần `"gpu"`: `"device": "cuda"`, `"note": null`, và `"speed_check"` ghi "Dùng GPU NVIDIA (CUDA)".
 - Trong `"steps"`: dòng "people: … device cuda" và "quality: … device cuda".
