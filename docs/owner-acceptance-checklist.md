@@ -1,7 +1,10 @@
 # KiraPick beta — Bảng kiểm tra trên Windows của chủ dự án (BR-03)
 
-Làm trên máy của bạn (Windows 10/11), với **bản thử nội bộ** build từ commit `423074b` theo
-`docs/internal-test-build.md` — chỉ sau khi bạn cho phép build. Với mỗi dòng ghi **Đạt** / **Lỗi** (+ ảnh chụp màn
+Làm trên máy của bạn (Windows 10/11), với **bản thử nội bộ KiraPick Internal Test 3.0.0b1.dev1**: bộ cài
+`KiraPick-InternalTest-3.0.0b1.dev1-Setup.exe` + `KiraPick-InternalTest-3.0.0b1.dev1-Setup-1.bin` (cùng nằm trong
+`KiraPick-InternalTest-3.0.0b1.dev1-BoCai.zip`), build từ mã nguồn `423074b` + commit chỉ đổi số phiên bản `d694511`
+(chi tiết, kích thước và SHA-256: `review_internal_build.txt`). **Chỉ cài sau khi bản build được duyệt** và sau khi
+làm xong `docs/internal-test-preflight.md` (sao lưu). Với mỗi dòng ghi **Đạt** / **Lỗi** (+ ảnh chụp màn
 hình app nếu lỗi; không cần gửi ảnh chụp của bạn). Mất khoảng 60–90 phút.
 
 > **Bảng này là kiểm tra chấp nhận, KHÔNG phải lệnh phát hành.** Làm xong và "Đạt" hết nghĩa là bản thử dùng được
@@ -14,9 +17,15 @@ hình app nếu lỗi; không cần gửi ảnh chụp của bạn). Mất kho�
   sang chỗ khác trước** (chép cả thư mục DCIM vào ổ cứng). Các bước có **rút thẻ khi đang chạy** (2.3, 6.3, 7.2) chỉ
   làm với thẻ thử này — không bao giờ với thẻ duy nhất đang chứa ảnh của khách. Rút thẻ khi máy đang đọc là việc
   KiraPick chỉ đọc, nhưng bản thân thẻ/đầu đọc vẫn có thể gặp sự cố; vì vậy cần bản sao lưu.
-- **Sao lưu dữ liệu KiraPick hiện tại** (bản 2.2.1 bạn đang dùng): đóng KiraPick, chép thư mục
-  `%LOCALAPPDATA%\KiraPick` (dán vào thanh địa chỉ File Explorer) sang chỗ khác. Bản thử nâng cấp dữ liệu phiên lên
-  v7 (xem K1 trong `docs/beta-release-checklist.md`).
+- **Sao lưu dữ liệu KiraPick** đúng như `docs/internal-test-preflight.md`: đóng mọi KiraPick, chạy
+  `scripts/owner_backup.ps1 -Destination D:\KiraPick-SaoLuu`, kiểm tra `DOC_TOI.txt` ghi "SHA-256 đã so khớp", ghi
+  lại đường dẫn bản sao lưu. Bản thử dùng **chung** dữ liệu với 2.2.1; mở một thư mục ảnh bằng bản thử sẽ nâng cấp
+  phiên của thư mục đó lên v7, và 2.2.1 không mở lại được nữa cho tới khi khôi phục bản sao lưu.
+- **Cài bản thử**: giải nén `KiraPick-InternalTest-3.0.0b1.dev1-BoCai.zip`, chạy `...-Setup.exe`. Kiểm tra: Start Menu
+  có thêm "KiraPick Internal Test" (lối tắt "KiraPick" cũ vẫn là 2.2.1); thư mục cài là
+  `%LOCALAPPDATA%\Programs\KiraPick-InternalTest`; tiêu đề cửa sổ ghi **KiraPick 3.0.0b1.dev1**; trình cài không tự mở
+  app.
+- **Chỉ mở bản sao thư mục ảnh** (bên dưới, `D:\Test\...`) trong bản thử — không mở các buổi chụp đang làm cho khách.
 - Trên máy: chép **chỉ các file JPEG** của thẻ vào một thư mục, ví dụ `D:\Test\JPEG_buoi1`. Không chép RAW.
 - Một thư mục trống để xuất, ví dụ `D:\Test\Xuat`.
 - **Chụp "dấu vân tay" của thẻ và thư mục gốc trước khi thử** (để chứng minh không file gốc nào bị đổi). Mở PowerShell
@@ -127,6 +136,13 @@ Compare-Object (Import-Csv D:\Test\jpeg_truoc.csv) (Import-Csv D:\Test\jpeg_sau.
 
 Gửi bảng này (Đạt / Lỗi), ảnh chụp màn hình app ở các dòng Lỗi, file `kirapick.log` (trong
 `%LOCALAPPDATA%\KiraPick\logs`), và mục 10. Không gửi ảnh chụp của bạn.
+
+**Gỡ bản thử và quay lại 2.2.1:** Start Menu → "Gỡ cài đặt KiraPick Internal Test"; rồi, nếu muốn 2.2.1 mở lại các
+thư mục đã mở bằng bản thử, khôi phục bản sao lưu: `scripts/owner_backup.ps1 -Restore <đường dẫn bản sao lưu>`
+(không xoá gì, dữ liệu hiện tại được đổi tên để giữ lại).
+
+**Bốn cổng tách biệt:** (1) build xong — (2) tự kiểm tra bản đóng gói offline đạt — (3) bạn kiểm tra chấp nhận xong —
+(4) duyệt phát hành beta công khai. Bảng này chỉ là cổng (3).
 
 **Sau khi gửi:** mình viết báo cáo quyết định phát hành beta (rủi ro còn lại, K2, ngoại lệ 331 ms, B4–B6). Bạn đọc
 rồi mới ra lệnh phát hành hoặc không. Hoàn thành bảng này **không** tự động là đồng ý phát hành.
