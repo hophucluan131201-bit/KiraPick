@@ -230,3 +230,35 @@ def test_pair_identity_by_input_order(fx, order: str) -> None:  # noqa: ANN001
     assert {op.asset_id for op in plan.operations} == {raw, jpg}
     subjects = plan_export(fx.project, ids, fx.dest / "s", layout=Layout.SUBJECTS)
     assert sorted(op.dest_relative for op in subjects.operations) == ["Mai/DSC_0001.JPG", "Mai/DSC_0001.NEF"]
+
+
+def _bytes_via_photos(conn, ids, fmt) -> int:  # noqa: ANN001
+    """The definition: the files load_photos gives each photo (pairs once), of the wanted kinds."""
+    from app.export.formats import wanted_kinds
+    from app.export.photos import load_photos
+
+    total, seen = 0, set()
+    for photo in load_photos(conn, ids):
+        if photo.photo_id in seen:
+            continue
+        seen.update(f.asset_id for f in photo.files)
+        total += sum(f.size for f in photo.files if f.kind in wanted_kinds(fmt, external=False))
+    return total
+
+
+@pytest.mark.parametrize("fmt", list(ExportFormat))
+def test_estimated_bytes_equals_the_photo_definition(fx, fmt) -> None:  # noqa: ANN001
+    """BR-02: the bottom bar's row-based sum must equal the Photo-based definition, whatever the order of the ids."""
+    import random
+
+    from app.export.copy_export import estimated_bytes
+
+    conn = fx.project.conn
+    raw, jpg = fx.files["pair"]
+    conn.execute("UPDATE assets SET status = 'error' WHERE id = ?", (fx.ids["raw_only"],))  # unreadable primary
+    conn.execute("UPDATE assets SET status = 'missing' WHERE id = ?", (fx.files["pair_missing_jpeg"][1],))
+    every = [aid for files in fx.files.values() for aid in files] + [99_999]
+    rng = random.Random(3)
+    for ids in ([raw, jpg], [jpg, raw], [jpg], [raw, raw, jpg], every, list(reversed(every)),
+                *(rng.sample(every, len(every)) for _ in range(5))):
+        assert estimated_bytes(conn, ids, fmt=fmt) == _bytes_via_photos(conn, ids, fmt), ids

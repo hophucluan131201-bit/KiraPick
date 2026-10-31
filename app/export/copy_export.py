@@ -46,6 +46,7 @@ from app.export.layout import (
     subject_folders,
 )
 from app.export.photos import Photo, load_photos
+from app.export.photos import _kind as _photo_kind
 from app.export.hashing import CHUNK, HashCache, HashCancelled, sha256_file
 from app.export.sources import (  # export lists live in MANIFEST_DIR, not between the photos
     MANIFEST_DIR,
@@ -486,15 +487,33 @@ def _plan_folder(plan: ExportPlan, photo: Photo, sources: list[_Source], folder:
 
 def estimated_bytes(conn: sqlite3.Connection, asset_ids: list[int], *, fmt: ExportFormat) -> int:
     """Bytes an export of these photos would copy from the imported folders into one folder, from the sizes recorded at
-    import (no disk access): the files plan_export picks."""
+    import (no disk access): the files plan_export picks (load_photos' rule: the photo's own file whatever its status,
+    the other files of its pair group when readable; a pair asked twice counts once). Plain rows, no Photo objects:
+    the bottom bar runs this after every P / X (beta readiness BR-02)."""
+    kinds = wanted_kinds(fmt, external=False)
+    ids = list(dict.fromkeys(asset_ids))
+    own: dict[int, tuple] = {}
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        for row in conn.execute(f"SELECT id, pair_group_id, media_kind, relative_path, size FROM assets "
+                                f"WHERE id IN ({','.join('?' * len(chunk))})", chunk):
+            own[row[0]] = tuple(row)
+    groups = list(dict.fromkeys(r[1] for r in own.values() if r[1] is not None))
+    members: dict[int, list[tuple]] = {}
+    for start in range(0, len(groups), 500):
+        chunk = groups[start:start + 500]
+        for row in conn.execute(f"SELECT id, pair_group_id, media_kind, relative_path, size FROM assets "
+                                f"WHERE status = 'ok' AND pair_group_id IN ({','.join('?' * len(chunk))})", chunk):
+            members.setdefault(row[1], []).append(tuple(row))
     total = 0
     seen: set[int] = set()
-    wanted = wanted_kinds(fmt, external=False)
-    for photo in load_photos(conn, asset_ids):
-        if photo.photo_id in seen:
+    for photo_id in ids:
+        row = own.get(photo_id)
+        if row is None or photo_id in seen:
             continue
-        seen.update(f.asset_id for f in photo.files)
-        total += sum(f.size for f in photo.files if f.kind in wanted)
+        rows = [row] + ([m for m in members.get(row[1], ()) if m[0] != photo_id] if row[1] is not None else [])
+        seen.update(r[0] for r in rows)
+        total += sum(int(r[4]) for r in rows if _photo_kind(r[2], r[3]) in kinds)
     return total
 
 
