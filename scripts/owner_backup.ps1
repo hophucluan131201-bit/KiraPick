@@ -5,7 +5,7 @@ Sao lưu (và khi cần, khôi phục) dữ liệu KiraPick trước khi thử b
     Khôi phục: powershell -ExecutionPolicy Bypass -File .\owner_backup.ps1 -Restore D:\KiraPick-SaoLuu\20261031-153000
 
 Sao lưu: %LOCALAPPDATA%\KiraPick (phiên làm việc của mọi thư mục ảnh, bộ nhớ học, nhật ký) và các cài đặt
-(HKCU\Software\KiraPick) vào một thư mục MỚI <Destination>\<ngày-giờ>; so SHA-256 từng file sau khi chép; không bao
+(HKCU\Software\KiraPick) vào một thư mục MỚI <Destination>\<ngày-giờ> (thêm -2, -3… nếu tên đã có); so SHA-256 từng file sau khi chép; không bao
 giờ ghi đè một bản sao lưu đã có. Ảnh gốc của bạn không nằm ở đây và không bị đụng tới.
 Khôi phục: KHÔNG xoá gì — thư mục dữ liệu hiện tại được đổi tên thành KiraPick.truoc-khoi-phuc-<ngày-giờ>, rồi bản sao
 lưu được chép trở lại và kiểm tra SHA-256; cài đặt được nhập lại từ file .reg của bản sao lưu.
@@ -60,7 +60,7 @@ if ($Destination.StartsWith($env:LOCALAPPDATA, [StringComparison]::OrdinalIgnore
     throw "Hãy chọn nơi sao lưu ngoài %LOCALAPPDATA% (ví dụ D:\KiraPick-SaoLuu)."
 }
 $target = Join-Path $Destination $stamp
-if (Test-Path $target) { throw "$target đã có: không ghi đè bản sao lưu. Chạy lại sau một giây." }
+for ($i = 2; Test-Path $target; $i++) { $target = Join-Path $Destination "$stamp-$i" }  # never overwrite a backup
 New-Item -ItemType Directory -Path $target | Out-Null
 if (Test-Path $data) {
     Copy-Item $data (Join-Path $target "KiraPick") -Recurse
