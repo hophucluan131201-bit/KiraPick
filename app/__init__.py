@@ -1,6 +1,6 @@
 """KiraPick (formerly Snorlu AI Culling) — offline, non-destructive photo culling."""
 
-__version__ = "2.2.1"
+__version__ = "3.0.0b1.dev1"
 
 # Offline guarantee: ONNX Runtime >= 1.31 starts a Microsoft "1DS" telemetry client as soon as it is
 # imported (HTTPS to mobile.events.data.microsoft.com + a local event store), before any API call
