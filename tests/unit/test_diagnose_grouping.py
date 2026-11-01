@@ -307,20 +307,17 @@ def test_open_session_is_refused_and_left_untouched(shoot) -> None:
 
 def test_session_changing_during_the_copy_is_refused(shoot, tmp_path: Path, monkeypatch) -> None:
     """A writer that appears during the copy (simulated: the -wal grows right after it is copied)."""
-    import shutil
-
     p, occ = shoot
     folder = _closed_copy(p, occ, tmp_path, keep_wal=True)
-    real = shutil.copyfile
+    real = dg._copy_read_only
 
-    def copy_then_write(src, dst, *a, **k):  # noqa: ANN001, ANN002, ANN003, ANN202
-        out = real(src, dst, *a, **k)
+    def copy_then_write(src: Path, dst: Path) -> None:
+        real(src, dst)
         if str(src).endswith("-wal"):
             with open(src, "ab") as f:
                 f.write(b"x")
-        return out
 
-    monkeypatch.setattr(dg.shutil, "copyfile", copy_then_write)
+    monkeypatch.setattr(dg, "_copy_read_only", copy_then_write)
     with pytest.raises(dg.SnapshotError, match="changed while it was read"):
         dg.diagnose(folder, None)
     assert sorted(f.name for f in folder.iterdir()) == [DB_NAME, f"{DB_NAME}-wal"]  # nothing left or added
@@ -425,7 +422,15 @@ def _closed_copy(p: Project, occ: dict, tmp: Path, keep_wal: bool) -> Path:
 
 
 def _state(folder: Path) -> dict[str, str]:
-    return {f.name: _sha(f) for f in folder.iterdir() if f.is_file()}
+    """Names + SHA-256; a file locked by a live SQLite connection (Windows -shm) is compared by size."""
+    out = {}
+    for f in folder.iterdir():
+        if f.is_file():
+            try:
+                out[f.name] = _sha(f)
+            except PermissionError:
+                out[f.name] = f"locked:{f.stat().st_size}"
+    return out
 
 
 @pytest.mark.parametrize("keep_wal", [False, True], ids=["no-wal", "wal-without-shm"])
@@ -473,7 +478,7 @@ def test_read_only_source_directory_windows_acl(shoot, tmp_path: Path) -> None:
     folder = _closed_copy(p, occ, tmp_path, keep_wal=True)
     before = _state(folder)
     user = getpass.getuser()
-    subprocess.run(["icacls", str(folder), "/deny", f"{user}:(OI)(CI)(W,D,DC)"], check=True, capture_output=True)
+    subprocess.run(["icacls", str(folder), "/deny", f"{user}:(OI)(CI)(WD,AD,WEA,WA,D,DC)"  # not (W): that includes SYNCHRONIZE, which blocks reads too], check=True, capture_output=True)
     try:
         with pytest.raises(OSError):  # the ACL really blocks writes
             (folder / "probe.txt").write_text("x")

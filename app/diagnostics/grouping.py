@@ -361,15 +361,31 @@ def check_numbers_only(report: dict) -> None:
 
 # ------------------------------------------------------------------ driver
 def _hash_files(paths: list[Path]) -> dict[str, str]:
+    """SHA-256 per existing file (read-only open). A file another process locks (e.g. a live -shm on Windows)
+    is recorded as "locked" instead of failing."""
     out = {}
     for path in paths:
         if path.is_file():
             h = hashlib.sha256()
-            with open(path, "rb") as f:
-                for chunk in iter(lambda: f.read(1 << 20), b""):
-                    h.update(chunk)
-            out[path.name] = h.hexdigest()
+            try:
+                with open(path, "rb") as f:
+                    for chunk in iter(lambda: f.read(1 << 20), b""):
+                        h.update(chunk)
+                out[path.name] = h.hexdigest()
+            except PermissionError:
+                out[path.name] = "locked"
     return out
+
+
+def _copy_read_only(src: Path, dst: Path) -> None:
+    """Byte copy that asks only for read access on ``src`` (no attribute/metadata copy, unlike shutil.copy*)."""
+    with open(src, "rb") as fin, open(dst, "wb") as fout:
+        shutil.copyfileobj(fin, fout, 1 << 20)
+
+
+def _busy(folder: Path, name: str) -> bool:
+    """A -shm or -journal file exists: the database is open (or was not closed cleanly). Checked by name only."""
+    return any((folder / f"{name}{s}").exists() for s in ("-shm", "-journal"))
 
 
 SETTLE_S = 0.5  # pause before the second check: a writer active during the copy shows up as a change
@@ -395,18 +411,15 @@ def snapshot(src: Path, dest: Path) -> str:
     import time
     from contextlib import closing
 
-    def busy(state: dict[str, str]) -> bool:
-        return any(name.endswith(("-shm", "-journal")) for name in state)
-
-    before = _sqlite_state(src)
-    if busy(before):
+    if _busy(src.parent, src.name):
         raise SnapshotError("KiraPick seems to be open (or did not close cleanly): close it, or open and close it "
                             "once, then run again")
+    before = _sqlite_state(src)
     private = dest.parent / "source-copy"
     private.mkdir()
     try:
         for name in before:
-            shutil.copyfile(src.with_name(name), private / name)
+            _copy_read_only(src.with_name(name), private / name)
         copied = _hash_files([private / name for name in before])
         after = _sqlite_state(src)
         time.sleep(SETTLE_S)
@@ -439,6 +452,10 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
     sources = [session_folder / (DB_NAME + s) for s in ("", "-wal", "-shm", "-journal")]
     if not (session_folder / DB_NAME).is_file():
         raise FileNotFoundError("no KiraPick session for this folder (open it in KiraPick first)")
+    for folder, name in ((session_folder, DB_NAME), (learning_folder, "learning.db")):
+        if folder is not None and _busy(folder, name):  # before reading anything: fail closed
+            raise SnapshotError("KiraPick seems to be open (or did not close cleanly): close it, or open and close "
+                                "it once, then run again")
     learning_sources = ([learning_folder / ("learning.db" + s) for s in ("", "-wal", "-shm", "-journal")]
                         if learning_folder else [])
     def listing() -> set[str]:  # every file next to the sources, so a newly created file also counts as a change
