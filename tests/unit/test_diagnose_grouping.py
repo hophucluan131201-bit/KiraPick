@@ -484,7 +484,13 @@ def test_read_only_source_directory_windows_acl(shoot, tmp_path: Path) -> None:
     try:
         with pytest.raises(OSError):  # the ACL really blocks writes
             (folder / "probe.txt").write_text("x")
-        report = dg.diagnose(folder, None)
+        try:
+            report = dg.diagnose(folder, None)
+        except OSError:
+            import traceback
+
+            frames = traceback.extract_tb(__import__("sys").exc_info()[2])
+            pytest.fail("diagnose under ACL: " + " <- ".join(f"{f.name}:{f.lineno}" for f in reversed(frames)))
     finally:
         subprocess.run(["icacls", str(folder), "/remove:d", user], check=True, capture_output=True)
     assert _state(folder) == before and report["read_only"]["unchanged"] is True
