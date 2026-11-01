@@ -283,7 +283,7 @@ jobs:
           # Source state: every file of the session folder, name + SHA-256 (a file locked by SQLite: name + size)
           function SessionState($photos) {
             $dir = (python -c "import sys; sys.path.insert(0, '.'); from pathlib import Path; from app.storage.sessions import session_dir; print(session_dir(Path(sys.argv[1]) / 'sessions', Path(sys.argv[2])))" $data $photos).Trim()
-            (Get-ChildItem $dir -File | Sort-Object Name | ForEach-Object { try { "$($_.Name)=$((Get-FileHash $_.FullName -ErrorAction Stop).Hash)" } catch { "$($_.Name)=locked:$($_.Length)" } }) -join ";"
+            (Get-ChildItem $dir -File | Sort-Object Name | ForEach-Object { $f = $_; try { "$($f.Name)=$((Get-FileHash $f.FullName -ErrorAction Stop).Hash)" } catch { "$($f.Name)=locked:$($f.Length)" } }) -join ";"
           }
           function RunDiag($photos, $name) {
             $report = Join-Path $env:RUNNER_TEMP "$name.json"
