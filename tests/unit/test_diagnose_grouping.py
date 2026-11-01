@@ -478,8 +478,11 @@ def test_read_only_source_directory_windows_acl(shoot, tmp_path: Path) -> None:
     folder = _closed_copy(p, occ, tmp_path, keep_wal=True)
     before = _state(folder)
     user = getpass.getuser()
-    # Write and delete rights only. Not (W): it includes SYNCHRONIZE, which blocks reads too.
-    subprocess.run(["icacls", str(folder), "/deny", f"{user}:(OI)(CI)(WD,AD,WEA,WA,D,DC)"],
+    # Deny creating, writing and deleting files (WD/AD/D/DC) and mark the files read-only. Not (W) or (WA):
+    # (W) includes SYNCHRONIZE and blocked every read in CI; with (WA) denied, os.stat was denied too.
+    for f in folder.iterdir():
+        subprocess.run(["attrib", "+R", str(f)], check=True, capture_output=True)
+    subprocess.run(["icacls", str(folder), "/deny", f"{user}:(OI)(CI)(WD,AD,D,DC)"],
                    check=True, capture_output=True)
     try:
         with pytest.raises(OSError):  # the ACL really blocks writes
@@ -493,6 +496,8 @@ def test_read_only_source_directory_windows_acl(shoot, tmp_path: Path) -> None:
             pytest.fail("diagnose under ACL: " + " <- ".join(f"{f.name}:{f.lineno}" for f in reversed(frames)))
     finally:
         subprocess.run(["icacls", str(folder), "/remove:d", user], check=True, capture_output=True)
+        for f in folder.iterdir():
+            subprocess.run(["attrib", "-R", str(f)], check=True, capture_output=True)
     assert _state(folder) == before and report["read_only"]["unchanged"] is True
     assert report["labels"]["person_labelled"] == 18
     (folder / "probe.txt").write_text("x")  # ACL restored
