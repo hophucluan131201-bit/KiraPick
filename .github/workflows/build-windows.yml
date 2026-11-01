@@ -271,9 +271,9 @@ jobs:
           $lines = @(); $failed = @()
           function Check($ok, $what) { if ($ok) { $script:lines += "PASS $what" } else { $script:lines += "FAIL $what"; $script:failed += $what }; Write-Host ("{0} {1}" -f $(if ($ok) { "PASS" } else { "FAIL" }), $what) }
           trap { Write-Host "::notice title=diag-positive ERROR::$($_.Exception.Message) at line $($_.InvocationInfo.ScriptLineNumber)%0A$($lines -join '%0A')"; exit 1 }
-          $hashes = (Get-ChildItem art -File -Filter "KiraPick-InternalTest-CUDA-*" | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())" }) -join "; "
+          $hashes = (Get-ChildItem art -Recurse -File -Filter "KiraPick-InternalTest-CUDA-*" | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())" }) -join "; "
           Check ($hashes -ne "") "artifact SHA-256: $hashes"
-          $setup = Get-ChildItem art -Filter "KiraPick-InternalTest-CUDA-*-Setup.exe" | Select-Object -First 1
+          $setup = Get-ChildItem art -Recurse -Filter "KiraPick-InternalTest-CUDA-*-Setup.exe" | Select-Object -First 1
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           $exe = Join-Path $env:LOCALAPPDATA "Programs\KiraPick-InternalTest-CUDA\KiraPick.exe"
           Check (Test-Path $exe) "installed $((Get-Item $exe).VersionInfo.ProductVersion)"
