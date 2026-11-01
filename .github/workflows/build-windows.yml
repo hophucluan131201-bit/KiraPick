@@ -18,11 +18,15 @@ on:
         description: "Also run the Windows tests: full suite, GUI smoke, Snap/DPI, performance, stress (no build needed)"
         type: boolean
         default: false
+      diag_from_run:
+        description: "F3: run id of an internal CUDA build to test --diagnose-grouping on a synthetic session (editions=none)"
+        default: ""
   push:
     branches: [main, beta]
 
 permissions:
   contents: write  # needed to create the Release
+  actions: read  # download an earlier run's artifact (diag-positive)
 
 jobs:
   plan:
@@ -40,7 +44,8 @@ jobs:
           import json, os
           msg, event = os.environ.get("MESSAGE", ""), os.environ["EVENT"]
           if event != "push":
-              editions = [e.strip() for e in (os.environ.get("WANTED") or "directml,cuda,openvino").split(",") if e.strip()]
+              editions = [e.strip() for e in (os.environ.get("WANTED") or "directml,cuda,openvino").split(",")
+                          if e.strip() in ("directml", "cuda", "openvino")]  # "none": no build
           elif "[release-all]" in msg:
               editions = ["directml", "cuda", "openvino"]
           else:
@@ -240,6 +245,62 @@ jobs:
   # shutdown / worker stress. Never blocks anything and never publishes: started by hand ("run_perf") or by "[perf]"
   # in a commit message. Each part prints its OWN notice (suite / gui-windows / snap-dpi / perf / stress): the job is
   # non-blocking, so a green job is not evidence that any part passed (review RV14-01) — read the notices.
+  # F3: the PACKAGED --diagnose-grouping of an already built internal CUDA artifact, positive path, on a synthetic
+  # session (no rebuild; nothing published; no real photos).
+  diag-positive:
+    if: github.event.inputs.diag_from_run != ''
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python packages for the synthetic session
+        run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: kirapick-windows-cuda
+          path: art
+          run-id: ${{ github.event.inputs.diag_from_run }}
+          github-token: ${{ github.token }}
+      - name: Install the packaged build, run --diagnose-grouping on a synthetic session
+        shell: pwsh
+        run: |
+          $lines = @(); $failed = @()
+          function Check($ok, $what) { if ($ok) { $script:lines += "PASS $what" } else { $script:lines += "FAIL $what"; $script:failed += $what }; Write-Host ("{0} {1}" -f $(if ($ok) { "PASS" } else { "FAIL" }), $what) }
+          $hashes = (Get-ChildItem art -File -Filter "KiraPick-InternalTest-CUDA-*" | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())" }) -join "; "
+          Check ($hashes -ne "") "artifact SHA-256: $hashes"
+          $setup = Get-ChildItem art -Filter "KiraPick-InternalTest-CUDA-*-Setup.exe" | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          $exe = Join-Path $env:LOCALAPPDATA "Programs\KiraPick-InternalTest-CUDA\KiraPick.exe"
+          Check (Test-Path $exe) "installed $((Get-Item $exe).VersionInfo.ProductVersion)"
+          $data = Join-Path $env:LOCALAPPDATA "KiraPick"
+          $photos = Join-Path $env:RUNNER_TEMP "Test\SoSanh-CUDA"
+          $made = python scripts/ci_make_diag_session.py $photos $data
+          Check ($LASTEXITCODE -eq 0) "synthetic session made: $made"
+          function DataState { (Get-ChildItem -Recurse -File $data | Where-Object { $_.Name -notlike "*-shm" } | Get-FileHash | ForEach-Object { "$($_.Path)=$($_.Hash)" }) -join ";" }
+          $before = DataState
+          $report = Join-Path $env:RUNNER_TEMP "grouping-report.json"
+          # The owner's exact command form. KiraPick.exe is a windowed app: "| Out-Null" makes PowerShell wait for it.
+          & $exe --diagnose-grouping $photos $report | Out-Null
+          $code = $LASTEXITCODE
+          Check (Test-Path $report) "report written when the command returns (the command waited)"
+          $r = if (Test-Path $report) { Get-Content $report -Raw | ConvertFrom-Json } else { $null }
+          $p = $r.reconstructed_baseline.default.person; $l = $r.reconstructed_baseline.default.look
+          Check ($code -eq 0 -and $r.ok -eq $true) "exit $code, ok=$($r.ok), version $($r.app_version)"
+          Check ($r.network_attempts -eq 0) "network_attempts $($r.network_attempts)"
+          Check ($r.read_only.unchanged -eq $true -and $r.read_only.snapshot_method -eq "sqlite_backup_read_only") "read_only $($r.read_only | ConvertTo-Json -Compress)"
+          Check ((DataState) -eq $before) "session and learning files byte-identical after the run (checked outside the app)"
+          Check ($r.labels.person_labelled -eq 18 -and $r.labels.look_labelled -eq 18 -and $r.labels.uncertain -eq 0) "labels $($r.labels | ConvertTo-Json -Compress)"
+          Check ($p.true_groups -eq 2 -and $l.true_groups -eq 3 -and $p.pairwise_precision -eq 1 -and $p.bcubed_f1 -gt 0 -and $p.bcubed_f1 -le 1) "person $($p | ConvertTo-Json -Compress)"
+          Check ($l.items -eq 18 -and $null -ne $l.bcubed_f1) "look $($l | ConvertTo-Json -Compress -Depth 3)"
+          Check ($r.reconstructed_baseline.verified_historical_output -eq $false -and $r.reconstructed_baseline.deterministic -eq $true) "reconstructed_baseline flags"
+          $text = Get-Content $report -Raw
+          Check (-not ($text -match "SYN_|SoSanh|K1-A|K2-A|runneradmin")) "report has no file names, folder names, labels or user names"
+          Write-Host "::notice title=diag-positive summary ($($failed.Count) failed)::$($lines -join '%0A')"
+          if ($failed.Count) { exit 1 }
+
   perf:
     if: github.event.inputs.run_perf == 'true' || contains(github.event.head_commit.message, '[perf]')
     runs-on: windows-2022
