@@ -5,7 +5,7 @@ It does not change grouping, thresholds or any session. The code is in `app/diag
 and the tests are in `tests/unit/test_diagnose_grouping.py`.
 
 ```powershell
-KiraPick.exe --diagnose-grouping "D:\Test\SoSanh-CUDA" D:\Test\grouping-report.json [D:\Test\labels.csv]
+KiraPick.exe --diagnose-grouping "D:\Test\SoSanh-CUDA" D:\Test\grouping-report.json [D:\Test\labels.csv] [--cooccurrence-list D:\Test\cooccurrence.csv]
 ```
 
 - **Close KiraPick first.** The diagnostic never opens the session or the learning database with SQLite. A
@@ -44,3 +44,24 @@ KiraPick.exe --diagnose-grouping "D:\Test\SoSanh-CUDA" D:\Test\grouping-report.j
   - Pair evidence between clusters, by category, for hypotheses H1–H5: same person in another costume, same
     costume split, and different persons. For each category: face top-3 mean, median look, minimum time gap,
     interleaving, co-occurrence, and what the review queue would ask.
+- **Same-label co-occurrence (P0-A).** The report counts photos where two occurrences carry the same person label.
+  These are always two people for the grouping. Each such pair is given a hypothesis class, which is a reporting aid
+  only and never used by the app:
+  - `duplicate_face_only` — a lone face box inside the other person's box;
+  - `duplicate_overlapping_bodies`;
+  - `possible_reflection`;
+  - `two_people_same_label`;
+  - `undetermined`.
+
+  One occurrence that holds both a person box and its face box is normal and never counted.
+  - `--cooccurrence-list <file>` (explicit opt-in) writes a LOCAL CSV for the owner with the photo file names,
+    subject names, hypothesis, numbers and an empty `owner_verdict` column. It never enters the shareable report,
+    and it must be a different file from the report.
+- **Learning audit (P0-B).** Run on a snapshot copy of `learning.db`; the original is never written.
+  - It reports answers and pairs by kind and answer, and which pairs use the current cue versions.
+  - It reports the learnt tuning with a reason code, the 5×5 cost grid that `tune()` searches, the cross-validation
+    fold by fold, and the answers whose links change under the learnt thresholds.
+  - "Same" answers whose pairs have a median look below the review look level are counted as **possible
+    contamination**. This is a hint only, never proof of a costume change.
+  - The tuning is re-run without those answers, and the labelled session is rebuilt with that tuning
+    (`reconstructed_baseline.filtered_learning`). Both happen on the copies only.

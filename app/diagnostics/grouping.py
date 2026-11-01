@@ -329,7 +329,7 @@ _LIMITATION_TEXTS = {LIMIT_CHANGED, *LIMITS_ALWAYS}
 
 
 # ----------------------------------------------------------------- privacy
-TEXT_KEYS = {"profile", "app_version", "error", "snapshot_method", "learning_snapshot_method"}  # fixed texts written by this module
+TEXT_KEYS = {"profile", "app_version", "error", "snapshot_method", "learning_snapshot_method", "reason_code"}  # fixed texts written by this module
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -443,8 +443,13 @@ def _correction_counts(conn) -> dict[str, int]:  # noqa: ANN001
             "different_marks": q("SELECT COUNT(*) FROM subject_pairs")}
 
 
-def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Path | None = None) -> dict:
-    """Run the diagnostic on copies of the session (and learning) databases; returns the numeric report."""
+def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Path | None = None,
+             cooccurrence_list: Path | None = None) -> dict:
+    """Run the diagnostic on copies of the session (and learning) databases; returns the numeric report.
+
+    ``cooccurrence_list``: also write the LOCAL list of photos where one person label appears twice (file names
+    and subject names, for the owner only; never part of the returned report)."""
+    from app.diagnostics import cooccurrence, learning_audit
     from app.identity.cluster import session_profile
     from app.learning.tuning import tune_from_store
 
@@ -494,13 +499,22 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
             untouched = {r[0] for r in conn.execute(
                 "SELECT id FROM occurrences WHERE assignment = 'auto' AND excluded_subject_id IS NULL")}
             profile = session_profile(conn)
+            pairs = cooccurrence.find_pairs(conn, labels)
+            report["cooccurrence"] = cooccurrence.summary(pairs)
+            if cooccurrence_list is not None:
+                cooccurrence.write_local_list(conn, pairs, cooccurrence_list)
+            report["cooccurrence"]["local_list_written"] = cooccurrence_list is not None
         tuning = tune_from_store(learn, profile)
+        report["learning_audit"], filtered = learning_audit.audit(learn, profile)
         runs: dict[str, dict[int, object]] = {}
-        for name in ("default", "default_repeat", "tuned"):
-            if name == "tuned" and not tuning.applied:
+        tunes = {"default": None, "default_repeat": None,
+                 "tuned": tuning.apply if tuning.applied else None,
+                 "filtered": filtered.apply if filtered is not None and filtered.applied else None}
+        for name, tune in tunes.items():
+            if name in ("tuned", "filtered") and tune is None:
                 continue
             with Project.open(fresh_copy(name, sources_snap)) as project:
-                runs[name] = rebuild(project, tuning.apply if name == "tuned" else None)
+                runs[name] = rebuild(project, tune)
                 if name == "default":
                     report["evidence"] = pair_evidence(project, labels, runs[name])
     after = _hash_files(sources + learning_sources)
@@ -519,6 +533,10 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
     if "tuned" in runs:
         report["reconstructed_baseline"]["tuned"] = level_metrics(labels, runs["tuned"])
         report["reconstructed_baseline"]["tuned_equals_default"] = same_partition(default, runs["tuned"])
+    # Learnt tuning without the "possibly contaminated" answers (copy only; nothing is removed from learning).
+    report["reconstructed_baseline"]["filtered_learning_applied"] = "filtered" in runs
+    if "filtered" in runs:
+        report["reconstructed_baseline"]["filtered_learning"] = level_metrics(labels, runs["filtered"])
     report["read_only"].update({"files_hashed": len(before), "no_new_files": files_before == files_after,
                                 "unchanged": before == after and files_before == files_after})
     if not report["read_only"]["unchanged"]:
@@ -537,16 +555,29 @@ def run_cli(args: list[str]) -> int:
     from app.selftest import _block_network
     from app.storage.sessions import session_dir
 
+    args = list(args)
+    listing = None
+    if "--cooccurrence-list" in args:  # explicit opt-in: the only output with file and subject names (local only)
+        i = args.index("--cooccurrence-list")
+        if i + 1 >= len(args):
+            print("--cooccurrence-list needs a file path")
+            return 2
+        listing = Path(args[i + 1].strip().strip('"'))
+        del args[i:i + 2]
     if len(args) < 2:
-        print("usage: KiraPick.exe --diagnose-grouping <photo folder> <report.json> [labels.csv]")
+        print("usage: KiraPick.exe --diagnose-grouping <photo folder> <report.json> [labels.csv] "
+              "[--cooccurrence-list <local list.csv>]")
         return 2
     folder = Path(args[0].strip().strip('"'))
     report_path = Path(args[1].strip().strip('"'))
     labels = Path(args[2].strip().strip('"')) if len(args) > 2 else None
+    if listing is not None and listing.resolve() == report_path.resolve():
+        print("the co-occurrence list must be a different file from the report")
+        return 2
     attempts: list[str] = []
     _block_network(attempts)
     try:
-        report = diagnose(session_dir(data_dir() / "sessions", folder), data_dir() / "learning", labels)
+        report = diagnose(session_dir(data_dir() / "sessions", folder), data_dir() / "learning", labels, listing)
         report["ok"] = report["read_only"]["unchanged"] and not attempts
     except Exception as exc:  # noqa: BLE001 - the report must always be written
         # Own errors carry fixed texts; anything else: the type only (a message may hold a path or a name).
