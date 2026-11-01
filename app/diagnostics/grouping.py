@@ -329,7 +329,7 @@ _LIMITATION_TEXTS = {LIMIT_CHANGED, *LIMITS_ALWAYS}
 
 
 # ----------------------------------------------------------------- privacy
-TEXT_KEYS = {"profile", "app_version", "error", "snapshot_method"}  # fixed texts written by this module
+TEXT_KEYS = {"profile", "app_version", "error", "snapshot_method", "learning_snapshot_method"}  # fixed texts written by this module
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -361,37 +361,79 @@ def check_numbers_only(report: dict) -> None:
 
 # ------------------------------------------------------------------ driver
 def _hash_files(paths: list[Path]) -> dict[str, str]:
+    """SHA-256 per existing file (read-only open). A file another process locks (e.g. a live -shm on Windows)
+    is recorded as "locked" instead of failing."""
     out = {}
     for path in paths:
         if path.is_file():
             h = hashlib.sha256()
-            with open(path, "rb") as f:
-                for chunk in iter(lambda: f.read(1 << 20), b""):
-                    h.update(chunk)
-            out[path.name] = h.hexdigest()
+            try:
+                with open(path, "rb") as f:
+                    for chunk in iter(lambda: f.read(1 << 20), b""):
+                        h.update(chunk)
+                out[path.name] = h.hexdigest()
+            except PermissionError:
+                out[path.name] = "locked"
     return out
 
 
-def _db_files(folder: Path, name: str) -> list[Path]:
-    """The files that hold data. The -shm file is SQLite's shared index (no data); readers may touch it."""
-    return [folder / name, folder / f"{name}-wal"]
+def _copy_read_only(src: Path, dst: Path) -> None:
+    """Byte copy that asks only for read access on ``src`` (no attribute/metadata copy, unlike shutil.copy*)."""
+    with open(src, "rb") as fin, open(dst, "wb") as fout:
+        shutil.copyfileobj(fin, fout, 1 << 20)
 
 
-def snapshot(src: Path, dest: Path) -> None:
-    """A transactionally consistent copy of ``src`` through SQLite's backup API, opened READ-ONLY.
+def _busy(folder: Path, name: str) -> bool:
+    """A -shm or -journal file exists: the database is open (or was not closed cleanly). Checked by name only."""
+    return any((folder / f"{name}{s}").exists() for s in ("-shm", "-journal"))
 
-    Includes committed changes still in the write-ahead log; never sees another connection's uncommitted
-    changes; never checkpoints or writes the source (read-only connection)."""
+
+SETTLE_S = 0.5  # pause before the second check: a writer active during the copy shows up as a change
+
+
+def _sqlite_state(src: Path) -> dict[str, str]:
+    """SHA-256 of every SQLite file of ``src`` that exists (.db, -wal, -shm, -journal)."""
+    return _hash_files([src.with_name(src.name + s) for s in ("", "-wal", "-shm", "-journal")])
+
+
+def snapshot(src: Path, dest: Path) -> str:
+    """A copy of the database ``src`` at ``dest`` taken without ever opening ``src`` with SQLite. Fail-closed.
+
+    Refused when the database may be in use or changes while it is read:
+    - a ``-shm`` or ``-journal`` file exists (KiraPick open, or it did not close cleanly — opening and closing
+      KiraPick once clears it);
+    - any SQLite file of ``src`` (.db, -wal, -shm, -journal) changes, appears or disappears between the check
+      before the copy and two checks after it (the second after SETTLE_S).
+    Otherwise .db (+ -wal) are copied byte for byte into a private folder and only that copy is opened; SQLite's
+    recovery of the copy keeps exactly the committed transactions. The source folder is only read (works when it
+    is read-only); no file there is created, changed or deleted."""
     import sqlite3
+    import time
     from contextlib import closing
 
+    if _busy(src.parent, src.name):
+        raise SnapshotError("KiraPick seems to be open (or did not close cleanly): close it, or open and close it "
+                            "once, then run again")
+    before = _sqlite_state(src)
+    private = dest.parent / "source-copy"
+    private.mkdir()
     try:
-        with closing(sqlite3.connect(src.resolve().as_uri() + "?mode=ro", uri=True)) as source, \
-                closing(sqlite3.connect(dest)) as target:
+        for name in before:
+            _copy_read_only(src.with_name(name), private / name)
+        copied = _hash_files([private / name for name in before])
+        after = _sqlite_state(src)
+        time.sleep(SETTLE_S)
+        settled = _sqlite_state(src)
+        if not (before == after == settled == copied):
+            raise SnapshotError("the session changed while it was read: close KiraPick and run again")
+        with closing(sqlite3.connect(private / src.name)) as source, closing(sqlite3.connect(dest)) as target:
             source.backup(target)
-    except sqlite3.Error as exc:
-        raise SnapshotError("could not read the session safely; close KiraPick and run again "
-                            f"({type(exc).__name__})") from exc
+    except (sqlite3.Error, OSError) as exc:
+        raise SnapshotError(f"could not read the session: close KiraPick and run again ({type(exc).__name__})") \
+            from exc
+    finally:
+        shutil.rmtree(private, ignore_errors=True)
+    return "file_copy_verified"
 
 
 def _correction_counts(conn) -> dict[str, int]:  # noqa: ANN001
@@ -407,22 +449,32 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
     from app.learning.tuning import tune_from_store
 
     report: dict = {"report_version": REPORT_VERSION, "read_only": {}, "limitations": []}
-    sources = [f for f in _db_files(session_folder, DB_NAME) if f.is_file()]
+    sources = [session_folder / (DB_NAME + s) for s in ("", "-wal", "-shm", "-journal")]
     if not (session_folder / DB_NAME).is_file():
         raise FileNotFoundError("no KiraPick session for this folder (open it in KiraPick first)")
-    learning_sources = [f for f in _db_files(learning_folder, "learning.db") if f.is_file()] if learning_folder else []
+    for folder, name in ((session_folder, DB_NAME), (learning_folder, "learning.db")):
+        if folder is not None and _busy(folder, name):  # before reading anything: fail closed
+            raise SnapshotError("KiraPick seems to be open (or did not close cleanly): close it, or open and close "
+                                "it once, then run again")
+    learning_sources = ([learning_folder / ("learning.db" + s) for s in ("", "-wal", "-shm", "-journal")]
+                        if learning_folder else [])
+    def listing() -> set[str]:  # every file next to the sources, so a newly created file also counts as a change
+        folders = [session_folder] + ([learning_folder] if learning_folder and learning_folder.is_dir() else [])
+        return {f"{i}/{f.name}" for i, d in enumerate(folders) for f in d.iterdir() if f.is_file()}
+
+    files_before = listing()
     before = _hash_files(sources + learning_sources)
-    report["read_only"]["snapshot_method"] = "sqlite_backup_read_only"
     report["read_only"]["wal_present"] = (session_folder / f"{DB_NAME}-wal").is_file()
     with tempfile.TemporaryDirectory(prefix="kirapick-diagnose-") as tmp:
         snap = Path(tmp) / "snapshot"
         snap.mkdir()
-        snapshot(session_folder / DB_NAME, snap / DB_NAME)  # one consistent point in time for every run
+        report["read_only"]["snapshot_method"] = snapshot(session_folder / DB_NAME, snap / DB_NAME)  # one point in time
         learn = None
-        if learning_sources:
+        if learning_folder and (learning_folder / "learning.db").is_file():
             learn = Path(tmp) / "learning"
             learn.mkdir()
-            snapshot(learning_folder / "learning.db", learn / "learning.db")
+            report["read_only"]["learning_snapshot_method"] = snapshot(learning_folder / "learning.db",
+                                                                       learn / "learning.db")
 
         def fresh_copy(name: str, files: list[Path]) -> Path:
             folder = Path(tmp) / name
@@ -452,6 +504,7 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
                 if name == "default":
                     report["evidence"] = pair_evidence(project, labels, runs[name])
     after = _hash_files(sources + learning_sources)
+    files_after = listing()
     default = runs["default"]
     report["current_state"] = level_metrics(labels, current)  # the owner-corrected state (sanity check)
     report["tuning"] = {"applied": tuning.applied, "face_shift": tuning.face, "look_shift": tuning.look}
@@ -466,7 +519,8 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
     if "tuned" in runs:
         report["reconstructed_baseline"]["tuned"] = level_metrics(labels, runs["tuned"])
         report["reconstructed_baseline"]["tuned_equals_default"] = same_partition(default, runs["tuned"])
-    report["read_only"].update({"files_hashed": len(before), "unchanged": before == after})
+    report["read_only"].update({"files_hashed": len(before), "no_new_files": files_before == files_after,
+                                "unchanged": before == after and files_before == files_after})
     if not report["read_only"]["unchanged"]:
         report["limitations"].append(LIMIT_CHANGED)
     report["limitations"] += LIMITS_ALWAYS
