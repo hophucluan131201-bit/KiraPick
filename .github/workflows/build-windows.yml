@@ -267,8 +267,10 @@ jobs:
       - name: Install the packaged build, run --diagnose-grouping on a synthetic session
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Continue"
           $lines = @(); $failed = @()
           function Check($ok, $what) { if ($ok) { $script:lines += "PASS $what" } else { $script:lines += "FAIL $what"; $script:failed += $what }; Write-Host ("{0} {1}" -f $(if ($ok) { "PASS" } else { "FAIL" }), $what) }
+          trap { Write-Host "::notice title=diag-positive ERROR::$($_.Exception.Message) at line $($_.InvocationInfo.ScriptLineNumber)%0A$($lines -join '%0A')"; exit 1 }
           $hashes = (Get-ChildItem art -File -Filter "KiraPick-InternalTest-CUDA-*" | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())" }) -join "; "
           Check ($hashes -ne "") "artifact SHA-256: $hashes"
           $setup = Get-ChildItem art -Filter "KiraPick-InternalTest-CUDA-*-Setup.exe" | Select-Object -First 1
@@ -277,8 +279,8 @@ jobs:
           Check (Test-Path $exe) "installed $((Get-Item $exe).VersionInfo.ProductVersion)"
           $data = Join-Path $env:LOCALAPPDATA "KiraPick"
           $photos = Join-Path $env:RUNNER_TEMP "Test\SoSanh-CUDA"
-          $made = python scripts/ci_make_diag_session.py $photos $data
-          Check ($LASTEXITCODE -eq 0) "synthetic session made: $made"
+          $made = python scripts/ci_make_diag_session.py $photos $data 2>&1 | Out-String
+          Check ($LASTEXITCODE -eq 0) "synthetic session made: $($made.Trim())"
           function DataState { (Get-ChildItem -Recurse -File $data | Where-Object { $_.Name -notlike "*-shm" } | Get-FileHash | ForEach-Object { "$($_.Path)=$($_.Hash)" }) -join ";" }
           $before = DataState
           $report = Join-Path $env:RUNNER_TEMP "grouping-report.json"
