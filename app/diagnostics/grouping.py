@@ -385,8 +385,14 @@ def snapshot(src: Path, dest: Path) -> None:
     import sqlite3
     from contextlib import closing
 
+    # Without a write-ahead log (KiraPick closed, log checkpointed) a plain read-only connection would still create
+    # empty -wal/-shm files next to the source; "immutable" reads the file as it is and creates nothing. With a log
+    # present (KiraPick open or not checkpointed) the normal read-only connection is needed to see committed
+    # changes in it; it does not write the -wal.
+    wal = src.with_name(src.name + "-wal").is_file()
+    query = "?mode=ro" if wal else "?mode=ro&immutable=1"
     try:
-        with closing(sqlite3.connect(src.resolve().as_uri() + "?mode=ro", uri=True)) as source, \
+        with closing(sqlite3.connect(src.resolve().as_uri() + query, uri=True)) as source, \
                 closing(sqlite3.connect(dest)) as target:
             source.backup(target)
     except sqlite3.Error as exc:
@@ -411,6 +417,12 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
     if not (session_folder / DB_NAME).is_file():
         raise FileNotFoundError("no KiraPick session for this folder (open it in KiraPick first)")
     learning_sources = [f for f in _db_files(learning_folder, "learning.db") if f.is_file()] if learning_folder else []
+    def listing() -> set[str]:  # every file next to the sources, so a newly created file also counts as a change
+        folders = [session_folder] + ([learning_folder] if learning_folder and learning_folder.is_dir() else [])
+        return {f"{i}/{f.name}" for i, d in enumerate(folders) for f in d.iterdir()
+                if f.is_file() and not f.name.endswith("-shm")}  # -shm: SQLite's shared index, no data
+
+    files_before = listing()
     before = _hash_files(sources + learning_sources)
     report["read_only"]["snapshot_method"] = "sqlite_backup_read_only"
     report["read_only"]["wal_present"] = (session_folder / f"{DB_NAME}-wal").is_file()
@@ -452,6 +464,7 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
                 if name == "default":
                     report["evidence"] = pair_evidence(project, labels, runs[name])
     after = _hash_files(sources + learning_sources)
+    files_after = listing()
     default = runs["default"]
     report["current_state"] = level_metrics(labels, current)  # the owner-corrected state (sanity check)
     report["tuning"] = {"applied": tuning.applied, "face_shift": tuning.face, "look_shift": tuning.look}
@@ -466,7 +479,8 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
     if "tuned" in runs:
         report["reconstructed_baseline"]["tuned"] = level_metrics(labels, runs["tuned"])
         report["reconstructed_baseline"]["tuned_equals_default"] = same_partition(default, runs["tuned"])
-    report["read_only"].update({"files_hashed": len(before), "unchanged": before == after})
+    report["read_only"].update({"files_hashed": len(before), "no_new_files": files_before == files_after,
+                                "unchanged": before == after and files_before == files_after})
     if not report["read_only"]["unchanged"]:
         report["limitations"].append(LIMIT_CHANGED)
     report["limitations"] += LIMITS_ALWAYS

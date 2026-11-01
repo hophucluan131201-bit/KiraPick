@@ -362,3 +362,22 @@ def test_cli_error_reports_never_carry_messages_of_unknown_errors(tmp_path: Path
     assert dg.run_cli([str(tmp_path / "x"), str(out)]) == 1
     assert json.loads(out.read_text(encoding="utf-8"))["error"] == "RuntimeError"
     assert (tmp_path / "r.json.traceback.txt").is_file()  # local detail, separate file
+
+
+def test_closed_session_gets_no_new_files_next_to_it(shoot) -> None:
+    """KiraPick closed (log checkpointed): reading must not even create empty -wal/-shm files."""
+    p, occ = shoot
+    _label_like_owner(p, occ)
+    p.conn.commit()
+    folder = p.folder
+    p.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    p.close()
+    for leftover in (folder / f"{DB_NAME}-wal", folder / f"{DB_NAME}-shm"):
+        leftover.unlink(missing_ok=True)
+    before = {f.name: _sha(f) for f in folder.iterdir() if f.is_file()}
+    report = dg.diagnose(folder, None)
+    assert {f.name: _sha(f) for f in folder.iterdir() if f.is_file()} == before
+    assert report["read_only"]["wal_present"] is False and report["read_only"]["no_new_files"] is True
+    assert report["read_only"]["unchanged"] is True
+    assert report["labels"]["person_labelled"] == 18
+    p.conn = __import__("sqlite3").connect(":memory:")  # the fixture closes it again
