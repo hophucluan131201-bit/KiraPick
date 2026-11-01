@@ -103,7 +103,8 @@ jobs:
           $intGuid = if ($cuda) { "{D51C8A47-2B9E-4E63-8F0A-6C3E9B17D284}" } else { "{3B7D2E91-6A4C-4F18-9E25-C81A0D6F4B72}" }
           $intDir = if ($cuda) { "KiraPick-InternalTest-CUDA" } else { "KiraPick-InternalTest" }
           $intName = if ($cuda) { "KiraPick Internal Test CUDA" } else { "KiraPick Internal Test" }
-          $intVer = if ($cuda) { "3.0.0b1.dev1a" } else { "3.0.0b1.dev1" }
+          $srcVer = ([regex]::Match((Get-Content app/__init__.py -Raw), '__version__ = "([^"]+)"')).Groups[1].Value
+          $intVer = if ($cuda) { "${srcVer}a" } else { $srcVer }
           # The other internal test build (the owner may have it installed): it must stay untouched
           $otherGuid = if ($cuda) { "{3B7D2E91-6A4C-4F18-9E25-C81A0D6F4B72}" } else { "{D51C8A47-2B9E-4E63-8F0A-6C3E9B17D284}" }
           $otherDir = if ($cuda) { "KiraPick-InternalTest" } else { "KiraPick-InternalTest-CUDA" }
@@ -168,6 +169,14 @@ jobs:
           Check ($p.ExitCode -eq 0 -and $r.ok -eq $true -and $r.version -eq $intVer -and $r.edition -eq $env:EDITION -and @($r.network_attempts).Count -eq 0) "installed self-test ok=$($r.ok) version=$($r.version) edition=$($r.edition) network_attempts=$(@($r.network_attempts).Count) providers=$($r.onnxruntime.providers -join '/') gpu=$($r.gpu.device)"
           if ($cuda) { Check (@($r.onnxruntime.providers) -contains "CUDAExecutionProvider") "CUDA provider present in the installed build (this runner has no NVIDIA card: the run itself uses the CPU)" }
           Check ((DataState) -eq $dataBefore) "user data unchanged after the self-test"
+          # Grouping diagnostic (F3): packaged, offline, read-only; a folder without a session gives the fixed error
+          $diag = Join-Path $PWD "installed-diagnose.json"
+          $nosession = Join-Path $env:RUNNER_TEMP "no-session-folder"
+          New-Item -ItemType Directory -Force $nosession | Out-Null
+          $dp = Start-Process $intExe -ArgumentList "--diagnose-grouping", "`"$nosession`"", "`"$diag`"" -Wait -PassThru
+          $d = if (Test-Path $diag) { Get-Content $diag -Raw | ConvertFrom-Json } else { $null }
+          Check ($dp.ExitCode -eq 1 -and $d.ok -eq $false -and "$($d.error)" -like "*no KiraPick session*" -and $d.network_attempts -eq 0 -and $d.app_version -eq $intVer) "installed --diagnose-grouping: exit=$($dp.ExitCode) ok=$($d.ok) network_attempts=$($d.network_attempts) version=$($d.app_version) error='$($d.error)'"
+          Check ((DataState) -eq $dataBefore) "user data unchanged after the diagnostic"
           # 5. Uninstall the test build: the official one, the other test build and the data stay
           Start-Process (Join-Path $progs "$intDir\unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           for ($i = 0; $i -lt 60 -and (Test-Path $intExe); $i++) { Start-Sleep -Seconds 1 }
@@ -198,6 +207,7 @@ jobs:
             dist/installer/*
             dist/selftest.json
             installed-selftest.json
+            installed-diagnose.json
           retention-days: 30
       - name: Publish release
         if: github.event_name == 'push'
