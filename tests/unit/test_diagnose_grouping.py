@@ -177,11 +177,12 @@ def test_report_measures_both_levels_and_is_read_only(shoot, tmp_path: Path) -> 
     p, occ = shoot
     _label_like_owner(p, occ)
     p.conn.commit()
-    files = [f for f in (p.folder / DB_NAME, p.folder / f"{DB_NAME}-wal") if f.is_file()]
+    p.close()  # KiraPick closed, as the owner runs it
+    files = [f for f in p.folder.iterdir() if f.is_file()]
     before = {f.name: _sha(f) for f in files}
     report = dg.diagnose(p.folder, None)
     assert {f.name: _sha(f) for f in files} == before
-    assert report["read_only"]["unchanged"] is True
+    assert report["read_only"]["unchanged"] is True and report["read_only"]["no_new_files"] is True
     base = report["reconstructed_baseline"]
     assert base["deterministic"] is True
     # Automatic grouping (rules as designed): look A split by the face-less burst, K1's costumes apart.
@@ -202,6 +203,7 @@ def test_cli_blocks_network_and_never_touches_photos(shoot, tmp_path: Path, monk
     p, occ = shoot
     _label_like_owner(p, occ)
     p.conn.commit()
+    p.close()
     for name in ("connect", "connect_ex"):  # restore the socket functions the CLI replaces
         monkeypatch.setattr(socket.socket, name, getattr(socket.socket, name))
     monkeypatch.setattr(socket, "create_connection", socket.create_connection)
@@ -244,6 +246,7 @@ def test_tuned_baseline_is_reported_when_learning_applies(shoot, monkeypatch) ->
     p, occ = shoot
     _label_like_owner(p, occ)
     p.conn.commit()
+    p.close()
     monkeypatch.setattr("app.learning.tuning.tune_from_store",
                         lambda folder, base: Tuning(face=0.04, look=0.02, applied=True))
     report = dg.diagnose(p.folder, None)
@@ -285,24 +288,42 @@ def test_csv_without_required_columns_is_refused(shoot, tmp_path: Path) -> None:
         dg.read_labels(p.conn, _write_csv(tmp_path / "bad.csv", ["file", "who"], [["a", "1"]]))
 
 
-def test_snapshot_includes_committed_wal_changes_and_excludes_uncommitted_ones(shoot, tmp_path: Path) -> None:
+def test_open_session_is_refused_and_left_untouched(shoot) -> None:
+    """KiraPick open (live connection, -wal and -shm present, even inside a write transaction): fail closed."""
     p, occ = shoot
+    _label_like_owner(p, occ)
     p.conn.commit()
-    _label_like_owner(p, occ)  # committed, still in the write-ahead log (connection kept open)
-    p.conn.commit()
-    assert (p.folder / f"{DB_NAME}-wal").stat().st_size > 0
     p.conn.execute("BEGIN IMMEDIATE")  # an active writer with uncommitted changes
     p.conn.execute("UPDATE subjects SET display_name = 'K9-Z'")
     try:
-        files = [p.folder / DB_NAME, p.folder / f"{DB_NAME}-wal"]
-        before = {f.name: _sha(f) for f in files}
-        report = dg.diagnose(p.folder, None)
-        assert {f.name: _sha(f) for f in files} == before
+        assert (p.folder / f"{DB_NAME}-shm").is_file()
+        before = _state(p.folder)
+        with pytest.raises(dg.SnapshotError, match="seems to be open"):
+            dg.diagnose(p.folder, None)
+        assert _state(p.folder) == before  # .db, -wal and -shm: same names, same bytes
     finally:
         p.conn.execute("ROLLBACK")
-    assert report["read_only"]["snapshot_method"] == "sqlite_backup_live"  # KiraPick's connection is open
-    assert report["labels"]["person_labelled"] == 18  # the committed labels, not K9-Z
-    assert report["current_state"]["person"]["true_groups"] == 2
+
+
+def test_session_changing_during_the_copy_is_refused(shoot, tmp_path: Path, monkeypatch) -> None:
+    """A writer that appears during the copy (simulated: the -wal grows right after it is copied)."""
+    import shutil
+
+    p, occ = shoot
+    folder = _closed_copy(p, occ, tmp_path, keep_wal=True)
+    real = shutil.copyfile
+
+    def copy_then_write(src, dst, *a, **k):  # noqa: ANN001, ANN002, ANN003, ANN202
+        out = real(src, dst, *a, **k)
+        if str(src).endswith("-wal"):
+            with open(src, "ab") as f:
+                f.write(b"x")
+        return out
+
+    monkeypatch.setattr(dg.shutil, "copyfile", copy_then_write)
+    with pytest.raises(dg.SnapshotError, match="changed while it was read"):
+        dg.diagnose(folder, None)
+    assert sorted(f.name for f in folder.iterdir()) == [DB_NAME, f"{DB_NAME}-wal"]  # nothing left or added
 
 
 def test_learning_db_and_session_files_stay_byte_identical(shoot, tmp_path: Path) -> None:
@@ -311,13 +332,15 @@ def test_learning_db_and_session_files_stay_byte_identical(shoot, tmp_path: Path
     p, occ = shoot
     _label_like_owner(p, occ)
     p.conn.commit()
+    p.close()
     learn = tmp_path / "learning"
     store = LearningStore(learn)
     store.close()
-    watched = [f for f in (*learn.iterdir(), *p.folder.iterdir()) if f.is_file() and not f.name.endswith("-shm")]
+    watched = [f for f in (*learn.iterdir(), *p.folder.iterdir()) if f.is_file()]
     before = {str(f): _sha(f) for f in watched}
     report = dg.diagnose(p.folder, learn)
     assert {str(f): _sha(f) for f in watched} == before
+    assert sorted(str(f) for f in (*learn.iterdir(), *p.folder.iterdir()) if f.is_file()) == sorted(before)
     assert report["read_only"]["unchanged"] is True and report["read_only"]["files_hashed"] >= 2
 
 
@@ -332,11 +355,11 @@ def test_report_holds_no_names_paths_or_vectors(tmp_path: Path) -> None:
     sid = p.conn.execute("SELECT subject_id FROM occurrences LIMIT 1").fetchone()[0]
     actions.rename_subject(p.conn, sid, "Nguyễn Bí Mật")
     p.conn.commit()
+    p.close()
     report = dg.diagnose(p.folder, None)
     text = json.dumps(report, ensure_ascii=False)
     for secret in ("SECRET", "secretuser", "Nguyễn", "Bí Mật", "Ảnh", str(tmp_path)):
         assert secret not in text
-    p.close()
 
 
 def test_numbers_only_check_rejects_stray_text_and_vectors() -> None:
@@ -422,8 +445,7 @@ def test_closed_sessions_are_never_opened_by_sqlite(shoot, tmp_path: Path, keep_
     report = dg.diagnose(folder, None)
     assert _state(folder) == before  # same names (no -shm/-wal created) and same bytes
     ro = report["read_only"]
-    assert ro["snapshot_method"] == "file_copy_closed" and ro["unchanged"] and ro["no_new_files"]
-    assert ro["kirapick_seemed_open"] is False
+    assert ro["snapshot_method"] == "file_copy_verified" and ro["unchanged"] and ro["no_new_files"]
     assert report["labels"]["person_labelled"] == 18  # committed changes in the -wal are included
 
 
@@ -439,3 +461,25 @@ def test_read_only_source_directory(shoot, tmp_path: Path) -> None:
     finally:
         folder.chmod(0o755)
     assert _state(folder) == before and report["read_only"]["unchanged"] is True
+
+
+@pytest.mark.skipif(__import__("os").name != "nt", reason="Windows ACL test")
+def test_read_only_source_directory_windows_acl(shoot, tmp_path: Path) -> None:
+    """Windows: deny writes on the session folder with an ACL, run, then restore the ACL (always)."""
+    import getpass
+    import subprocess
+
+    p, occ = shoot
+    folder = _closed_copy(p, occ, tmp_path, keep_wal=True)
+    before = _state(folder)
+    user = getpass.getuser()
+    subprocess.run(["icacls", str(folder), "/deny", f"{user}:(OI)(CI)(W,D,DC)"], check=True, capture_output=True)
+    try:
+        with pytest.raises(OSError):  # the ACL really blocks writes
+            (folder / "probe.txt").write_text("x")
+        report = dg.diagnose(folder, None)
+    finally:
+        subprocess.run(["icacls", str(folder), "/remove:d", user], check=True, capture_output=True)
+    assert _state(folder) == before and report["read_only"]["unchanged"] is True
+    assert report["labels"]["person_labelled"] == 18
+    (folder / "probe.txt").write_text("x")  # ACL restored

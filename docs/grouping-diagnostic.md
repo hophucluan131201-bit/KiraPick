@@ -8,15 +8,17 @@ and the tests are in `tests/unit/test_diagnose_grouping.py`.
 KiraPick.exe --diagnose-grouping "D:\Test\SoSanh-CUDA" D:\Test\grouping-report.json [D:\Test\labels.csv]
 ```
 
-- **Close KiraPick first.** The session database (and the learning data) are snapshotted at one point in time.
-  - If there is no `-shm` file, no connection has the database open. The `.db` and `-wal` files are copied byte for
-    byte into a private temporary folder, and only the copy is opened. SQLite never touches the source folder, so
-    no file is created or changed there, even when the folder is read-only.
-  - If there is a `-shm` file, KiraPick is open (or crashed). The source is opened read-only through SQLite's backup
-    API, which gives the committed state even while KiraPick writes. SQLite readers leave read marks in the `-shm`
-    index, which holds no data. The report sets `kirapick_seemed_open`.
-  - The `.db` and `-wal` files are hashed, and the folder's file names listed, before and after the run. The report
-    states `unchanged` and `no_new_files`.
+- **Close KiraPick first.** The diagnostic never opens the session or the learning database with SQLite. A
+  read-only SQLite connection can still create `-wal`/`-shm` files and write read marks into an existing `-shm`,
+  so the diagnostic avoids it entirely.
+  - Before it starts, the run is refused when a `-shm` or `-journal` file exists, meaning KiraPick is open or did not
+    close cleanly. Opening and closing KiraPick once clears that.
+  - Otherwise the `.db` (and `-wal`) files are copied byte for byte into a private folder. The run is refused if any
+    SQLite file of the source changes, appears or disappears between the check before the copy and two checks
+    after it (the second after 0.5 s), or if the copy differs from the source.
+  - Only the copy is opened. SQLite's recovery of the copy keeps exactly the committed transactions.
+  - The source folder is only read, so the diagnostic also works when that folder is read-only. Every SQLite file
+    is hashed and the folder listed before and after the run. The report states `unchanged` and `no_new_files`.
   - Photo files are never opened. Network access is blocked for the whole run.
 - **Labels.** In a *copy* of a session, rename each subject `K<customer>-<costume>` (`K1-A`, `K1-B`, `K2-A`).
   - Two subjects of the same costume get the same label.
