@@ -534,7 +534,17 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
         report["reconstructed_baseline"]["tuned"] = level_metrics(labels, runs["tuned"])
         report["reconstructed_baseline"]["tuned_equals_default"] = same_partition(default, runs["tuned"])
     # Learnt tuning without the "possibly contaminated" answers (copy only; nothing is removed from learning).
+    # Every run starts from the same snapshot copy of the session; only the thresholds differ (listed here).
     report["reconstructed_baseline"]["filtered_learning_applied"] = "filtered" in runs
+    report["reconstructed_baseline"]["runs"] = {
+        "same_session_snapshot": True,
+        "input_occurrences": report["labels"]["occurrences"],
+        "default": {"face_shift": 0.0, "look_shift": 0.0},
+        "tuned": {"applied": tuning.applied, "face_shift": tuning.face, "look_shift": tuning.look},
+        "filtered": {"applied": filtered is not None and filtered.applied,
+                     "face_shift": 0.0 if filtered is None else filtered.face,
+                     "look_shift": 0.0 if filtered is None else filtered.look},
+    }
     if "filtered" in runs:
         report["reconstructed_baseline"]["filtered_learning"] = level_metrics(labels, runs["filtered"])
     report["read_only"].update({"files_hashed": len(before), "no_new_files": files_before == files_after,
@@ -574,6 +584,13 @@ def run_cli(args: list[str]) -> int:
     if listing is not None and listing.resolve() == report_path.resolve():
         print("the co-occurrence list must be a different file from the report")
         return 2
+    sessions = (data_dir() / "sessions").resolve()
+    learning = (data_dir() / "learning").resolve()
+    for out in [p for p in (listing, report_path) if p is not None]:
+        target = out.resolve()
+        if target.is_relative_to(sessions) or target.is_relative_to(learning):
+            print("write the report and the list outside KiraPick's data folder")
+            return 2
     attempts: list[str] = []
     _block_network(attempts)
     try:

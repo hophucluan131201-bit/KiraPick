@@ -127,6 +127,9 @@ def test_cli_flag_parsing(tmp_path: Path, monkeypatch) -> None:
     assert seen["labels"] == tmp_path / "lab.csv"
     assert dg.run_cli(["F", str(out), "--cooccurrence-list", str(out)]) == 2  # never the report file
     assert dg.run_cli(["F", str(out), "--cooccurrence-list"]) == 2
+    inside = tmp_path / "data" / "sessions" / "x"
+    assert dg.run_cli(["F", str(out), "--cooccurrence-list", str(inside / "l.csv")]) == 2  # never in KiraPick data
+    assert dg.run_cli(["F", str(inside / "r.json")]) == 2
 
 
 # ------------------------------------------------------------------ P0-B learning audit
@@ -174,7 +177,14 @@ def test_audit_counts_grid_cv_and_contamination(tmp_path: Path) -> None:
     assert cv["tuned_total"] < cv["default_total"]
     pc = report["possible_contamination"]
     assert pc["hint_only"] is True and pc["same_answers_below_threshold"] == 3 and pc["by_kind"] == {"merge": 3}
-    assert report["filtered_tuning"]["excluded_answers"] == 3
+    ft = report["filtered_tuning"]
+    assert ft["excluded_answers"] == 3
+    assert ft["evidence_before"] == {"usable_pairs": 31, "same_answers": 7, "different_answers": 5}
+    assert ft["evidence_after"] == {"usable_pairs": 25, "same_answers": 4, "different_answers": 5}
+    # The cross-costume merges are missed at the default and at the learnt thresholds alike: they cannot have
+    # driven the learnt shift, which is why it stays the same without them.
+    assert ft["excluded_answers_cost_neutral"] is True and ft["same_shift_as_learnt"] is True
+    assert ft["reason_code"] == "cross_validation"
     assert filtered is not None
     dg.check_numbers_only({"learning_audit": report})
 
@@ -202,6 +212,11 @@ def test_diagnose_reports_audit_and_filtered_learning(tmp_path: Path) -> None:
     assert report["tuning"]["applied"] == audit["tuning"]["applied"]
     base = report["reconstructed_baseline"]
     assert base["filtered_learning_applied"] is True and "filtered_learning" in base and "tuned" in base
+    runs = base["runs"]
+    assert runs["same_session_snapshot"] is True and runs["input_occurrences"] == report["labels"]["occurrences"]
+    assert runs["default"] == {"face_shift": 0.0, "look_shift": 0.0}
+    assert runs["tuned"]["face_shift"] == report["tuning"]["face_shift"]
+    assert runs["filtered"]["applied"] is True
     assert base["filtered_learning"]["person"]["items"] == base["default"]["person"]["items"]
 
 

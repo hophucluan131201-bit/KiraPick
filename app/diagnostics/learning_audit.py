@@ -155,9 +155,32 @@ def audit(learning_folder: Path | None, base) -> tuple[dict, object | None]:  # 
             "same_answers_below_threshold": len(suspect),
             "by_kind": dict(Counter(kinds.get(a, "other") for a in suspect)),
         }
-        filtered = tuning_mod.tune([e for e in examples if e.answer not in suspect], base)
-        report["filtered_tuning"] = {"applied": filtered.applied, "face_shift": filtered.face,
-                                     "look_shift": filtered.look, "excluded_answers": len(suspect)}
+        kept = [e for e in examples if e.answer not in suspect]
+        filtered = tuning_mod.tune(kept, base)
+        d_kept = tuning_mod._arrays(kept, base)
+
+        def evidence(data) -> dict:  # noqa: ANN001
+            if data is None:
+                return {"usable_pairs": 0, "same_answers": 0, "different_answers": 0}
+            return {"usable_pairs": len(data.same), "same_answers": len(np.unique(data.answer[data.same])),
+                    "different_answers": len(np.unique(data.answer[~data.same]))}
+
+        # Why the learnt shift can stay the same without those answers: their cost (missed links, weighted) is the
+        # same at the default and at the learnt thresholds, so they cannot have pulled the choice either way.
+        excluded = np.isin(d.answer, list(suspect)) if suspect else np.zeros(len(d.same), bool)
+        learnt_t = learnt.apply(base)
+        cost_default = tuning_mod._cost(d, base, excluded)[0] if excluded.any() else 0.0
+        cost_learnt = tuning_mod._cost(d, learnt_t, excluded)[0] if excluded.any() else 0.0
+        report["filtered_tuning"] = {
+            "applied": filtered.applied, "face_shift": filtered.face, "look_shift": filtered.look,
+            "reason_code": _reason_code(d_kept, base, tuning_mod),
+            "excluded_answers": len(suspect),
+            "evidence_before": evidence(d), "evidence_after": evidence(d_kept),
+            "same_shift_as_learnt": (filtered.face, filtered.look) == (learnt.face, learnt.look),
+            "excluded_cost_at_default": round(cost_default, 4),
+            "excluded_cost_at_learnt": round(cost_learnt, 4),
+            "excluded_answers_cost_neutral": abs(cost_default - cost_learnt) < 1e-9,
+        }
         return report, filtered
     finally:
         store.close()

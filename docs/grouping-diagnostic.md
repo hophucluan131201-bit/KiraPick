@@ -65,3 +65,10 @@ KiraPick.exe --diagnose-grouping "D:\Test\SoSanh-CUDA" D:\Test\grouping-report.j
     contamination**. This is a hint only, never proof of a costume change.
   - The tuning is re-run without those answers, and the labelled session is rebuilt with that tuning
     (`reconstructed_baseline.filtered_learning`). Both happen on the copies only.
+    - `filtered_tuning` reports the evidence before and after the exclusion, and the reason code.
+    - It also reports whether the excluded answers are cost-neutral, meaning they have the same cost at the default
+      and the learnt thresholds. That explains a learnt shift that stays the same without them.
+    - `reconstructed_baseline.runs` lists the thresholds of each run (default, tuned, filtered). All runs start from
+      the same session snapshot.
+- **Output paths.** The report and the local list must be written outside KiraPick's data folder (`sessions`,
+  `learning`); the command refuses such paths.
