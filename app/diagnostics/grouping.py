@@ -329,7 +329,7 @@ _LIMITATION_TEXTS = {LIMIT_CHANGED, *LIMITS_ALWAYS}
 
 
 # ----------------------------------------------------------------- privacy
-TEXT_KEYS = {"profile", "app_version", "error", "snapshot_method"}  # fixed texts written by this module
+TEXT_KEYS = {"profile", "app_version", "error", "snapshot_method", "learning_snapshot_method"}  # fixed texts written by this module
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -377,25 +377,36 @@ def _db_files(folder: Path, name: str) -> list[Path]:
     return [folder / name, folder / f"{name}-wal"]
 
 
-def snapshot(src: Path, dest: Path) -> None:
-    """A transactionally consistent copy of ``src`` through SQLite's backup API, opened READ-ONLY.
+def snapshot(src: Path, dest: Path) -> str:
+    """A consistent copy of the database ``src`` at ``dest``; returns how it was taken.
 
-    Includes committed changes still in the write-ahead log; never sees another connection's uncommitted
-    changes; never checkpoints or writes the source (read-only connection)."""
+    - No ``-shm`` next to it: no SQLite connection has the database open (a live connection always has the
+      shared index), so nothing can change it. The files (.db and, if present, -wal) are copied byte for byte
+      into a private folder and only the COPY is opened. SQLite never touches the source folder: no file is
+      created or changed there, which also works when that folder is read-only.
+    - ``-shm`` present (KiraPick open, or it crashed): a READ-ONLY connection through SQLite's backup API, which
+      sees exactly the committed state even while KiraPick writes. SQLite readers record read marks in the -shm
+      index (no data); .db and -wal are not written."""
     import sqlite3
     from contextlib import closing
 
-    # Without a write-ahead log (KiraPick closed, log checkpointed) a plain read-only connection would still create
-    # empty -wal/-shm files next to the source; "immutable" reads the file as it is and creates nothing. With a log
-    # present (KiraPick open or not checkpointed) the normal read-only connection is needed to see committed
-    # changes in it; it does not write the -wal.
-    wal = src.with_name(src.name + "-wal").is_file()
-    query = "?mode=ro" if wal else "?mode=ro&immutable=1"
+    wal, shm = (src.with_name(src.name + s) for s in ("-wal", "-shm"))
     try:
-        with closing(sqlite3.connect(src.resolve().as_uri() + query, uri=True)) as source, \
+        if not shm.exists():
+            private = dest.parent / "source-copy"
+            private.mkdir()
+            shutil.copyfile(src, private / src.name)
+            if wal.is_file():
+                shutil.copyfile(wal, private / wal.name)
+            with closing(sqlite3.connect(private / src.name)) as source, closing(sqlite3.connect(dest)) as target:
+                source.backup(target)
+            shutil.rmtree(private)
+            return "file_copy_closed"
+        with closing(sqlite3.connect(src.resolve().as_uri() + "?mode=ro", uri=True)) as source, \
                 closing(sqlite3.connect(dest)) as target:
             source.backup(target)
-    except sqlite3.Error as exc:
+        return "sqlite_backup_live"
+    except (sqlite3.Error, OSError) as exc:
         raise SnapshotError("could not read the session safely; close KiraPick and run again "
                             f"({type(exc).__name__})") from exc
 
@@ -419,22 +430,22 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
     learning_sources = [f for f in _db_files(learning_folder, "learning.db") if f.is_file()] if learning_folder else []
     def listing() -> set[str]:  # every file next to the sources, so a newly created file also counts as a change
         folders = [session_folder] + ([learning_folder] if learning_folder and learning_folder.is_dir() else [])
-        return {f"{i}/{f.name}" for i, d in enumerate(folders) for f in d.iterdir()
-                if f.is_file() and not f.name.endswith("-shm")}  # -shm: SQLite's shared index, no data
+        return {f"{i}/{f.name}" for i, d in enumerate(folders) for f in d.iterdir() if f.is_file()}
 
     files_before = listing()
     before = _hash_files(sources + learning_sources)
-    report["read_only"]["snapshot_method"] = "sqlite_backup_read_only"
     report["read_only"]["wal_present"] = (session_folder / f"{DB_NAME}-wal").is_file()
     with tempfile.TemporaryDirectory(prefix="kirapick-diagnose-") as tmp:
         snap = Path(tmp) / "snapshot"
         snap.mkdir()
-        snapshot(session_folder / DB_NAME, snap / DB_NAME)  # one consistent point in time for every run
+        report["read_only"]["snapshot_method"] = snapshot(session_folder / DB_NAME, snap / DB_NAME)  # one point in time
+        report["read_only"]["kirapick_seemed_open"] = report["read_only"]["snapshot_method"] == "sqlite_backup_live"
         learn = None
         if learning_sources:
             learn = Path(tmp) / "learning"
             learn.mkdir()
-            snapshot(learning_folder / "learning.db", learn / "learning.db")
+            report["read_only"]["learning_snapshot_method"] = snapshot(learning_folder / "learning.db",
+                                                                       learn / "learning.db")
 
         def fresh_copy(name: str, files: list[Path]) -> Path:
             folder = Path(tmp) / name

@@ -300,7 +300,7 @@ def test_snapshot_includes_committed_wal_changes_and_excludes_uncommitted_ones(s
         assert {f.name: _sha(f) for f in files} == before
     finally:
         p.conn.execute("ROLLBACK")
-    assert report["read_only"]["snapshot_method"] == "sqlite_backup_read_only"
+    assert report["read_only"]["snapshot_method"] == "sqlite_backup_live"  # KiraPick's connection is open
     assert report["labels"]["person_labelled"] == 18  # the committed labels, not K9-Z
     assert report["current_state"]["person"]["true_groups"] == 2
 
@@ -381,3 +381,61 @@ def test_closed_session_gets_no_new_files_next_to_it(shoot) -> None:
     assert report["read_only"]["unchanged"] is True
     assert report["labels"]["person_labelled"] == 18
     p.conn = __import__("sqlite3").connect(":memory:")  # the fixture closes it again
+
+
+def _closed_copy(p: Project, occ: dict, tmp: Path, keep_wal: bool) -> Path:
+    """A closed session folder, optionally with committed changes still in its -wal and no -shm."""
+    import shutil
+
+    _label_like_owner(p, occ)
+    p.conn.commit()
+    folder = tmp / "closed"
+    folder.mkdir()
+    if keep_wal:  # as after a crash: .db + -wal, no -shm
+        p.conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        shutil.copyfile(p.folder / DB_NAME, folder / DB_NAME)
+        shutil.copyfile(p.folder / f"{DB_NAME}-wal", folder / f"{DB_NAME}-wal")
+    else:
+        p.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        shutil.copyfile(p.folder / DB_NAME, folder / DB_NAME)
+    return folder
+
+
+def _state(folder: Path) -> dict[str, str]:
+    return {f.name: _sha(f) for f in folder.iterdir() if f.is_file()}
+
+
+@pytest.mark.parametrize("keep_wal", [False, True], ids=["no-wal", "wal-without-shm"])
+def test_closed_sessions_are_never_opened_by_sqlite(shoot, tmp_path: Path, keep_wal: bool, monkeypatch) -> None:
+    import sqlite3
+
+    p, occ = shoot
+    folder = _closed_copy(p, occ, tmp_path, keep_wal)
+    before = _state(folder)
+    real = sqlite3.connect
+
+    def guarded(target, *a, **k):  # noqa: ANN001, ANN002, ANN003, ANN202
+        assert str(folder) not in str(target) and folder.resolve().as_uri() not in str(target)
+        return real(target, *a, **k)
+
+    monkeypatch.setattr(sqlite3, "connect", guarded)
+    report = dg.diagnose(folder, None)
+    assert _state(folder) == before  # same names (no -shm/-wal created) and same bytes
+    ro = report["read_only"]
+    assert ro["snapshot_method"] == "file_copy_closed" and ro["unchanged"] and ro["no_new_files"]
+    assert ro["kirapick_seemed_open"] is False
+    assert report["labels"]["person_labelled"] == 18  # committed changes in the -wal are included
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "geteuid") or __import__("os").geteuid() == 0,
+                    reason="root ignores directory permissions (checked on Windows CI with an ACL)")
+def test_read_only_source_directory(shoot, tmp_path: Path) -> None:
+    p, occ = shoot
+    folder = _closed_copy(p, occ, tmp_path, keep_wal=True)
+    before = _state(folder)
+    folder.chmod(0o555)
+    try:
+        report = dg.diagnose(folder, None)
+    finally:
+        folder.chmod(0o755)
+    assert _state(folder) == before and report["read_only"]["unchanged"] is True

@@ -8,12 +8,15 @@ and the tests are in `tests/unit/test_diagnose_grouping.py`.
 KiraPick.exe --diagnose-grouping "D:\Test\SoSanh-CUDA" D:\Test\grouping-report.json [D:\Test\labels.csv]
 ```
 
-- **Close KiraPick first.** The session database and the learning data are snapshotted through SQLite's backup API
-  on a read-only connection. The snapshot includes committed changes still in the write-ahead log, never another
-  connection's uncommitted changes, and never checkpoints or writes the source. Everything is computed on copies of
-  that snapshot.
-  - The data files (`.db`, `-wal`) are hashed before and after the run, and the report states whether they are
-    unchanged. If KiraPick changed them during the run, the report says so.
+- **Close KiraPick first.** The session database (and the learning data) are snapshotted at one point in time.
+  - If there is no `-shm` file, no connection has the database open. The `.db` and `-wal` files are copied byte for
+    byte into a private temporary folder, and only the copy is opened. SQLite never touches the source folder, so
+    no file is created or changed there, even when the folder is read-only.
+  - If there is a `-shm` file, KiraPick is open (or crashed). The source is opened read-only through SQLite's backup
+    API, which gives the committed state even while KiraPick writes. SQLite readers leave read marks in the `-shm`
+    index, which holds no data. The report sets `kirapick_seemed_open`.
+  - The `.db` and `-wal` files are hashed, and the folder's file names listed, before and after the run. The report
+    states `unchanged` and `no_new_files`.
   - Photo files are never opened. Network access is blocked for the whole run.
 - **Labels.** In a *copy* of a session, rename each subject `K<customer>-<costume>` (`K1-A`, `K1-B`, `K2-A`).
   - Two subjects of the same costume get the same label.
