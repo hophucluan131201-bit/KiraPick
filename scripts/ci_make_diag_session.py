@@ -44,7 +44,8 @@ def main(folder: Path, data: Path) -> None:
     conn = p.conn
     conn.execute("INSERT INTO sources (root_path, added_at) VALUES (?, 'n')", (str(folder),))
     k1, k2 = unit(RNG.normal(size=128)), unit(RNG.normal(size=128))
-    look_a, look_b, look_c = (unit(RNG.random(96)) for _ in range(3))
+    # Distinct costumes: different dominant colour bins (uniform random histograms would all look alike).
+    look_a, look_b, look_c = (unit(np.eye(96)[k * 30 : k * 30 + 6].sum(0) + 0.05 * RNG.random(96)) for k in range(3))
     k1_makeup = near(k1, 1.2)
     plan = ([("K1-A", near(k1, 0.3), look_a, j * 20) for j in range(5)]
             + [("K1-A", None, look_a, 480 + j * 20) for j in range(3)]
@@ -67,18 +68,22 @@ def main(folder: Path, data: Path) -> None:
                 conn.execute("INSERT INTO occurrence_vectors VALUES (?, ?, 't', ?)",
                              (occ, kind, vec.astype("<f4").tobytes()))
     recluster(p)
-    # The owner's labelling: the face-less burst joined to its costume, then every subject renamed.
-    by_label: dict[str, set[int]] = {}
+    # The owner's labelling on a copy: every occurrence in a subject named after its true person and costume
+    # (manual, as renaming + fixing would leave it). The diagnostic clears these to rebuild the automatic result.
+    by_label: dict[str, list[int]] = {}
     for occ, label in occ_label.items():
-        sid = conn.execute("SELECT subject_id FROM occurrences WHERE id = ?", (occ,)).fetchone()[0]
-        if sid is not None:
-            by_label.setdefault(label, set()).add(sid)
-    for label, sids in by_label.items():
-        keep, *rest = sorted(sids)
-        for other in rest:
-            actions.merge_subjects(conn, keep, other)
-        actions.rename_subject(conn, keep, label)
+        by_label.setdefault(label, []).append(occ)
+    for label, occs in by_label.items():
+        assets = [conn.execute("SELECT asset_id FROM occurrences WHERE id = ?", (o,)).fetchone()[0] for o in occs]
+        sid = int(conn.execute("INSERT INTO subjects (created_at) VALUES ('n')").lastrowid)
+        actions.rename_subject(conn, sid, label)
+        conn.executemany("UPDATE occurrences SET subject_id = ?, assignment = 'manual' WHERE id = ?",
+                         [(sid, o) for o in occs])
+        del assets
+    conn.execute("""DELETE FROM subjects WHERE display_name IS NULL
+                    AND id NOT IN (SELECT subject_id FROM occurrences WHERE subject_id IS NOT NULL)""")
     conn.commit()
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # as after KiraPick closes
     p.close()
     print(json.dumps({"occurrences": len(plan), "persons": 2, "looks": 3}))
 

@@ -282,6 +282,7 @@ jobs:
           $made = python scripts/ci_make_diag_session.py $photos $data 2>&1 | Out-String
           Check ($LASTEXITCODE -eq 0) "synthetic session made: $($made.Trim())"
           function DataState { (Get-ChildItem -Recurse -File $data | Where-Object { $_.Name -notlike "*-shm" } | Get-FileHash | ForEach-Object { "$($_.Path)=$($_.Hash)" }) -join ";" }
+          $listBefore = (Get-ChildItem -Recurse -File $data | ForEach-Object Name | Sort-Object) -join ", "
           $before = DataState
           $report = Join-Path $env:RUNNER_TEMP "grouping-report.json"
           # The owner's exact command form. KiraPick.exe is a windowed app: "| Out-Null" makes PowerShell wait for it.
@@ -293,10 +294,12 @@ jobs:
           Check ($code -eq 0 -and $r.ok -eq $true) "exit $code, ok=$($r.ok), version $($r.app_version)"
           Check ($r.network_attempts -eq 0) "network_attempts $($r.network_attempts)"
           Check ($r.read_only.unchanged -eq $true -and $r.read_only.snapshot_method -eq "sqlite_backup_read_only") "read_only $($r.read_only | ConvertTo-Json -Compress)"
-          Check ((DataState) -eq $before) "session and learning files byte-identical after the run (checked outside the app)"
+          $listAfter = (Get-ChildItem -Recurse -File $data | ForEach-Object Name | Sort-Object) -join ", "
+          Check ((DataState) -eq $before) "session and learning files byte-identical, no new data files (checked outside the app); before: $listBefore | after: $listAfter"
           Check ($r.labels.person_labelled -eq 18 -and $r.labels.look_labelled -eq 18 -and $r.labels.uncertain -eq 0) "labels $($r.labels | ConvertTo-Json -Compress)"
-          Check ($p.true_groups -eq 2 -and $l.true_groups -eq 3 -and $p.pairwise_precision -eq 1 -and $p.bcubed_f1 -gt 0 -and $p.bcubed_f1 -le 1) "person $($p | ConvertTo-Json -Compress)"
-          Check ($l.items -eq 18 -and $null -ne $l.bcubed_f1) "look $($l | ConvertTo-Json -Compress -Depth 3)"
+          # Expected from the synthetic shoot (same numbers as on Linux): F3's pattern, 2 customers -> 4 clusters, no false merge
+          Check ($p.true_groups -eq 2 -and $p.clusters -eq 4 -and $p.pairwise_precision -eq 1 -and $p.false_split_extra_clusters -eq 2 -and $p.bcubed_f1 -eq 0.6927) "person $($p | ConvertTo-Json -Compress -Depth 3)"
+          Check ($l.true_groups -eq 3 -and $l.clusters -eq 4 -and $l.pairwise_precision -eq 1 -and $l.false_split_extra_clusters -eq 1 -and $l.bcubed_f1 -eq 0.8837) "look $($l | ConvertTo-Json -Compress -Depth 3)"
           Check ($r.reconstructed_baseline.verified_historical_output -eq $false -and $r.reconstructed_baseline.deterministic -eq $true) "reconstructed_baseline flags"
           $text = Get-Content $report -Raw
           Check (-not ($text -match "SYN_|SoSanh|K1-A|K2-A|runneradmin")) "report has no file names, folder names, labels or user names"
