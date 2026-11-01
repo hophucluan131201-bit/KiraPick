@@ -264,7 +264,7 @@ jobs:
           path: art
           run-id: ${{ github.event.inputs.diag_from_run }}
           github-token: ${{ github.token }}
-      - name: Install the packaged build, run --diagnose-grouping on a synthetic session
+      - name: Install the packaged build, run --diagnose-grouping on synthetic sessions (5 cases)
         shell: pwsh
         run: |
           $ErrorActionPreference = "Continue"
@@ -276,33 +276,73 @@ jobs:
           $setup = Get-ChildItem art -Recurse -Filter "KiraPick-InternalTest-CUDA-*-Setup.exe" | Select-Object -First 1
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           $exe = Join-Path $env:LOCALAPPDATA "Programs\KiraPick-InternalTest-CUDA\KiraPick.exe"
-          Check (Test-Path $exe) "installed $((Get-Item $exe).VersionInfo.ProductVersion)"
+          $ver = (Get-Item $exe).VersionInfo.ProductVersion
+          Check (Test-Path $exe) "installed $ver"
           $data = Join-Path $env:LOCALAPPDATA "KiraPick"
-          $photos = Join-Path $env:RUNNER_TEMP "Test\SoSanh-CUDA"
-          $made = python scripts/ci_make_diag_session.py $photos $data 2>&1 | Out-String
-          Check ($LASTEXITCODE -eq 0) "synthetic session made: $($made.Trim())"
-          function DataState { (Get-ChildItem -Recurse -File $data | Where-Object { $_.Name -notlike "*-shm" } | Get-FileHash | ForEach-Object { "$($_.Path)=$($_.Hash)" }) -join ";" }
-          $listBefore = (Get-ChildItem -Recurse -File $data | ForEach-Object Name | Sort-Object) -join ", "
-          $before = DataState
-          $report = Join-Path $env:RUNNER_TEMP "grouping-report.json"
-          # The owner's exact command form. KiraPick.exe is a windowed app: "| Out-Null" makes PowerShell wait for it.
-          & $exe --diagnose-grouping $photos $report | Out-Null
-          $code = $LASTEXITCODE
-          Check (Test-Path $report) "report written when the command returns (the command waited)"
-          $r = if (Test-Path $report) { Get-Content $report -Raw | ConvertFrom-Json } else { $null }
-          $p = $r.reconstructed_baseline.default.person; $l = $r.reconstructed_baseline.default.look
-          Check ($code -eq 0 -and $r.ok -eq $true) "exit $code, ok=$($r.ok), version $($r.app_version)"
-          Check ($r.network_attempts -eq 0) "network_attempts $($r.network_attempts)"
-          Check ($r.read_only.unchanged -eq $true -and $r.read_only.snapshot_method -eq "sqlite_backup_read_only") "read_only $($r.read_only | ConvertTo-Json -Compress)"
-          $listAfter = (Get-ChildItem -Recurse -File $data | ForEach-Object Name | Sort-Object) -join ", "
-          Check ((DataState) -eq $before) "session and learning files byte-identical, no new data files (checked outside the app); before: $listBefore | after: $listAfter"
-          Check ($r.labels.person_labelled -eq 18 -and $r.labels.look_labelled -eq 18 -and $r.labels.uncertain -eq 0) "labels $($r.labels | ConvertTo-Json -Compress)"
-          # Expected from the synthetic shoot (same numbers as on Linux): F3's pattern, 2 customers -> 4 clusters, no false merge
-          Check ($p.true_groups -eq 2 -and $p.clusters -eq 4 -and $p.pairwise_precision -eq 1 -and $p.false_split_extra_clusters -eq 2 -and $p.bcubed_f1 -eq 0.6927) "person $($p | ConvertTo-Json -Compress -Depth 3)"
-          Check ($l.true_groups -eq 3 -and $l.clusters -eq 4 -and $l.pairwise_precision -eq 1 -and $l.false_split_extra_clusters -eq 1 -and $l.bcubed_f1 -eq 0.8837) "look $($l | ConvertTo-Json -Compress -Depth 3)"
-          Check ($r.reconstructed_baseline.verified_historical_output -eq $false -and $r.reconstructed_baseline.deterministic -eq $true) "reconstructed_baseline flags"
-          $text = Get-Content $report -Raw
-          Check (-not ($text -match "SYN_|SoSanh|K1-A|K2-A|runneradmin")) "report has no file names, folder names, labels or user names"
+          $root = Join-Path $env:RUNNER_TEMP "Test"
+          # Source state: every file of the session folder, name + SHA-256 (a file locked by SQLite: name + size)
+          function SessionState($photos) {
+            $dir = (python -c "import sys; sys.path.insert(0, '.'); from pathlib import Path; from app.storage.sessions import session_dir; print(session_dir(Path(sys.argv[1]) / 'sessions', Path(sys.argv[2])))" $data $photos).Trim()
+            (Get-ChildItem $dir -File | Sort-Object Name | ForEach-Object { try { "$($_.Name)=$((Get-FileHash $_.FullName -ErrorAction Stop).Hash)" } catch { "$($_.Name)=locked:$($_.Length)" } }) -join ";"
+          }
+          function RunDiag($photos, $name) {
+            $report = Join-Path $env:RUNNER_TEMP "$name.json"
+            & $exe --diagnose-grouping $photos $report | Out-Null   # the owner's command form (waits)
+            $code = $LASTEXITCODE
+            $r = if (Test-Path $report) { Get-Content $report -Raw | ConvertFrom-Json } else { $null }
+            $text = if (Test-Path $report) { Get-Content $report -Raw } else { "" }
+            Check (-not ($text -match "SYN_|SoSanh|K1-A|K2-A|runneradmin|Test\\")) "${name}: report has no file, folder, label or user names"
+            Check ($r.network_attempts -eq 0 -and $r.app_version -eq $ver) "${name}: offline (network_attempts $($r.network_attempts)), version $($r.app_version)"
+            return @{ code = $code; r = $r }
+          }
+          function ExpectOk($photos, $name) {
+            $before = SessionState $photos
+            $o = RunDiag $photos $name; $r = $o.r
+            $p = $r.reconstructed_baseline.default.person; $l = $r.reconstructed_baseline.default.look
+            Check ($o.code -eq 0 -and $r.ok -eq $true -and $r.read_only.unchanged -eq $true -and $r.read_only.no_new_files -eq $true -and $r.read_only.snapshot_method -eq "file_copy_verified") "${name}: exit $($o.code), ok $($r.ok), read_only $($r.read_only | ConvertTo-Json -Compress)"
+            Check ((SessionState $photos) -eq $before) "${name}: source names + SHA-256 unchanged ($before)"
+            Check ($r.labels.person_labelled -eq 18 -and $p.true_groups -eq 2 -and $p.clusters -eq 4 -and $p.pairwise_precision -eq 1 -and $p.bcubed_f1 -eq 0.6927 -and $l.true_groups -eq 3 -and $l.bcubed_f1 -eq 0.8837) "${name}: metrics person F1 $($p.bcubed_f1), look F1 $($l.bcubed_f1), labels $($r.labels.person_labelled)"
+          }
+          # 1. closed session without WAL
+          $c1 = Join-Path $root "c1"; python scripts/ci_make_diag_session.py $c1 $data closed | Out-Null
+          ExpectOk $c1 "case1-closed-no-wal"
+          # 2. closed session with WAL, no SHM (committed data only in the -wal)
+          $c2 = Join-Path $root "c2"; python scripts/ci_make_diag_session.py $c2 $data wal_no_shm | Out-Null
+          ExpectOk $c2 "case2-wal-no-shm"
+          # 3. WAL + SHM, active writer holding a write transaction: refused, nothing changed
+          $c3 = Join-Path $root "c3"; python scripts/ci_make_diag_session.py $c3 $data closed | Out-Null
+          $holder = Start-Process python -ArgumentList "scripts/ci_make_diag_session.py", "--hold", "`"$c3`"", "`"$data`"", "30" -PassThru -NoNewWindow
+          Start-Sleep -Seconds 5
+          $before = SessionState $c3
+          $o = RunDiag $c3 "case3-active-writer"
+          Check ($o.code -eq 1 -and $o.r.ok -eq $false -and "$($o.r.error)" -like "*seems to be open*") "case3-active-writer: refused (exit $($o.code), error '$($o.r.error)')"
+          Check ((SessionState $c3) -eq $before -and $before -like "*-shm=*") "case3-active-writer: .db/-wal/-shm unchanged ($before)"
+          Stop-Process -Id $holder.Id -ErrorAction SilentlyContinue
+          # 4. source changing during the snapshot (a -wal growing every 50 ms, no -shm): refused, no file added
+          $c4 = Join-Path $root "c4"; python scripts/ci_make_diag_session.py $c4 $data wal_no_shm | Out-Null
+          $writer = Start-Process python -ArgumentList "scripts/ci_make_diag_session.py", "--append-wal", "`"$c4`"", "`"$data`"", "20" -PassThru -NoNewWindow
+          Start-Sleep -Seconds 2
+          $namesBefore = ((SessionState $c4) -split ";" | ForEach-Object { ($_ -split "=")[0] }) -join ","
+          $o = RunDiag $c4 "case4-changing"
+          $namesAfter = ((SessionState $c4) -split ";" | ForEach-Object { ($_ -split "=")[0] }) -join ","
+          Check ($o.code -eq 1 -and $o.r.ok -eq $false -and "$($o.r.error)" -like "*changed while it was read*") "case4-changing: refused (exit $($o.code), error '$($o.r.error)')"
+          Check ($namesAfter -eq $namesBefore) "case4-changing: no file created or deleted ($namesAfter)"
+          Stop-Process -Id $writer.Id -ErrorAction SilentlyContinue
+          # 5. read-only source folder (ACL denies write/delete with specific rights + read-only attribute), restored
+          $c5 = Join-Path $root "c5"; python scripts/ci_make_diag_session.py $c5 $data wal_no_shm | Out-Null
+          $dir5 = (python -c "import sys; sys.path.insert(0, '.'); from pathlib import Path; from app.storage.sessions import session_dir; print(session_dir(Path(sys.argv[1]) / 'sessions', Path(sys.argv[2])))" $data $c5).Trim()
+          Get-ChildItem $dir5 -File | ForEach-Object { attrib +R $_.FullName }
+          icacls $dir5 /deny "${env:USERNAME}:(OI)(CI)(WD,AD,DE,DC)" | Out-Null
+          try {
+            $probe = $false; try { Set-Content (Join-Path $dir5 "probe.txt") "x" -ErrorAction Stop } catch { $probe = $true }
+            Check $probe "case5-read-only: the ACL blocks writes"
+            ExpectOk $c5 "case5-read-only"
+          } finally {
+            icacls $dir5 /remove:d "$env:USERNAME" | Out-Null
+            Get-ChildItem $dir5 -File | ForEach-Object { attrib -R $_.FullName }
+          }
+          $restored = $true; try { Set-Content (Join-Path $dir5 "probe.txt") "x" -ErrorAction Stop; Remove-Item (Join-Path $dir5 "probe.txt") } catch { $restored = $false }
+          Check $restored "case5-read-only: ACL and attributes restored"
           Write-Host "::notice title=diag-positive summary ($($failed.Count) failed)::$($lines -join '%0A')"
           if ($failed.Count) { exit 1 }
 

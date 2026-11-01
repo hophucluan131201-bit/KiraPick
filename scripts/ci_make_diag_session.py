@@ -1,7 +1,9 @@
 """CI only: a synthetic KiraPick session for a synthetic photo folder, to test the PACKAGED
 ``--diagnose-grouping`` on Windows (F3). Synthetic vectors, no real photos or faces.
 
-    python scripts/ci_make_diag_session.py <photo folder> <data dir>   # data dir = %LOCALAPPDATA%\\KiraPick
+    python scripts/ci_make_diag_session.py <photo folder> <data dir> [closed|wal_no_shm]
+    python scripts/ci_make_diag_session.py --hold <photo folder> <data dir> <seconds>    # an open writer
+    python scripts/ci_make_diag_session.py --append-wal <photo folder> <data dir> <seconds>  # a changing -wal
 
 Layout as the app makes it: <data dir>/sessions/<session_key(folder)>/project.snorlu.db (+ marker).
 Two customers: K1 in costume A (+ a face-less burst 8 min later) and costume B 40 min later; K2 in costume A.
@@ -36,11 +38,16 @@ def near(base: np.ndarray, noise: float) -> np.ndarray:
     return unit(base + unit(RNG.normal(size=base.size)) * noise)
 
 
-def main(folder: Path, data: Path) -> None:
+def main(folder: Path, data: Path, mode: str = "closed") -> None:
+    import shutil
+    import tempfile
+
     folder.mkdir(parents=True, exist_ok=True)
     target = session_dir(data / "sessions", folder)
-    p = Project.create(target, folder.name)
-    (target / "kirapick-session").write_text("KiraPick session data\n", encoding="utf-8")
+    work = Path(tempfile.mkdtemp()) / "s" if mode == "wal_no_shm" else target
+    p = Project.create(work, folder.name)
+    if mode != "wal_no_shm":
+        (target / "kirapick-session").write_text("KiraPick session data\n", encoding="utf-8")
     conn = p.conn
     conn.execute("INSERT INTO sources (root_path, added_at) VALUES (?, 'n')", (str(folder),))
     k1, k2 = unit(RNG.normal(size=128)), unit(RNG.normal(size=128))
@@ -83,10 +90,48 @@ def main(folder: Path, data: Path) -> None:
     conn.execute("""DELETE FROM subjects WHERE display_name IS NULL
                     AND id NOT IN (SELECT subject_id FROM occurrences WHERE subject_id IS NOT NULL)""")
     conn.commit()
-    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # as after KiraPick closes
-    p.close()
+    if mode == "wal_no_shm":  # as after a crash: .db + -wal with committed data, no -shm
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "kirapick-session").write_text("KiraPick session data\n", encoding="utf-8")
+        for name in ("project.snorlu.db", "project.snorlu.db-wal"):
+            shutil.copyfile(work / name, target / name)
+        p.close()
+    else:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # as after KiraPick closes
+        p.close()
     print(json.dumps({"occurrences": len(plan), "persons": 2, "looks": 3}))
 
 
+def hold(folder: Path, data: Path, seconds: float) -> None:
+    """An open writer: a connection with an open write transaction, for ``seconds``."""
+    import sqlite3
+    import time
+
+    conn = sqlite3.connect(session_dir(data / "sessions", folder) / "project.snorlu.db")
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute("UPDATE subjects SET display_name = 'K9-Z'")
+    print("holding", flush=True)
+    time.sleep(seconds)
+    conn.execute("ROLLBACK")
+    conn.close()
+
+
+def append_wal(folder: Path, data: Path, seconds: float) -> None:
+    """A source that keeps changing: bytes appended to the -wal every 50 ms for ``seconds``."""
+    import time
+
+    wal = session_dir(data / "sessions", folder) / "project.snorlu.db-wal"
+    end = time.time() + seconds
+    while time.time() < end:
+        with open(wal, "ab") as f:
+            f.write(b"\0")
+        time.sleep(0.05)
+
+
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), Path(sys.argv[2]))
+    if sys.argv[1] == "--hold":
+        hold(Path(sys.argv[2]), Path(sys.argv[3]), float(sys.argv[4]))
+    elif sys.argv[1] == "--append-wal":
+        append_wal(Path(sys.argv[2]), Path(sys.argv[3]), float(sys.argv[4]))
+    else:
+        main(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else "closed")
