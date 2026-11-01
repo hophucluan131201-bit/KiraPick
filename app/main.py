@@ -44,6 +44,10 @@ def _folder_arg(text: str) -> Path | None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
+    if "--diagnose-grouping" in argv:  # read-only grouping report (F3 Batch 0), no window, network blocked
+        from app.diagnostics.grouping import run_cli
+
+        return run_cli(argv[argv.index("--diagnose-grouping") + 1:])
     if "--self-test" in argv:  # packaged app check, no window: KiraPick.exe --self-test report.json
         rest = argv[argv.index("--self-test") + 1:]  # [report.json] [a photo folder to try, read-only]
         report = Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json"
