@@ -145,7 +145,7 @@ def test_csv_labels_are_per_occurrence_and_override_names(shoot, tmp_path: Path)
     labels, stats = dg.read_labels(p.conn, path)
     assert labels[occ["K2-A"][0]] == dg.UNCERTAIN
     assert labels[occ["K1-A"][1]] == dg.Label("1", "1-A")
-    assert stats["csv_rows_applied"] == 2 and stats["csv_rows_unmatched"] == 1
+    assert stats["csv_rows_applied"] == 2 and stats["csv_rows_unknown"] == 1
     assert stats["uncertain"] >= 1
 
 
@@ -182,7 +182,7 @@ def test_report_measures_both_levels_and_is_read_only(shoot, tmp_path: Path) -> 
     report = dg.diagnose(p.folder, None)
     assert {f.name: _sha(f) for f in files} == before
     assert report["read_only"]["unchanged"] is True
-    base = report["baseline"]
+    base = report["reconstructed_baseline"]
     assert base["deterministic"] is True
     # Automatic grouping (rules as designed): look A split by the face-less burst, K1's costumes apart.
     person, look = base["default"]["person"], base["default"]["look"]
@@ -248,4 +248,117 @@ def test_tuned_baseline_is_reported_when_learning_applies(shoot, monkeypatch) ->
                         lambda folder, base: Tuning(face=0.04, look=0.02, applied=True))
     report = dg.diagnose(p.folder, None)
     assert report["tuning"] == {"applied": True, "face_shift": 0.04, "look_shift": 0.02}
-    assert "tuned" in report["baseline"] and isinstance(report["baseline"]["tuned_equals_default"], bool)
+    assert "tuned" in report["reconstructed_baseline"] and isinstance(report["reconstructed_baseline"]["tuned_equals_default"], bool)
+
+
+# ----------------------------------------------- Batch 0 review follow-ups
+def _write_csv(path: Path, header: list[str], rows: list[list[object]]) -> Path:
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        w.writerows(rows)
+    return path
+
+
+def test_csv_duplicates_conflicts_unknown_and_invalid_rows(shoot, tmp_path: Path) -> None:
+    p, occ = shoot
+    a, b = occ["K1-A"][0], occ["K2-A"][0]
+    path = _write_csv(tmp_path / "l.csv", ["occurrence_id", "photo", "person", "look"], [
+        [a, "", "1", "A"], [a, "", "1", "a"],  # duplicate (same label)
+        [b, "", "2", "A"], ["", "DSC_0014.JPG", "1", "A"],  # photo 14's occurrence is b: conflict
+        ["999999", "", "1", "A"],  # unknown id
+        ["12x", "", "1", "A"], ["", "", "1", "A"],  # invalid
+    ])
+    labels, stats = dg.read_labels(p.conn, path)
+    assert occ["K2-A"][0] == p.conn.execute(
+        "SELECT o.id FROM occurrences o JOIN assets s ON s.id = o.asset_id WHERE s.relative_path = 'DSC_0014.JPG'"
+    ).fetchone()[0]
+    assert labels[a] == dg.Label("1", "1-A")
+    assert labels[b] == dg.UNCERTAIN  # contradicting rows are never guessed
+    assert stats["csv_rows_duplicate"] == 1 and stats["csv_conflicting_occurrences"] == 1
+    assert stats["csv_rows_unknown"] == 1 and stats["csv_rows_invalid"] == 2
+
+
+def test_csv_without_required_columns_is_refused(shoot, tmp_path: Path) -> None:
+    p, _ = shoot
+    with pytest.raises(dg.LabelsError):
+        dg.read_labels(p.conn, _write_csv(tmp_path / "bad.csv", ["file", "who"], [["a", "1"]]))
+
+
+def test_snapshot_includes_committed_wal_changes_and_excludes_uncommitted_ones(shoot, tmp_path: Path) -> None:
+    p, occ = shoot
+    p.conn.commit()
+    _label_like_owner(p, occ)  # committed, still in the write-ahead log (connection kept open)
+    p.conn.commit()
+    assert (p.folder / f"{DB_NAME}-wal").stat().st_size > 0
+    p.conn.execute("BEGIN IMMEDIATE")  # an active writer with uncommitted changes
+    p.conn.execute("UPDATE subjects SET display_name = 'K9-Z'")
+    try:
+        files = [p.folder / DB_NAME, p.folder / f"{DB_NAME}-wal"]
+        before = {f.name: _sha(f) for f in files}
+        report = dg.diagnose(p.folder, None)
+        assert {f.name: _sha(f) for f in files} == before
+    finally:
+        p.conn.execute("ROLLBACK")
+    assert report["read_only"]["snapshot_method"] == "sqlite_backup_read_only"
+    assert report["labels"]["person_labelled"] == 18  # the committed labels, not K9-Z
+    assert report["current_state"]["person"]["true_groups"] == 2
+
+
+def test_learning_db_and_session_files_stay_byte_identical(shoot, tmp_path: Path) -> None:
+    from app.learning.store import LearningStore
+
+    p, occ = shoot
+    _label_like_owner(p, occ)
+    p.conn.commit()
+    learn = tmp_path / "learning"
+    store = LearningStore(learn)
+    store.close()
+    watched = [f for f in (*learn.iterdir(), *p.folder.iterdir()) if f.is_file() and not f.name.endswith("-shm")]
+    before = {str(f): _sha(f) for f in watched}
+    report = dg.diagnose(p.folder, learn)
+    assert {str(f): _sha(f) for f in watched} == before
+    assert report["read_only"]["unchanged"] is True and report["read_only"]["files_hashed"] >= 2
+
+
+def test_report_holds_no_names_paths_or_vectors(tmp_path: Path) -> None:
+    p = Project.create(tmp_path / "s", "SECRET_PROJECT")
+    p.conn.execute("INSERT INTO sources (root_path, added_at) VALUES ('C:/Users/secretuser/Ảnh', 'n')")
+    face, look = _unit(RNG.normal(size=128)), _unit(RNG.random(96))
+    for i in range(1, 5):
+        _add(p, i, _near(face, 0.3), _near(look, 0.05), i * 10)
+    p.conn.execute("UPDATE assets SET relative_path = 'SECRETPHOTO_' || id || '.JPG'")
+    recluster(p)
+    sid = p.conn.execute("SELECT subject_id FROM occurrences LIMIT 1").fetchone()[0]
+    actions.rename_subject(p.conn, sid, "Nguyễn Bí Mật")
+    p.conn.commit()
+    report = dg.diagnose(p.folder, None)
+    text = json.dumps(report, ensure_ascii=False)
+    for secret in ("SECRET", "secretuser", "Nguyễn", "Bí Mật", "Ảnh", str(tmp_path)):
+        assert secret not in text
+    p.close()
+
+
+def test_numbers_only_check_rejects_stray_text_and_vectors() -> None:
+    dg.check_numbers_only({"labels": {"occurrences": 3}, "limitations": list(dg.LIMITS_ALWAYS)})
+    for bad in ({"name": "Mai"}, {"x": {"DSC_0001": 1}}, {"v": [0.1] * 128}, {"limitations": ["C:/Users/x"]},
+                {"error": b"bytes"}):
+        with pytest.raises(ValueError):
+            dg.check_numbers_only(bad)
+
+
+def test_cli_error_reports_never_carry_messages_of_unknown_errors(tmp_path: Path, monkeypatch) -> None:
+    for name in ("connect", "connect_ex"):
+        monkeypatch.setattr(socket.socket, name, getattr(socket.socket, name))
+    monkeypatch.setattr(socket, "create_connection", socket.create_connection)
+    monkeypatch.setattr(socket, "getaddrinfo", socket.getaddrinfo)
+    monkeypatch.setattr("app.branding.data_dir", lambda: tmp_path / "data")
+
+    def boom(*_a, **_k):  # noqa: ANN002, ANN003, ANN202
+        raise RuntimeError("C:/Users/secretuser/Ảnh/DSC_0001.JPG")
+
+    monkeypatch.setattr(dg, "diagnose", boom)
+    out = tmp_path / "r.json"
+    assert dg.run_cli([str(tmp_path / "x"), str(out)]) == 1
+    assert json.loads(out.read_text(encoding="utf-8"))["error"] == "RuntimeError"
+    assert (tmp_path / "r.json.traceback.txt").is_file()  # local detail, separate file

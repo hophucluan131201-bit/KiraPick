@@ -55,6 +55,14 @@ class Label:
 UNCERTAIN = Label(None, None)
 
 
+class LabelsError(ValueError):
+    """labels.csv cannot be used (missing columns)."""
+
+
+class SnapshotError(RuntimeError):
+    """The session could not be read as a consistent snapshot."""
+
+
 def parse_subject_label(name: str | None) -> Label:
     """``K1-A`` -> person 1, look 1-A; ``K1`` -> person 1; anything else (composite, ?, names) -> uncertain."""
     m = LABEL_RE.match(name or "")
@@ -83,21 +91,39 @@ def read_labels(conn, labels_csv: Path | None) -> tuple[dict[int, Label], dict[s
                         "SELECT subject_id FROM occurrences WHERE id = ?", (r[0],)).fetchone()[0]))
     if labels_csv is not None:
         by_photo: dict[str, int] = {}
-        for occ_id, asset_id, prominence, _ in sorted(rows, key=lambda r: -r[2]):
+        for occ_id, asset_id, _prominence, _ in sorted(rows, key=lambda r: -r[2]):
             path = conn.execute("SELECT relative_path FROM assets WHERE id = ?", (asset_id,)).fetchone()[0]
             by_photo.setdefault(path.replace("\\", "/").casefold(), occ_id)
+        given: dict[int, set[Label]] = defaultdict(set)
         with open(labels_csv, encoding="utf-8-sig", newline="") as f:
-            for row in csv.DictReader(f):
-                occ = None
-                if (row.get("occurrence_id") or "").strip().isdigit():
-                    occ = int(row["occurrence_id"])
-                elif row.get("photo"):
-                    occ = by_photo.get(row["photo"].strip().replace("\\", "/").casefold())
-                if occ is None or occ not in labels:
-                    stats["csv_rows_unmatched"] += 1
+            reader = csv.DictReader(f)
+            columns = {c.strip().casefold() for c in reader.fieldnames or []}
+            if "person" not in columns or not columns & {"occurrence_id", "photo"}:
+                raise LabelsError("labels.csv needs the columns person and occurrence_id or photo")
+            for raw in reader:
+                row = {(k or "").strip().casefold(): (v or "").strip() for k, v in raw.items()}
+                ident, photo = row.get("occurrence_id", ""), row.get("photo", "")
+                if ident and not ident.isdigit():
+                    stats["csv_rows_invalid"] += 1
                     continue
-                labels[occ] = _csv_label(row.get("person", ""), row.get("look", ""))
+                if not ident and not photo:
+                    stats["csv_rows_invalid"] += 1
+                    continue
+                occ = int(ident) if ident else by_photo.get(photo.replace("\\", "/").casefold())
+                if occ is None or occ not in labels:
+                    stats["csv_rows_unknown"] += 1
+                    continue
+                label = _csv_label(row.get("person", ""), row.get("look", ""))
+                if label in given[occ]:
+                    stats["csv_rows_duplicate"] += 1
+                given[occ].add(label)
                 stats["csv_rows_applied"] += 1
+        for occ, found in given.items():
+            if len(found) == 1:
+                labels[occ] = next(iter(found))
+            else:  # contradicting rows: the occurrence becomes uncertain, never guessed
+                labels[occ] = UNCERTAIN
+                stats["csv_conflicting_occurrences"] += 1
     stats["occurrences"] = len(labels)
     stats["person_labelled"] = sum(1 for v in labels.values() if v.person is not None)
     stats["look_labelled"] = sum(1 for v in labels.values() if v.look is not None)
@@ -290,6 +316,49 @@ def pair_evidence(project: Project, labels: dict[int, Label], pred: dict[int, ob
             "review_queue_asks": dict(asked)}
 
 
+LIMIT_CHANGED = ("the session or learning data changed during the run (KiraPick open?): the report used one "
+                 "consistent snapshot; close KiraPick and run again")
+LIMITS_ALWAYS = [
+    ("reconstructed_baseline is rebuilt now from the current occurrences with this build's rules; the app does not "
+     "store its original automatic grouping, so it is not verified historical output"),
+    "if photos were re-analysed after the owner's corrections, occurrences may differ from the first run",
+    "the learnt tuning at the time of the first grouping is unknown; both default and current tuning are reported",
+    "occurrence-level truth comes from subject names unless labels.csv gives it per occurrence",
+]
+_LIMITATION_TEXTS = {LIMIT_CHANGED, *LIMITS_ALWAYS}
+
+
+# ----------------------------------------------------------------- privacy
+TEXT_KEYS = {"profile", "app_version", "error", "snapshot_method"}  # fixed texts written by this module
+KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def check_numbers_only(report: dict) -> None:
+    """Refuse a report that could carry a file name, a subject name, a label or a vector.
+
+    Keys must be this module's snake_case vocabulary; values must be numbers, booleans or None, except
+    TEXT_KEYS and the fixed ``limitations`` sentences; lists hold numbers only (no vectors: at most 16)."""
+    def walk(value: object, key: str) -> None:
+        if isinstance(value, dict):
+            for k, v in value.items():
+                if not isinstance(k, str) or not KEY_RE.match(k):
+                    raise ValueError(f"unexpected report key {k!r}")
+                walk(v, k)
+        elif isinstance(value, list):
+            if key == "limitations":
+                if not all(isinstance(x, str) and x in _LIMITATION_TEXTS for x in value):
+                    raise ValueError("unexpected limitation text")
+                return
+            if len(value) > 16 or not all(isinstance(x, (int, float)) for x in value):
+                raise ValueError(f"unexpected list under {key!r}")
+        elif isinstance(value, str):
+            if key not in TEXT_KEYS:
+                raise ValueError(f"unexpected text under {key!r}")
+        elif value is not None and not isinstance(value, (int, float, bool)):
+            raise ValueError(f"unexpected value type under {key!r}")
+    walk(report, "")
+
+
 # ------------------------------------------------------------------ driver
 def _hash_files(paths: list[Path]) -> dict[str, str]:
     out = {}
@@ -304,7 +373,25 @@ def _hash_files(paths: list[Path]) -> dict[str, str]:
 
 
 def _db_files(folder: Path, name: str) -> list[Path]:
-    return [folder / name, folder / f"{name}-wal"]  # -shm is rebuilt by SQLite; never copied
+    """The files that hold data. The -shm file is SQLite's shared index (no data); readers may touch it."""
+    return [folder / name, folder / f"{name}-wal"]
+
+
+def snapshot(src: Path, dest: Path) -> None:
+    """A transactionally consistent copy of ``src`` through SQLite's backup API, opened READ-ONLY.
+
+    Includes committed changes still in the write-ahead log; never sees another connection's uncommitted
+    changes; never checkpoints or writes the source (read-only connection)."""
+    import sqlite3
+    from contextlib import closing
+
+    try:
+        with closing(sqlite3.connect(src.resolve().as_uri() + "?mode=ro", uri=True)) as source, \
+                closing(sqlite3.connect(dest)) as target:
+            source.backup(target)
+    except sqlite3.Error as exc:
+        raise SnapshotError("could not read the session safely; close KiraPick and run again "
+                            f"({type(exc).__name__})") from exc
 
 
 def _correction_counts(conn) -> dict[str, int]:  # noqa: ANN001
@@ -325,22 +412,29 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
         raise FileNotFoundError("no KiraPick session for this folder (open it in KiraPick first)")
     learning_sources = [f for f in _db_files(learning_folder, "learning.db") if f.is_file()] if learning_folder else []
     before = _hash_files(sources + learning_sources)
+    report["read_only"]["snapshot_method"] = "sqlite_backup_read_only"
     report["read_only"]["wal_present"] = (session_folder / f"{DB_NAME}-wal").is_file()
-    if report["read_only"]["wal_present"]:
-        report["limitations"].append("the session has a write-ahead log: close KiraPick before running, "
-                                     "or the copy may miss the newest changes")
     with tempfile.TemporaryDirectory(prefix="kirapick-diagnose-") as tmp:
+        snap = Path(tmp) / "snapshot"
+        snap.mkdir()
+        snapshot(session_folder / DB_NAME, snap / DB_NAME)  # one consistent point in time for every run
+        learn = None
+        if learning_sources:
+            learn = Path(tmp) / "learning"
+            learn.mkdir()
+            snapshot(learning_folder / "learning.db", learn / "learning.db")
+
         def fresh_copy(name: str, files: list[Path]) -> Path:
             folder = Path(tmp) / name
             if folder.exists():
                 shutil.rmtree(folder)
             folder.mkdir()
-            for src in files:  # byte copies; the originals are only read
+            for src in files:
                 shutil.copyfile(src, folder / src.name)
             return folder
 
-        learn = fresh_copy("learning", learning_sources) if learning_sources else None
-        with Project.open(fresh_copy("current", sources)) as project:
+        sources_snap = [snap / DB_NAME]
+        with Project.open(fresh_copy("current", sources_snap)) as project:
             conn = project.conn
             labels, report["labels"] = read_labels(conn, labels_csv)
             current = partition(conn)
@@ -353,7 +447,7 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
         for name in ("default", "default_repeat", "tuned"):
             if name == "tuned" and not tuning.applied:
                 continue
-            with Project.open(fresh_copy(name, sources)) as project:
+            with Project.open(fresh_copy(name, sources_snap)) as project:
                 runs[name] = rebuild(project, tuning.apply if name == "tuned" else None)
                 if name == "default":
                     report["evidence"] = pair_evidence(project, labels, runs[name])
@@ -361,7 +455,8 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
     default = runs["default"]
     report["current_state"] = level_metrics(labels, current)  # the owner-corrected state (sanity check)
     report["tuning"] = {"applied": tuning.applied, "face_shift": tuning.face, "look_shift": tuning.look}
-    report["baseline"] = {
+    report["reconstructed_baseline"] = {
+        "verified_historical_output": False,  # rebuilt now from the snapshot; the app keeps no original result
         "profile": profile.name,
         "deterministic": same_partition(default, runs["default_repeat"]),
         "agreement_with_untouched_auto_pairs": pair_agreement(default, current, untouched),
@@ -369,16 +464,13 @@ def diagnose(session_folder: Path, learning_folder: Path | None, labels_csv: Pat
         "default": level_metrics(labels, default),
     }
     if "tuned" in runs:
-        report["baseline"]["tuned"] = level_metrics(labels, runs["tuned"])
-        report["baseline"]["tuned_equals_default"] = same_partition(default, runs["tuned"])
+        report["reconstructed_baseline"]["tuned"] = level_metrics(labels, runs["tuned"])
+        report["reconstructed_baseline"]["tuned_equals_default"] = same_partition(default, runs["tuned"])
     report["read_only"].update({"files_hashed": len(before), "unchanged": before == after})
-    report["limitations"] += [
-        ("the original automatic grouping is not stored by the app; the baseline is rebuilt from the current "
-         "occurrences with this build's rules"),
-        "if photos were re-analysed after the owner's corrections, occurrences may differ from the first run",
-        "the learnt tuning at the time of the first grouping is unknown; both default and current tuning are reported",
-        "occurrence-level truth comes from subject names unless labels.csv gives it per occurrence",
-    ]
+    if not report["read_only"]["unchanged"]:
+        report["limitations"].append(LIMIT_CHANGED)
+    report["limitations"] += LIMITS_ALWAYS
+    check_numbers_only(report)
     return report
 
 
@@ -403,8 +495,17 @@ def run_cli(args: list[str]) -> int:
         report = diagnose(session_dir(data_dir() / "sessions", folder), data_dir() / "learning", labels)
         report["ok"] = report["read_only"]["unchanged"] and not attempts
     except Exception as exc:  # noqa: BLE001 - the report must always be written
-        report = {"report_version": REPORT_VERSION, "ok": False, "error": f"{type(exc).__name__}: {exc}",
-                  "traceback": traceback.format_exc()[-2000:]}
+        # Own errors carry fixed texts; anything else: the type only (a message may hold a path or a name).
+        # The full traceback goes to a separate local file the owner does not need to share.
+        known = isinstance(exc, (LabelsError, SnapshotError)) or (
+            isinstance(exc, FileNotFoundError) and str(exc).startswith("no KiraPick session"))
+        report = {"report_version": REPORT_VERSION, "ok": False,
+                  "error": f"{type(exc).__name__}: {exc}" if known else type(exc).__name__}
+        try:
+            report_path.with_name(report_path.name + ".traceback.txt").write_text(
+                traceback.format_exc(), encoding="utf-8")
+        except OSError:
+            pass
     report["network_attempts"] = len(attempts)
     from app import __version__
 
