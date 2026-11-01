@@ -343,6 +343,40 @@ jobs:
           }
           $restored = $true; try { Set-Content (Join-Path $dir5 "probe.txt") "x" -ErrorAction Stop; Remove-Item (Join-Path $dir5 "probe.txt") } catch { $restored = $false }
           Check $restored "case5-read-only: ACL and attributes restored"
+          # 6. P0-A: same-label co-occurrence classes, opt-in local list, privacy, no list by default
+          $c6 = Join-Path $root "c6"; python scripts/ci_make_diag_session.py --cooc $c6 $data | Out-Null
+          $before6 = SessionState $c6
+          $list = Join-Path $env:RUNNER_TEMP "cooccurrence.csv"
+          $r6json = Join-Path $env:RUNNER_TEMP "case6.json"
+          & $exe --diagnose-grouping $c6 $r6json --cooccurrence-list $list | Out-Null
+          $code6 = $LASTEXITCODE
+          $r6 = Get-Content $r6json -Raw | ConvertFrom-Json; $t6 = Get-Content $r6json -Raw
+          $bc = $r6.cooccurrence.by_class
+          Check ($code6 -eq 0 -and $r6.ok -eq $true -and $r6.network_attempts -eq 0 -and $r6.cooccurrence.pairs -eq 4 -and $r6.cooccurrence.photos -eq 4 -and $bc.duplicate_face_only -eq 1 -and $bc.duplicate_overlapping_bodies -eq 0 -and $bc.possible_reflection -eq 1 -and $bc.two_people_same_label -eq 1 -and $bc.undetermined -eq 1 -and $r6.cooccurrence.hypotheses_only -eq $true -and $r6.cooccurrence.local_list_written -eq $true) "case6-cooccurrence: exit $code6, $($r6.cooccurrence | ConvertTo-Json -Compress -Depth 3)"
+          $csv = if (Test-Path $list) { Get-Content $list -Raw } else { "" }
+          Check ($csv -match "SYN_0001.JPG" -and $csv -match "K1-A" -and $csv -match "owner_verdict") "case6-cooccurrence: local list has photo and subject names (stays local)"
+          Check (-not ($t6 -match "SYN_|K1-A|K2-A|cooccurrence.csv|runneradmin")) "case6-cooccurrence: JSON has no names, labels or list path"
+          Check ((SessionState $c6) -eq $before6) "case6-cooccurrence: source unchanged"
+          $nolist = Join-Path $env:RUNNER_TEMP "nolist"; New-Item -ItemType Directory -Force $nolist | Out-Null
+          & $exe --diagnose-grouping $c6 (Join-Path $nolist "r.json") | Out-Null
+          $files = (Get-ChildItem $nolist -File | ForEach-Object Name) -join ","
+          $r6b = Get-Content (Join-Path $nolist "r.json") -Raw | ConvertFrom-Json
+          Check ($files -eq "r.json" -and $r6b.cooccurrence.local_list_written -eq $false) "case6-cooccurrence: no list without the flag ($files)"
+          $inside = Join-Path $data "sessions\list.csv"
+          & $exe --diagnose-grouping $c6 (Join-Path $nolist "r2.json") --cooccurrence-list $inside | Out-Null
+          Check ($LASTEXITCODE -eq 2 -and -not (Test-Path $inside) -and -not (Test-Path (Join-Path $nolist "r2.json"))) "case6-cooccurrence: list inside KiraPick data refused (exit $LASTEXITCODE)"
+          # 7. P0-B: learning audit on a known learning.db (session c1), learning.db unchanged
+          python scripts/ci_make_diag_session.py --learning $data | Out-Null
+          $learn = Join-Path $data "learning"
+          $lbefore = (Get-ChildItem $learn -File | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName).Hash)" }) -join ";"
+          $o7 = RunDiag $c1 "case7-learning"; $r7 = $o7.r; $a = $r7.learning_audit; $ft = $a.filtered_tuning
+          $lafter = (Get-ChildItem $learn -File | Sort-Object Name | ForEach-Object { "$($_.Name)=$((Get-FileHash $_.FullName).Hash)" }) -join ";"
+          Check ($o7.code -eq 0 -and $r7.ok -eq $true -and $a.available -eq $true -and $a.counts.by_kind.merge_same.answers -eq 8 -and $a.counts.by_kind.merge_same.pairs -eq 19 -and $a.counts.by_kind.merge_same.pairs_current_face -eq 18 -and $a.counts.by_kind.different_different.answers -eq 4) "case7-learning: counts $($a.counts.by_kind | ConvertTo-Json -Compress -Depth 3)"
+          Check ($a.tuning.applied -eq $true -and $a.tuning.face_shift -eq 0.04 -and $a.tuning.look_shift -eq 0 -and $a.tuning.reason_code -eq "cross_validation" -and $a.cross_validation.tuned_total -eq 3 -and $a.cross_validation.default_total -eq 15) "case7-learning: tuning $($a.tuning | ConvertTo-Json -Compress), cv $($a.cross_validation.tuned_total)/$($a.cross_validation.default_total)"
+          Check ($a.possible_contamination.same_answers_below_threshold -eq 3 -and $a.possible_contamination.hint_only -eq $true -and $ft.excluded_answers -eq 3 -and $ft.evidence_before.usable_pairs -eq 31 -and $ft.evidence_before.same_answers -eq 7 -and $ft.evidence_after.usable_pairs -eq 25 -and $ft.evidence_after.same_answers -eq 4 -and $ft.excluded_answers_cost_neutral -eq $true) "case7-learning: contamination + evidence before/after $($ft | ConvertTo-Json -Compress -Depth 3)"
+          $rb = $r7.reconstructed_baseline
+          Check ($rb.filtered_learning_applied -eq $true -and $null -ne $rb.filtered_learning.person.bcubed_f1 -and $null -ne $rb.tuned.person.bcubed_f1 -and $rb.runs.same_session_snapshot -eq $true -and $rb.runs.filtered.face_shift -eq 0.04) "case7-learning: tuned and filtered-learning runs on the same snapshot $($rb.runs | ConvertTo-Json -Compress -Depth 3)"
+          Check ($lafter -eq $lbefore -and $r7.read_only.unchanged -eq $true) "case7-learning: learning.db names + SHA-256 unchanged"
           Write-Host "::notice title=diag-positive summary ($($failed.Count) failed)::$($lines -join '%0A')"
           if ($failed.Count) { exit 1 }
 

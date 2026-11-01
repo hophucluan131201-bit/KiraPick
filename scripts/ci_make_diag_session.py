@@ -128,8 +128,81 @@ def append_wal(folder: Path, data: Path, seconds: float) -> None:
         time.sleep(0.05)
 
 
+def cooc(folder: Path, data: Path) -> None:
+    """P0-A: same-label pairs of each hypothesis class (1 duplicate_face_only, 1 possible_reflection,
+    1 two_people_same_label, 1 undetermined) plus one photo with two different labels (not a pair)."""
+    import json as _json
+
+    folder.mkdir(parents=True, exist_ok=True)
+    target = session_dir(data / "sessions", folder)
+    p = Project.create(target, folder.name)
+    (target / "kirapick-session").write_text("KiraPick session data\n", encoding="utf-8")
+    conn = p.conn
+    conn.execute("INSERT INTO sources (root_path, added_at) VALUES (?, 'n')", (str(folder),))
+    k1, k2 = unit(RNG.normal(size=128)), unit(RNG.normal(size=128))
+    other = unit(RNG.normal(size=128))
+    other = unit(other - (other @ k1) * k1)
+    k1_mid = unit(0.45 * k1 + (1 - 0.45 ** 2) ** 0.5 * other)  # face similarity 0.45 to k1: ambiguous
+    look = unit(RNG.random(96))
+    left, right = [0.05, 0.1, 0.3, 0.8], [0.6, 0.12, 0.3, 0.75]
+    body, face_in = [0.1, 0.1, 0.4, 0.8], [0.25, 0.15, 0.1, 0.1]
+    plan = [  # (photo, label, person box, face box, face vector)
+        (1, "K1-A", body, face_in, k1), (1, "K1-A", None, face_in, k1),
+        (2, "K1-A", left, [0.1, 0.12, 0.1, 0.1], k1), (2, "K1-A", right, [0.65, 0.14, 0.1, 0.1], k1),
+        (3, "K1-A", left, [0.1, 0.12, 0.1, 0.1], k1), (3, "K1-A", right, [0.65, 0.14, 0.1, 0.1], k2),
+        (4, "K1-A", left, [0.1, 0.12, 0.1, 0.1], k1), (4, "K1-A", right, [0.65, 0.14, 0.1, 0.1], k1_mid),
+        (5, "K1-A", left, [0.1, 0.12, 0.1, 0.1], k1), (5, "K2-A", right, [0.65, 0.14, 0.1, 0.1], k2),
+    ]
+    for asset, label, person, face_box, face in plan:
+        if not conn.execute("SELECT 1 FROM assets WHERE id = ?", (asset,)).fetchone():
+            conn.execute(
+                """INSERT INTO assets (id, source_id, relative_path, extension, media_kind, support_level, size,
+                   mtime_ns, quick_hash, status, capture_time, added_at, updated_at)
+                   VALUES (?, 1, ?, '.jpg', 'raster', 'verified', 1, 1, ?, 'ok', ?, 'n', 'n')""",
+                (asset, f"SYN_{asset:04d}.JPG", str(asset), (T0 + timedelta(seconds=asset * 30)).isoformat()))
+        occ = int(conn.execute(
+            """INSERT INTO occurrences (asset_id, person_box, face_box, prominence, is_main, analysis_version,
+               created_at) VALUES (?, ?, ?, 1.0, 1, 1, 'n')""",
+            (asset, _json.dumps(person) if person else None, _json.dumps(face_box))).lastrowid)
+        conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'face', 't', ?)", (occ, face.astype("<f4").tobytes()))
+        conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'outfit', 't', ?)", (occ, look.astype("<f4").tobytes()))
+        sid = int(conn.execute("INSERT INTO subjects (display_name, user_locked, created_at) VALUES (?, 1, 'n')",
+                               (label,)).lastrowid)
+        conn.execute("UPDATE occurrences SET subject_id = ?, assignment = 'manual' WHERE id = ?", (sid, occ))
+    conn.commit()
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    p.close()
+    print(json.dumps({"expected": {"duplicate_face_only": 1, "duplicate_overlapping_bodies": 0,
+                                   "possible_reflection": 1, "two_people_same_label": 1, "undetermined": 1}}))
+
+
+def learning(data: Path) -> None:
+    """P0-B: a learning.db with known answers (4 true merges, 4 'different' with faces 0.67 close in time,
+    3 cross-look merges, 1 remove, 1 outdated-cue merge) — as tests/unit/test_diagnose_followup.py."""
+    from app.identity.features import OUTFIT_VERSION
+    from app.learning.store import LearningStore, PairEvidence
+    from app.workers.analyze_job import FACE_VECTOR_VERSION
+
+    store = LearningStore(data / "learning")
+    for _ in range(4):
+        store.add_identity("merge", True, [PairEvidence(0.85, 0.9, 60.0)] * 3, FACE_VECTOR_VERSION, OUTFIT_VERSION)
+    for _ in range(4):
+        store.add_identity("different", False, [PairEvidence(0.67, 0.5, 60.0)] * 3, FACE_VECTOR_VERSION,
+                           OUTFIT_VERSION)
+    for _ in range(3):
+        store.add_identity("merge", True, [PairEvidence(0.6, 0.3, 4000.0)] * 2, FACE_VECTOR_VERSION, OUTFIT_VERSION)
+    store.add_identity("remove", False, [PairEvidence(0.2, 0.4, 60.0)], FACE_VECTOR_VERSION, OUTFIT_VERSION)
+    store.add_identity("merge", True, [PairEvidence(0.8, 0.9, 60.0)], "old-face", "old-outfit")
+    store.close()
+    print("learning written")
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "--hold":
+    if sys.argv[1] == "--cooc":
+        cooc(Path(sys.argv[2]), Path(sys.argv[3]))
+    elif sys.argv[1] == "--learning":
+        learning(Path(sys.argv[2]))
+    elif sys.argv[1] == "--hold":
         hold(Path(sys.argv[2]), Path(sys.argv[3]), float(sys.argv[4]))
     elif sys.argv[1] == "--append-wal":
         append_wal(Path(sys.argv[2]), Path(sys.argv[3]), float(sys.argv[4]))
