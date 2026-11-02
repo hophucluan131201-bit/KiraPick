@@ -27,11 +27,13 @@ def _avatar(project: Project, subject_id: int) -> tuple[QPixmap | None, int]:
 class ReviewDialog(QDialog):
     changed = Signal()
 
-    def __init__(self, project: Project, parent: QWidget | None = None, teacher: Teacher | None = None) -> None:
+    def __init__(self, project: Project, parent: QWidget | None = None, teacher: Teacher | None = None,
+                 run=None) -> None:  # noqa: ANN001
         super().__init__(parent)
         self.setWindowTitle("Cần xem lại: có phải cùng một chủ thể?")
         self.project = project
         self.teacher = teacher
+        self.run = run  # run(label, fn): one undoable correction (the window's history); None = plain transaction
         self.queue: list[Suggestion] = merge_suggestions(project.conn)
         self.index = 0
         self.decisions = 0
@@ -111,16 +113,23 @@ class ReviewDialog(QDialog):
         self.index += 1
         self._show()
 
+    def _run(self, label: str, fn) -> None:  # noqa: ANN001
+        if self.run is not None:
+            self.run(label, fn)
+            return
+        with self.project.transaction() as conn:
+            fn(conn)
+
     def answer_same(self) -> None:
         s = self.current()
         if s is None:
             return
         counts = {r["id"]: r["photos"] for r in actions.subjects_summary(self.project.conn)}
         keep, drop = (s.a, s.b) if counts.get(s.a, 0) >= counts.get(s.b, 0) else (s.b, s.a)
-        with self.project.transaction() as conn:
-            if self.teacher is not None:
-                self.teacher.merged(conn, keep, drop)
-            actions.merge_subjects(conn, keep, drop)
+        def merge(conn) -> None:  # noqa: ANN001
+            actions.merge_look(conn, keep, [drop], teacher=self.teacher)
+
+        self._run("gộp hai chủ thể", merge)
         self.decisions += 1
         self.changed.emit()
         self.next()
@@ -129,10 +138,12 @@ class ReviewDialog(QDialog):
         s = self.current()
         if s is None:
             return
-        with self.project.transaction() as conn:
+        def mark(conn) -> None:  # noqa: ANN001
             if self.teacher is not None:
                 self.teacher.different(conn, s.a, s.b)
             actions.mark_different(conn, s.a, s.b)
+
+        self._run("đánh dấu hai chủ thể khác nhau", mark)
         self.decisions += 1
         self.changed.emit()
         self.next()
