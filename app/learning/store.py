@@ -28,6 +28,11 @@ from app.learning.taste import TasteExample
 log = logging.getLogger(__name__)
 
 DB_NAME = "learning.db"
+OP_BASE = -(2 ** 40)  # answer ids <= this belong to undoable operations (app.undo); ordinary answers are >= 1
+# The reservation row of an operation id. The table only allows the four answer kinds (CHECK), so a reservation is a
+# cue-less "merge" row with same = 0 (an answer the teacher never writes) marked by this outfit_version; it is never a
+# learning example (identity_examples / identity_counts skip it).
+RESERVATION_VERSION = "undo-op-reservation"
 SCHEMA_VERSION = 7
 # v7: learned sharpness: one row per photo, the user's Q/W/R label with the sharpness measurements
 # and the camera + lens it applies to (model names only).
@@ -155,13 +160,19 @@ class LearningStore:
                 self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def add_identity(self, kind: str, same: bool, pairs: list[PairEvidence], face_version: str,
-                     outfit_version: str, arc_version: str = "", body_version: str = "") -> int:
+                     outfit_version: str, arc_version: str = "", body_version: str = "",
+                     answer_id: int | None = None) -> int:
+        """``answer_id``: an undoable operation's reserved id (<= OP_BASE); None = the next ordinary answer."""
         if not pairs:
             return 0
+        if answer_id is not None and answer_id > OP_BASE:
+            raise ValueError("operation answer ids are reserved below OP_BASE")
         today = date.today().isoformat()
         r = lambda v, n=4: None if v is None else round(v, n)  # noqa: E731
         with self.conn:
-            answer = self.conn.execute("SELECT COALESCE(MAX(answer_id), 0) + 1 FROM identity_feedback").fetchone()[0]
+            # Ordinary answers count 1, 2, 3 …; undo operations live below OP_BASE and never move this counter.
+            answer = answer_id if answer_id is not None else self.conn.execute(
+                "SELECT MAX(COALESCE(MAX(answer_id), 0), 0) + 1 FROM identity_feedback").fetchone()[0]
             self.conn.executemany(
                 """INSERT INTO identity_feedback (created_on, app_version, face_version, outfit_version, kind, same,
                    face, outfit, dt_s, answer_id, face_arc, arc_version, body, body_version)
@@ -177,7 +188,8 @@ class LearningStore:
         rows = self.conn.execute(
             """SELECT answer_id, created_on, kind, same, face, outfit, dt_s, face_arc, body,
                       face_version, outfit_version, arc_version, body_version
-               FROM identity_feedback ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
+               FROM identity_feedback WHERE outfit_version != ?
+               ORDER BY id DESC LIMIT ?""", (RESERVATION_VERSION, limit)).fetchall()
         old_answers: dict[tuple, int] = {}
         out = []
         for (answer, day, kind, same, face, outfit, dt, arc, body, fv, ov, av, bv) in rows:
@@ -186,6 +198,30 @@ class LearningStore:
             out.append(IdentityExample(answer, bool(same), PairEvidence(face, outfit, dt, arc, body),
                                        CueVersions(fv, ov, av or "", bv or "")))
         return out
+
+    # ---- undoable operations (app.undo): ids reserved below OP_BASE, one reservation row each (no cues) ----
+    def reserve_operation(self) -> int:
+        """A new operation id, unique: allocated under the write lock, below every stored id and OP_BASE."""
+        with self.conn:
+            self.conn.execute("BEGIN IMMEDIATE")
+            low = self.conn.execute("SELECT MIN(answer_id) FROM identity_feedback").fetchone()[0]
+            op_id = min(OP_BASE, low if low is not None else 0) - 1
+            self.conn.execute(
+                """INSERT INTO identity_feedback (created_on, app_version, face_version, outfit_version, kind, same,
+                   answer_id) VALUES (?, ?, '', ?, 'merge', 0, ?)""",
+                (date.today().isoformat(), __version__, RESERVATION_VERSION, op_id))
+        return int(op_id)
+
+    def operation_has_examples(self, op_id: int) -> bool:
+        return self.conn.execute("SELECT 1 FROM identity_feedback WHERE answer_id = ? AND outfit_version != ? LIMIT 1",
+                                 (op_id, RESERVATION_VERSION)).fetchone() is not None
+
+    def delete_operation(self, op_id: int) -> int:
+        """Remove an operation's examples and its reservation (idempotent; only ids <= OP_BASE)."""
+        if op_id > OP_BASE:
+            raise ValueError("only operation ids can be deleted this way")
+        with self.conn:
+            return self.conn.execute("DELETE FROM identity_feedback WHERE answer_id = ?", (op_id,)).rowcount
 
     def add_culling(self, decision: str, ai_rank: int | None, total: float | None, parts: dict[str, float | None],
                     profile_version: str) -> None:
@@ -267,7 +303,8 @@ class LearningStore:
         return self.conn.execute("SELECT COUNT(*) FROM culling_feedback").fetchone()[0]
 
     def identity_counts(self) -> dict[str, int]:
-        rows = self.conn.execute("SELECT same, COUNT(*) FROM identity_feedback GROUP BY same").fetchall()
+        rows = self.conn.execute("SELECT same, COUNT(*) FROM identity_feedback WHERE outfit_version != ? GROUP BY same",
+                                 (RESERVATION_VERSION,)).fetchall()
         counts = {"same": 0, "different": 0}
         for same, n in rows:
             counts["same" if same else "different"] = n

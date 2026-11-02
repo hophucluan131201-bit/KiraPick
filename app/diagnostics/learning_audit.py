@@ -15,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 
+from app.learning.store import RESERVATION_VERSION
+
 KINDS = ("merge", "different", "remove", "assign")
 SAME_KINDS = ("merge", "assign")
 
@@ -29,7 +31,8 @@ def answer_kinds(conn: sqlite3.Connection) -> dict[int, str]:
     out: dict[int, str] = {}
     old: dict[tuple, int] = {}
     for answer, day, kind, same in conn.execute(
-            "SELECT answer_id, created_on, kind, same FROM identity_feedback ORDER BY id DESC LIMIT 20000"):
+            "SELECT answer_id, created_on, kind, same FROM identity_feedback WHERE outfit_version != ? "
+            "ORDER BY id DESC LIMIT 20000", (RESERVATION_VERSION,)):
         if answer is None:
             answer = old.setdefault((day, kind, same), -1 - len(old))
         out[int(answer)] = kind if kind in KINDS else "other"
@@ -42,12 +45,15 @@ def _counts(conn: sqlite3.Connection) -> dict:
     from app.workers.analyze_job import FACE_VECTOR_VERSION
 
     out: dict = {"pre_v5_rows": conn.execute("SELECT COUNT(*) FROM identity_feedback WHERE answer_id IS NULL")
-                 .fetchone()[0]}
+                 .fetchone()[0],
+                 "undo_operation_reservations": conn.execute(
+                     "SELECT COUNT(*) FROM identity_feedback WHERE outfit_version = ?", (RESERVATION_VERSION,)).fetchone()[0]}
     rows = conn.execute("""SELECT kind, same, COUNT(*), COUNT(DISTINCT answer_id),
                                   SUM(face_version = ?), SUM(outfit_version = ?), SUM(arc_version = ?),
                                   SUM(body_version = ?)
-                           FROM identity_feedback GROUP BY kind, same""",
-                        (FACE_VECTOR_VERSION, OUTFIT_VERSION, ARCFACE_VERSION, BODY_VERSION)).fetchall()
+                           FROM identity_feedback WHERE outfit_version != ? GROUP BY kind, same""",
+                        (FACE_VECTOR_VERSION, OUTFIT_VERSION, ARCFACE_VERSION, BODY_VERSION, RESERVATION_VERSION)
+                        ).fetchall()
     by = {}
     for kind, same, pairs, answers, face_cur, outfit_cur, arc_cur, body_cur in rows:
         key = f"{kind if kind in KINDS else 'other'}_{'same' if same else 'different'}"
