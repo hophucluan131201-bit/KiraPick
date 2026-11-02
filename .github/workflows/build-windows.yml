@@ -18,6 +18,10 @@ on:
         description: "Also run the Windows tests: full suite, GUI smoke, Snap/DPI, performance, stress (no build needed)"
         type: boolean
         default: false
+      k2_repeat:
+        description: "K2: P/X latency repeatability, 20 fresh-process runs per test, measurement only (editions=none)"
+        type: boolean
+        default: false
   push:
     branches: [main, beta]
 
@@ -40,7 +44,8 @@ jobs:
           import json, os
           msg, event = os.environ.get("MESSAGE", ""), os.environ["EVENT"]
           if event != "push":
-              editions = [e.strip() for e in (os.environ.get("WANTED") or "directml,cuda,openvino").split(",") if e.strip()]
+              editions = [e.strip() for e in (os.environ.get("WANTED") or "directml,cuda,openvino").split(",")
+                          if e.strip() in ("directml", "cuda", "openvino")]  # "none": no build
           elif "[release-all]" in msg:
               editions = ["directml", "cuda", "openvino"]
           else:
@@ -123,6 +128,33 @@ jobs:
   # shutdown / worker stress. Never blocks anything and never publishes: started by hand ("run_perf") or by "[perf]"
   # in a commit message. Each part prints its OWN notice (suite / gui-windows / snap-dpi / perf / stress): the job is
   # non-blocking, so a green job is not evidence that any part passed (review RV14-01) — read the notices.
+  # K2: P/X latency repeatability (measurement only; thresholds live in the perf tests and are unchanged).
+  k2-repeat:
+    if: github.event.inputs.k2_repeat == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python packages
+        run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt "pytest>=9,<10" "pytest-qt>=4.4,<5"
+      - name: 20 fresh-process runs per test
+        shell: pwsh
+        run: |
+          $out = python scripts/k2_repeat.py --runs 20 --out k2 2>&1
+          $code = $LASTEXITCODE
+          $out | Write-Host
+          foreach ($line in ($out | Where-Object { $_ -like "K2 *" })) { Write-Host "::notice title=k2::$line" }
+          exit $code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kirapick-k2-windows
+          path: k2/
+          retention-days: 30
+
   perf:
     if: github.event.inputs.run_perf == 'true' || contains(github.event.head_commit.message, '[perf]')
     runs-on: windows-2022

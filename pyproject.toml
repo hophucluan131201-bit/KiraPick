@@ -43,5 +43,6 @@ markers = [
     "gui: drives the Qt main window (offscreen)",
     "perf: timing measurements; run explicitly with -m perf",
     "stress: long repeated lifecycle runs; run explicitly with -m stress",
+    "k2: P/X latency repeatability measurement (scripts/k2_repeat.py); run explicitly with -m k2",
 ]
-addopts = "-m 'not perf and not stress'"
+addopts = "-m 'not perf and not stress and not k2'"
