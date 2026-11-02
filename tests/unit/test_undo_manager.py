@@ -250,9 +250,27 @@ def test_bounds_keep_the_newest_entries(world, monkeypatch) -> None:
     journal = read_config(p.conn)[um.JOURNAL_KEY]
     assert len(journal) == um.MAX_PERSISTED and journal[-1]["label"] == f"r{um.MAX_PERSISTED + 4}"
     assert len(json.dumps(journal)) <= um.MAX_BYTES
-    monkeypatch.setattr(um, "MAX_BYTES", 10)  # a correction larger than the bound is done but not kept
-    assert m.subject_action("big", lambda c: actions.rename_subject(c, s1, "Lon")) is False
-    assert actions.subject_label(p.conn, s1) == "Lon"
+    monkeypatch.setattr(um, "MAX_BYTES", 10)  # a correction whose undo record cannot be kept is refused
+    with pytest.raises(um.UndoTooLarge):
+        m.subject_action("big", lambda c: actions.rename_subject(c, s1, "Lon"))
+    assert actions.subject_label(p.conn, s1) == f"Ten {um.MAX_PERSISTED + 4}"
+
+
+def test_oversized_merge_is_refused_and_changes_nothing(world, monkeypatch) -> None:
+    """P0: fail closed — no merge without undo protection; session and learning databases unchanged."""
+    p, teacher, _ = world
+    m = UndoManager(p, teacher)
+    s1, s2 = _subjects(p)[:2]
+    m.subject_action("r", lambda c: actions.rename_subject(c, s1, "Mai"))
+    before, learn_before = _rows(p), _learning_rows(teacher.store)
+    journal_before = read_config(p.conn)[um.JOURNAL_KEY]
+    monkeypatch.setattr(um, "MAX_BYTES", 400)  # the merge record (~450 bytes here) cannot fit
+    with pytest.raises(um.UndoTooLarge):
+        m.subject_action("merge", lambda c: actions.merge_look(c, s1, [s2], teacher=teacher))
+    assert _rows(p) == before and _learning_rows(teacher.store) == learn_before
+    assert read_config(p.conn)[um.JOURNAL_KEY] == journal_before and m.next_label() == "r"
+    monkeypatch.setattr(um, "MAX_BYTES", 1_000_000)
+    assert m.subject_action("merge", lambda c: actions.merge_look(c, s1, [s2], teacher=teacher))  # fits again
 
 
 def test_renumbering_clears_the_subject_history(world) -> None:

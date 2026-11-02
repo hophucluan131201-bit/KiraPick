@@ -41,6 +41,10 @@ MAX_BYTES = 1_000_000
 MAX_MEMORY_DECISIONS = 200
 
 
+class UndoTooLarge(RuntimeError):
+    """The correction is too large to keep an undo record for: it is refused (nothing changed)."""
+
+
 class UndoRefused(RuntimeError):
     """The data changed since the action in a way that makes an exact undo impossible."""
 
@@ -159,7 +163,8 @@ class UndoManager:
     def subject_action(self, label: str, fn: Callable[[sqlite3.Connection], None]) -> bool:
         """Run ``fn(conn)`` (a subject correction, teacher calls included) as one undoable operation.
 
-        Returns True when an undo entry was recorded. Exceptions from ``fn`` propagate; nothing is changed then."""
+        Returns True when an undo entry was recorded, False when nothing changed. Exceptions from ``fn`` propagate,
+        and UndoTooLarge is raised when the undo record would exceed MAX_BYTES; nothing is changed in either case."""
         teacher = self.teacher
         collecting = teacher is not None and self.store is not None
         if collecting:
@@ -179,23 +184,25 @@ class UndoManager:
                 collecting = False
                 if _empty(diff):
                     return False
+                # Fail closed: a correction whose undo record cannot be kept is not done at all (the transaction
+                # rolls back, learning.db is not touched — nothing is reserved yet).
+                data = {"v": JOURNAL_VERSION, "seq": self._seq, "label": label, "op_id": -(2 ** 62),
+                        "learning": "reserved", **diff}  # the largest the record can be
+                size = len(json.dumps(data))
+                if size > MAX_BYTES:
+                    log.info("undo: correction refused, its undo record would be %d bytes", size)
+                    raise UndoTooLarge(size)
                 if items:
                     try:
                         op_id = self.store.reserve_operation()  # before the session commit (crash-safe)
                     except Exception:  # noqa: BLE001 - learning is optional; the action goes ahead
                         log.exception("undo: could not reserve a learning operation id")
-                entry = Entry(self._seq, "subject", label,
-                              {"v": JOURNAL_VERSION, "seq": self._seq, "label": label, "op_id": op_id,
-                               "learning": "reserved" if op_id is not None else "none", **diff})
-                size = len(json.dumps(entry.data))
-                if size > MAX_BYTES:
-                    log.info("undo: correction too large to keep (%d bytes)", size)
-                    entry = None
-                else:
-                    cfg = read_config(conn)
-                    self._entries.append(entry)
-                    self._write_journal(cfg)
-                    write_config(conn, cfg)
+                data.update(op_id=op_id, learning="reserved" if op_id is not None else "none")
+                entry = Entry(self._seq, "subject", label, data)
+                cfg = read_config(conn)
+                self._entries.append(entry)
+                self._write_journal(cfg)
+                write_config(conn, cfg)
         except BaseException:
             if collecting:
                 teacher.stop_collecting()
@@ -223,7 +230,8 @@ class UndoManager:
     def _write_journal(self, cfg: dict) -> None:
         """Persist the subject entries (oldest dropped beyond the bounds)."""
         subject = [e for e in self._entries if e.kind == "subject"]
-        while len(subject) > MAX_PERSISTED or len(json.dumps([e.data for e in subject])) > MAX_BYTES:
+        while len(subject) > 1 and (len(subject) > MAX_PERSISTED or
+                                    len(json.dumps([e.data for e in subject])) > MAX_BYTES):
             dropped = subject.pop(0)
             self._entries.remove(dropped)
         if subject:

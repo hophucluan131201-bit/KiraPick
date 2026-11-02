@@ -70,7 +70,7 @@ from app.identity import actions
 from app.identity.cluster import merge_suggestions
 from app.storage.project_config import picks_stale
 from app.ui.merge_dialog import MergeDialog
-from app.undo.manager import UndoManager, UndoRefused
+from app.undo.manager import UndoManager, UndoRefused, UndoTooLarge
 from app.learning.store import LearningStore
 from app.quality import burst, select
 from app.learning.teacher import Teacher, group_key, photo_key
@@ -1486,7 +1486,8 @@ class MainWindow(QMainWindow):
                                unmark_conflicts=choice.unmark_conflicts, teacher=self.teacher)
 
         try:
-            self._subject_action(f"gộp {len(ids)} chủ thể", merge)
+            if not self._subject_action(f"gộp {len(ids)} chủ thể", merge):
+                return  # refused (too large to undo) and explained: nothing changed
         except actions.MergeConflict:
             QMessageBox.warning(self, "Gộp chủ thể", "Các chủ thể này đã được đánh dấu là người khác nhau. "
                                                        "Không có gì bị thay đổi.")
@@ -1622,6 +1623,8 @@ class MainWindow(QMainWindow):
             self.teacher.assigned(conn, made[-1], assets)
 
         self._subject_action("tạo chủ thể mới", run)
+        if not made or self.project.conn.execute("SELECT 1 FROM subjects WHERE id = ?", (made[-1],)).fetchone() is None:
+            return None  # refused (too large to undo): nothing changed
         subject_id = made[-1]
         self._after_people_change()
         self.status.setText(f"Đã tạo {actions.subject_label(self.project.conn, subject_id)} với {len(assets)} ảnh.")
@@ -2313,6 +2316,12 @@ class MainWindow(QMainWindow):
             return True
         try:
             return self.undo.subject_action(label, fn)
+        except UndoTooLarge:
+            QMessageBox.warning(
+                self, "Không thực hiện",
+                f"Không {label} được: thao tác này lớn quá nên app không giữ được bản để hoàn tác (Ctrl+Z).\n"
+                "Không có gì bị thay đổi. Hãy làm thành nhiều lần nhỏ hơn (ví dụ gộp từng hai chủ thể).")
+            return False
         finally:
             self._update_undo_action()
 

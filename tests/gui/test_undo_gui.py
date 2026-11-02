@@ -237,3 +237,41 @@ def test_cancelled_merge_dialog_changes_nothing(qtbot, env, monkeypatch) -> None
     before = _occ(w)
     _dialog(w, [1, 2], monkeypatch, lambda d: False)
     assert _occ(w) == before and not w.act_undo.isEnabled()
+
+
+def test_oversized_merge_is_refused_with_an_explanation(qtbot, env, monkeypatch) -> None:  # noqa: ANN001, F811
+    from PySide6.QtWidgets import QMessageBox
+
+    from app.undo import manager as um
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    _three_people(w)
+    before_occ, before_subj = _occ(w), _subjects(w)
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: warned.append(a[2]))
+    monkeypatch.setattr(um, "MAX_BYTES", 100)
+    _dialog(w, [1, 2], monkeypatch)
+    assert warned and "không giữ được bản để hoàn tác" in warned[0] and "Không có gì bị thay đổi" in warned[0]
+    assert _occ(w) == before_occ and _subjects(w) == before_subj and not w.act_undo.isEnabled()
+    assert "Đã gộp" not in w.status.text()
+
+
+def test_original_photos_unchanged_by_merge_decisions_and_undo(qtbot, env, monkeypatch) -> None:  # noqa: ANN001, F811
+    import hashlib
+
+    def hashes() -> dict:
+        return {f.name: hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted(env["photos"].iterdir())}
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    before = hashes()
+    _three_people(w)
+    _dialog(w, [1, 2], monkeypatch)
+    w.select_row(0)
+    w.grid.setFocus()
+    for key in (Qt.Key.Key_P, Qt.Key.Key_5, Qt.Key.Key_X):
+        _key(qtbot, w, key)
+    while w.act_undo.isEnabled():
+        _ctrl_z(qtbot, w)
+    assert hashes() == before
