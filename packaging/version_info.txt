@@ -6,11 +6,11 @@ VSVersionInfo(
     StringFileInfo([StringTable('040904B0', [
       StringStruct('CompanyName', 'KiraPick'),
       StringStruct('FileDescription', 'KiraPick'),
-      StringStruct('FileVersion', '3.0.0b1.dev4'),
+      StringStruct('FileVersion', '3.0.0b1.dev5'),
       StringStruct('InternalName', 'KiraPick'),
       StringStruct('OriginalFilename', 'KiraPick.exe'),
       StringStruct('ProductName', 'KiraPick'),
-      StringStruct('ProductVersion', '3.0.0b1.dev4')])]),
+      StringStruct('ProductVersion', '3.0.0b1.dev5')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
 )

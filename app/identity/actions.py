@@ -40,10 +40,28 @@ def rename_subject(conn: sqlite3.Connection, subject_id: int, name: str) -> None
                  (name or None, int(bool(name)), subject_id))
 
 
+class MergeConflict(ValueError):
+    """The user marked the two subjects as different people: unmark them first (never merged silently)."""
+
+
+def are_different(conn: sqlite3.Connection, a: int, b: int) -> bool:
+    return conn.execute("SELECT 1 FROM subject_pairs WHERE a = ? AND b = ? AND relation = 'different'",
+                        (min(a, b), max(a, b))).fetchone() is not None
+
+
 def merge_subjects(conn: sqlite3.Connection, keep: int, drop: int) -> None:
-    """'These are the same person': everything of ``drop`` moves to ``keep`` (manually)."""
+    """'These are the same person': everything of ``drop`` moves to ``keep`` (manually).
+
+    The user's "different" marks of ``drop`` are carried to ``keep`` (they would otherwise be deleted with it);
+    merging two subjects marked different is refused (MergeConflict)."""
     if keep == drop:
         return
+    if are_different(conn, keep, drop):
+        raise MergeConflict(f"subjects {keep} and {drop} are marked as different people")
+    for (other,) in conn.execute("""SELECT CASE WHEN a = ? THEN b ELSE a END FROM subject_pairs
+                                    WHERE relation = 'different' AND (a = ? OR b = ?)""", (drop, drop, drop)).fetchall():
+        if other != keep:
+            mark_different(conn, keep, other)
     conn.execute("UPDATE occurrences SET subject_id = ?, assignment = 'manual', confidence = NULL WHERE subject_id = ?",
                  (keep, drop))
     conn.execute("UPDATE occurrences SET excluded_subject_id = ? WHERE excluded_subject_id = ?", (keep, drop))
@@ -75,6 +93,44 @@ def mark_different(conn: sqlite3.Connection, a: int, b: int) -> None:
         return
     conn.execute("INSERT OR IGNORE INTO subject_pairs (a, b, relation, created_at) VALUES (?, ?, 'different', ?)",
                  (min(a, b), max(a, b), utc_now()))
+
+
+def merge_look(conn: sqlite3.Connection, keep: int, others: list[int], name: str | None = None,
+               unmark_conflicts: bool = False, teacher=None) -> None:  # noqa: ANN001
+    """LOOK merge (same person, same costume): ``others`` into ``keep``.
+
+    Refused (MergeConflict, nothing changed) when two of the subjects are marked different, unless the user chose
+    to withdraw those marks (``unmark_conflicts``). Marks against third subjects are carried to ``keep``. A ⭐
+    selection that chose photos for one of ``others`` is flagged stale (asked to run again). ``name``: the merged
+    subject's name (None = keep the current one)."""
+    from itertools import combinations
+
+    from app.storage.project_config import set_picks_stale
+
+    group = [keep, *[o for o in others if o != keep]]
+    conflicts = [(a, b) for a, b in combinations(group, 2) if are_different(conn, a, b)]
+    if conflicts and not unmark_conflicts:
+        raise MergeConflict("some of these subjects are marked as different people")
+    for a, b in conflicts:
+        unmark_different(conn, a, b)
+    marks = ",".join("?" * len(group[1:]))
+    stale = bool(group[1:]) and conn.execute(
+        f"SELECT 1 FROM picks WHERE subject_id IN ({marks}) LIMIT 1", group[1:]).fetchone() is not None
+    for other in group[1:]:
+        if teacher is not None:
+            teacher.merged(conn, keep, other)
+        merge_subjects(conn, keep, other)
+    if name is not None:
+        current = conn.execute("SELECT display_name FROM subjects WHERE id = ?", (keep,)).fetchone()
+        if current is not None and (current[0] or "") != name.strip():
+            rename_subject(conn, keep, name)
+    if stale:
+        set_picks_stale(conn, True)
+
+
+def unmark_different(conn: sqlite3.Connection, a: int, b: int) -> None:
+    """Withdraw a "these are different people" mark."""
+    conn.execute("DELETE FROM subject_pairs WHERE a = ? AND b = ? AND relation = 'different'", (min(a, b), max(a, b)))
 
 
 def remove_photos_from_subject(conn: sqlite3.Connection, subject_id: int, asset_ids: list[int]) -> int:

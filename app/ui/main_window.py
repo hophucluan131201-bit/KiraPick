@@ -68,6 +68,9 @@ from app.storage.sessions import delete_session, open_session, purge_old_session
 from app.ai.models import ModelRegistry, ModelState
 from app.identity import actions
 from app.identity.cluster import merge_suggestions
+from app.storage.project_config import picks_stale
+from app.ui.merge_dialog import MergeDialog
+from app.undo.manager import UndoManager, UndoRefused, UndoTooLarge
 from app.learning.store import LearningStore
 from app.quality import burst, select
 from app.learning.teacher import Teacher, group_key, photo_key
@@ -166,6 +169,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} {__version__}")
         self.settings = settings or QSettings(*SETTINGS_IDS)
         self.project: Project | None = None
+        self.undo: UndoManager | None = None
         self._session_root: Path | None = None
         self._restored_note = ""
         self.import_thread: ImportThread | None = None
@@ -312,6 +316,22 @@ class MainWindow(QMainWindow):
         self.act_merge.triggered.connect(lambda: self.merge_selected_people())
         self.act_select = QAction("⭐ Chọn ảnh", self)
         self.act_select.triggered.connect(lambda: self.open_select_dialog())
+        # Ctrl+Z: the newest undoable action (subject corrections and photo decisions, one history). A text field
+        # with the keyboard keeps its own Ctrl+Z (Qt gives it the shortcut first; undo_last checks too).
+        self.act_undo = QAction("↶ Hoàn tác", self)
+        self.act_undo.setShortcut(QKeySequence(QKeySequence.StandardKey.Undo))
+        self.act_undo.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
+        self.act_undo.setEnabled(False)
+        self.act_undo.triggered.connect(self.undo_last)
+        self.addAction(self.act_undo)
+        # The window's menu area is the step bar (setMenuWidget), so "Chỉnh sửa" is a menu button in it.
+        self.edit_menu = QMenu("Chỉnh sửa", self)
+        self.edit_menu.addAction(self.act_undo)
+        self.edit_button = QToolButton(self)
+        self.edit_button.setText("Chỉnh sửa")
+        self.edit_button.setToolTip("Hoàn tác thao tác gần nhất (Ctrl+Z)")
+        self.edit_button.setMenu(self.edit_menu)
+        self.edit_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         for act in (self.act_import, self.act_analyze, self.act_merge, self.act_quality, self.act_select,
                     self.act_client_list, self.act_export, self.act_grid_view, self.act_loupe):
             self.addAction(act)  # keyboard shortcuts work without a toolbar
@@ -359,7 +379,7 @@ class MainWindow(QMainWindow):
         focus_search.setShortcut(QKeySequence("Ctrl+F"))
         focus_search.triggered.connect(lambda: (self.search.setFocus(), self.search.selectAll()))
         self.addAction(focus_search)
-        self.top_bar = TopBar(self.search, self.options_button)
+        self.top_bar = TopBar(self.search, self.options_button, edit_button=self.edit_button)
         for key, act in (("import", self.act_import), ("people", self.act_analyze), ("quality", self.act_quality),
                          ("pick", self.act_select), ("export", self.act_export)):
             self.top_bar.bind(key, act)
@@ -675,6 +695,7 @@ class MainWindow(QMainWindow):
         if self.project is not None:
             self.project.close()
         self.project = project
+        self.undo = UndoManager(project, self.teacher)
         self._session_root = photo_root
         self.setWindowTitle(f"{photo_root.name or photo_root} — {APP_NAME} {__version__}")
         self.search.clear()
@@ -690,6 +711,10 @@ class MainWindow(QMainWindow):
         self._update_steps()
         if self.model.rowCount():
             self.select_row(0)
+        self._update_undo_action()
+        if self.undo.restored_subject_entries:
+            self.status.setText(f"Có thể hoàn tác {self.undo.restored_subject_entries} thao tác với chủ thể (Ctrl+Z). "
+                                "Các lần Chọn/Loại/sao trước khi đóng app không hoàn tác được nữa.")
 
     def _export_may_stop(self, doing: str) -> bool:
         """Closing or switching stops a running export after its current file: ask first (No = keep copying)."""
@@ -723,6 +748,8 @@ class MainWindow(QMainWindow):
         if self.project is not None:
             self.project.close()
         self.project = None
+        self.undo = None
+        self._update_undo_action()
         self._session_root = None
         self._paused_job = None
         self._fill_people()
@@ -886,7 +913,11 @@ class MainWindow(QMainWindow):
                 parts.append(f"{summary['missing']} không còn trên ổ đĩa")
             if summary["pairs"]:
                 parts.append(f"{summary['pairs']} cặp RAW+JPEG")
-            self.status.setText(", ".join(parts) + ". " + self._restored_note)
+            undo_note = ""
+            if self.undo is not None and self.undo.restored_subject_entries and self.undo.can_undo():
+                undo_note = (f" Có thể hoàn tác {self.undo.restored_subject_entries} thao tác với chủ thể (Ctrl+Z); "
+                             "các lần Chọn/Loại/sao trước khi đóng app không hoàn tác được nữa.")
+            self.status.setText(", ".join(parts) + ". " + self._restored_note + undo_note)
 
     def _on_import_failed(self, message: str) -> None:
         if not self._gate.open:  # releasing the session: no dialog (it would run its own event loop); logged
@@ -1077,6 +1108,7 @@ class MainWindow(QMainWindow):
         if self.project is not None:
             self.project.close()
             self.project = None  # a late signal must find no session, not a closed one
+            self.undo = None
         if self.teacher.store is not None:
             self.teacher.store.close()
             self.teacher.store = None
@@ -1306,10 +1338,13 @@ class MainWindow(QMainWindow):
         if ask and QMessageBox.question(
                 self, "Đánh số lại",
                 "Đánh số lại các chủ thể thành 1, 2, 3… theo thời gian chụp (không còn số bị nhảy)?\n"
-                "Chủ thể đã đặt tên giữ nguyên tên; ảnh và các lần sửa không bị ảnh hưởng.") != QMessageBox.StandardButton.Yes:
+                "Chủ thể đã đặt tên giữ nguyên tên; ảnh và các lần sửa không bị ảnh hưởng.\n"
+                "Các lần sửa chủ thể trước đó sẽ không hoàn tác (Ctrl+Z) được nữa.") != QMessageBox.StandardButton.Yes:
             return 0
         with self.project.transaction() as conn:
             changed = actions.renumber_subjects(conn)
+            if self.undo is not None:
+                self.undo.clear_subject_history(conn)
         target = self.model.current_target
         if self.model.current_filter is Filter.SUBJECT and target in changed:
             self.model.set_filter(Filter.SUBJECT, subject_id=changed[target])  # keep showing the same person
@@ -1318,6 +1353,7 @@ class MainWindow(QMainWindow):
         self.people.setCurrentRow(-1)  # the old row's id may now belong to someone else
         self.people.blockSignals(False)
         self._after_people_change()
+        self._update_undo_action()
         if self.model.current_filter is Filter.SUBJECT:
             for i in range(self.people.count()):
                 if self.people.item(i).data(Qt.ItemDataRole.UserRole) == ("subject", target):
@@ -1431,30 +1467,31 @@ class MainWindow(QMainWindow):
         name, ok = QInputDialog.getText(self, "Đặt tên", "Tên chủ thể này (để trống = bỏ tên):",
                                         text=actions.subject_label(self.project.conn, sid))
         if ok:
-            with self.project.transaction() as conn:
-                actions.rename_subject(conn, sid, name)
+            old_label = actions.subject_label(self.project.conn, sid)
+            self._subject_action(f"đặt tên {old_label}", lambda conn: actions.rename_subject(conn, sid, name))
             self._fill_people()
 
     def merge_selected_people(self, ids: list[int] | None = None) -> None:
+        """Gộp chủ thể (LOOK merge) with the dialog: target, name, photo preview and warnings; undoable."""
         ids = self._people_to_merge() if ids is None else ids
         if self.project is None or len(ids) < 2:
             return
-        summary = {r["id"]: r for r in actions.subjects_summary(self.project.conn)}
-        # Keep a named person if there is one (its name stays), otherwise the one with most photos.
-        keep = max(ids, key=lambda i: (summary[i]["display_name"] is not None if i in summary else False,
-                                       summary[i]["photos"] if i in summary else 0))
-        names = ", ".join(actions.subject_label(self.project.conn, i) for i in ids)
-        total = sum(summary[i]["photos"] for i in ids if i in summary)
-        if QMessageBox.question(
-                self, "Gộp chủ thể",
-                f"Gộp {names} thành một chủ thể ({total} ảnh), giữ tên \"{actions.subject_label(self.project.conn, keep)}\"?\n"
-                "App sẽ nhớ việc gộp này cả khi nhận diện lại.") != QMessageBox.StandardButton.Yes:
+        dialog = MergeDialog(self.project.conn, self.project.cache_dir, ids, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        with self.project.transaction() as conn:
-            for other in ids:
-                if other != keep:
-                    self.teacher.merged(conn, keep, other)
-                actions.merge_subjects(conn, keep, other)
+        choice = dialog.choice()
+
+        def merge(conn) -> None:  # noqa: ANN001
+            actions.merge_look(conn, choice.keep, choice.others, name=choice.name,
+                               unmark_conflicts=choice.unmark_conflicts, teacher=self.teacher)
+
+        try:
+            if not self._subject_action(f"gộp {len(ids)} chủ thể", merge):
+                return  # refused (too large to undo) and explained: nothing changed
+        except actions.MergeConflict:
+            QMessageBox.warning(self, "Gộp chủ thể", "Các chủ thể này đã được đánh dấu là người khác nhau. "
+                                                       "Không có gì bị thay đổi.")
+            return
         self.people.blockSignals(True)
         for i in range(self.people.count()):  # merged: clear the ticks
             item = self.people.item(i)
@@ -1462,11 +1499,14 @@ class MainWindow(QMainWindow):
                 item.setCheckState(Qt.CheckState.Unchecked)
         self.people.blockSignals(False)
         self._after_people_change()
+        note = " Kết quả ⭐ Chọn ảnh cũ cần chọn lại." if picks_stale(self.project.conn) else ""
+        self.status.setText(f"Đã gộp {len(ids)} chủ thể thành {actions.subject_label(self.project.conn, choice.keep)}"
+                            f" (Ctrl+Z để hoàn tác).{note}")
 
     def open_review(self) -> ReviewDialog | None:
         if self.project is None:
             return None
-        dialog = ReviewDialog(self.project, self, teacher=self.teacher)
+        dialog = ReviewDialog(self.project, self, teacher=self.teacher, run=self._subject_action)
         dialog.changed.connect(self._after_people_change)
         dialog.show()
         return dialog
@@ -1496,9 +1536,13 @@ class MainWindow(QMainWindow):
         elif chosen is merge:
             self.merge_selected_people(ids)
         elif chosen is different:
-            with self.project.transaction() as conn:
-                self.teacher.different(conn, ids[0], ids[1])
-                actions.mark_different(conn, ids[0], ids[1])
+            a, b = ids[0], ids[1]
+
+            def mark(conn) -> None:  # noqa: ANN001
+                self.teacher.different(conn, a, b)
+                actions.mark_different(conn, a, b)
+
+            self._subject_action("đánh dấu hai chủ thể khác nhau", mark)
             self._fill_people()
 
     def _grid_context_menu(self, pos: object) -> None:
@@ -1543,7 +1587,9 @@ class MainWindow(QMainWindow):
         if chosen is new_subject:
             self.create_subject_from(assets, target if flt is Filter.SUBJECT else None)
             return
-        with self.project.transaction() as conn:
+        n = f"{len(assets)} ảnh" if len(assets) > 1 else "1 ảnh"
+
+        def run(conn) -> None:  # noqa: ANN001
             if chosen is remove:
                 self.teacher.removed(conn, target, assets)  # type: ignore[arg-type]
                 actions.remove_photos_from_subject(conn, target, assets)  # type: ignore[arg-type]
@@ -1553,6 +1599,10 @@ class MainWindow(QMainWindow):
             elif chosen in targets:
                 actions.assign_photos_to_subject(conn, targets[chosen], assets)
                 self.teacher.assigned(conn, targets[chosen], assets)
+
+        label = (f"bỏ {n} khỏi chủ thể" if chosen is remove else f"xác nhận {n}" if chosen is confirm
+                 else f"gán {n} cho chủ thể khác")
+        self._subject_action(label, run)
         self._after_people_change()
 
     def create_subject_from(self, assets: list[int], from_subject: int | None = None) -> int | None:
@@ -1564,11 +1614,18 @@ class MainWindow(QMainWindow):
                                         f"Tên chủ thể mới cho {len(assets)} ảnh (để trống = tự đặt số):")
         if not ok:
             return None
-        with self.project.transaction() as conn:
+        made: list[int] = []
+
+        def run(conn) -> None:  # noqa: ANN001
             if from_subject is not None:
                 self.teacher.removed(conn, from_subject, assets)
-            subject_id = actions.create_subject(conn, assets, name, from_subject)
-            self.teacher.assigned(conn, subject_id, assets)
+            made.append(actions.create_subject(conn, assets, name, from_subject))
+            self.teacher.assigned(conn, made[-1], assets)
+
+        self._subject_action("tạo chủ thể mới", run)
+        if not made or self.project.conn.execute("SELECT 1 FROM subjects WHERE id = ?", (made[-1],)).fetchone() is None:
+            return None  # refused (too large to undo): nothing changed
+        subject_id = made[-1]
         self._after_people_change()
         self.status.setText(f"Đã tạo {actions.subject_label(self.project.conn, subject_id)} với {len(assets)} ảnh.")
         return subject_id
@@ -2048,30 +2105,34 @@ class MainWindow(QMainWindow):
         anchor = self._tick_anchor
         if shift and anchor in order:
             lo, hi = sorted((order.index(anchor), order.index(asset_id)))
-            self._apply_to(records[lo:hi + 1], lambda conn, rec: decisions.set_flag(conn, rec.id, "keep"))
+            self._apply_to(records[lo:hi + 1], lambda conn, rec: decisions.set_flag(conn, rec.id, "keep"), "Chọn")
         else:
             rec = records[order.index(asset_id)]
             new = None if rec.flag == "keep" else "keep"
-            self._apply_to([rec], lambda conn, r: decisions.set_flag(conn, r.id, new))
+            self._apply_to([rec], lambda conn, r: decisions.set_flag(conn, r.id, new), "Chọn" if new else "bỏ Chọn")
         self._tick_anchor = asset_id
 
-    def _apply(self, fn: object, *, advance: bool = False) -> None:
+    def _apply(self, fn: object, *, advance: bool = False, label: str = "thay đổi ảnh") -> None:
         if self.project is None:
             return
         targets = self._action_records()
         if not targets:
             return
-        self._apply_to(targets, fn)
+        self._apply_to(targets, fn, label)
         if advance and len(targets) == 1 and self.act_auto_advance.isChecked():
             self.step(1)
 
-    def _apply_to(self, targets: list[AssetRecord], fn: object) -> None:
+    def _apply_to(self, targets: list[AssetRecord], fn: object, label: str = "thay đổi ảnh") -> None:
         """Change decisions of these photos in one transaction, teach taste, repaint (keys, buttons, tick boxes)."""
         if self.project is None or not targets:
             return
         with self.project.transaction() as conn:
+            before = UndoManager.capture_decisions(conn, [r.id for r in targets])
             for rec in targets:
                 fn(conn, rec)  # type: ignore[operator]
+        if self.undo is not None:
+            self.undo.push_decisions(f"{label} ({len(targets)} ảnh)" if len(targets) > 1 else label, before)
+            self._update_undo_action()
         self._learn_taste(targets)
         for rec in targets:
             self.model.refresh_record(rec.id)
@@ -2192,7 +2253,8 @@ class MainWindow(QMainWindow):
                                        load_vector(conn, asset_id, "clip", CLIP_VERSION), group_key(session, day))
 
     def set_flag(self, flag: str | None) -> None:
-        self._apply(lambda conn, rec: decisions.set_flag(conn, rec.id, flag), advance=flag is not None)
+        self._apply(lambda conn, rec: decisions.set_flag(conn, rec.id, flag), advance=flag is not None,
+                    label={"keep": "Chọn", "reject": "Loại"}.get(flag or "", "bỏ Chọn/Loại"))
 
     def set_focus_label(self, label: str) -> None:
         """Q / W / R: the user's sharpness label (pressing the same key again clears it); teaches the focus model."""
@@ -2202,21 +2264,15 @@ class MainWindow(QMainWindow):
         if not targets:
             return
         new = None if all(r.focus == label for r in targets) else label
-        session = self._session_key()
-        unmeasured = 0
         with self.project.transaction() as conn:
+            before = UndoManager.capture_decisions(conn, [r.id for r in targets])
             for rec in targets:
                 decisions.set_focus(conn, rec.id, new)
-        conn = self.project.conn
-        for rec in targets:
-            measured = focus_learning.photo_focus(conn, rec.id)
-            key = photo_key(session, rec.id, "focus:")
-            if measured is None:
-                unmeasured += 1
-                self.teacher.focus_labeled(key, "", "", None, {})
-                continue
-            camera, features = measured
-            self.teacher.focus_labeled(key, camera, group_key(session, (rec.capture_time or "")[:10]), new, features)
+        if self.undo is not None:
+            names = {"sharp": "nhãn nét căng", "soft": "nhãn hơi soft", "missed": "nhãn lệch nét"}
+            self.undo.push_decisions(names.get(new or "", "bỏ nhãn nét"), before)
+            self._update_undo_action()
+        unmeasured = self._teach_focus(targets)
         for rec in targets:
             self.model.refresh_record(rec.id)
         self._refresh_compare([r.id for r in targets])
@@ -2229,6 +2285,88 @@ class MainWindow(QMainWindow):
             self.retrain_focus()
         if new is not None and len(targets) == 1 and self.act_auto_advance.isChecked():
             self.step(1)
+
+    def _teach_focus(self, targets: list[AssetRecord]) -> int:
+        """Each photo's current focus label teaches the focus model (keyed by photo; the latest label wins).
+        Returns how many photos have no measurement yet."""
+        assert self.project is not None
+        session = self._session_key()
+        conn = self.project.conn
+        unmeasured = 0
+        for rec in targets:
+            label = decisions.get(conn, rec.id).focus
+            measured = focus_learning.photo_focus(conn, rec.id)
+            key = photo_key(session, rec.id, "focus:")
+            if measured is None:
+                unmeasured += 1
+                self.teacher.focus_labeled(key, "", "", None, {})
+                continue
+            camera, features = measured
+            self.teacher.focus_labeled(key, camera, group_key(session, (rec.capture_time or "")[:10]), label, features)
+        return unmeasured
+
+    # ---------------------------------------------------------- undo (Ctrl+Z)
+    def _subject_action(self, label: str, fn) -> bool:  # noqa: ANN001
+        """A subject correction as one undoable operation (plain transaction if no history is open)."""
+        if self.project is None:
+            return False
+        if self.undo is None:
+            with self.project.transaction() as conn:
+                fn(conn)
+            return True
+        try:
+            return self.undo.subject_action(label, fn)
+        except UndoTooLarge:
+            QMessageBox.warning(
+                self, "Không thực hiện",
+                f"Không {label} được: thao tác này lớn quá nên app không giữ được bản để hoàn tác (Ctrl+Z).\n"
+                "Không có gì bị thay đổi. Hãy làm thành nhiều lần nhỏ hơn (ví dụ gộp từng hai chủ thể).")
+            return False
+        finally:
+            self._update_undo_action()
+
+    def _update_undo_action(self) -> None:
+        if not hasattr(self, "act_undo"):
+            return
+        label = self.undo.next_label() if getattr(self, "undo", None) is not None else None
+        self.act_undo.setEnabled(label is not None)
+        self.act_undo.setText(f"↶ Hoàn tác {label}" if label else "↶ Hoàn tác")
+        self.act_undo.setToolTip(f"Hoàn tác: {label} (Ctrl+Z)" if label else "Chưa có gì để hoàn tác")
+
+    def undo_last(self) -> None:
+        focus = QApplication.focusWidget()
+        if typing_in(focus):  # a text field keeps its own undo
+            if hasattr(focus, "undo"):
+                focus.undo()  # type: ignore[union-attr]
+            return
+        if self.project is None or self.undo is None or not self.undo.can_undo():
+            return
+        label = self.undo.next_label()
+        try:
+            result = self.undo.undo()
+        except UndoRefused as exc:
+            self._update_undo_action()
+            QMessageBox.information(self, "Hoàn tác", f"Không hoàn tác được “{label}”: {exc}.\n"
+                                                        "Không có gì bị thay đổi; thao tác này được bỏ khỏi danh sách hoàn tác.")
+            self._after_people_change()
+            return
+        self._update_undo_action()
+        if result is None:
+            return
+        if result.kind == "decision":
+            recs = list(self.model.records_by_id(list(result.asset_ids)).values())
+            for rec in recs:
+                self.model.refresh_record(rec.id)
+            recs = list(self.model.records_by_id(list(result.asset_ids)).values())
+            self._learn_taste(recs)  # the restored latest state teaches (keyed by photo)
+            self._teach_focus(recs)
+            self._refresh_compare(list(result.asset_ids))
+            self._show_inspector(self.view_record())
+            self._update_counts()
+            self.refresh_steps()
+        else:
+            self._after_people_change()
+        self.status.setText(f"Đã hoàn tác: {result.label}")
 
     def retrain_focus(self, wait: bool = False) -> None:
         """Train the per-camera sharpness models in the background (never on the Qt thread)."""
@@ -2259,12 +2397,13 @@ class MainWindow(QMainWindow):
             self._show_inspector(self.view_record())
 
     def set_rating(self, rating: int) -> None:
-        self._apply(lambda conn, rec: decisions.set_rating(conn, rec.id, rating))
+        self._apply(lambda conn, rec: decisions.set_rating(conn, rec.id, rating), label=f"{rating} sao")
 
     def toggle_favorite(self) -> None:
         targets = self._action_records()
         new = not all(r.favorite for r in targets) if targets else True
-        self._apply(lambda conn, rec: decisions.set_favorite(conn, rec.id, new))
+        self._apply(lambda conn, rec: decisions.set_favorite(conn, rec.id, new),
+                    label="yêu thích" if new else "bỏ yêu thích")
 
     # ----------------------------------------------------------- best shots
     def _on_sort_changed(self) -> None:

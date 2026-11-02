@@ -20,10 +20,11 @@ CELL_MIN, CELL_MAX, CELL_DEFAULT = 140, 340, 220  # grid card size (logical px)
 class TopBar(QWidget):
     step_clicked = Signal(str)
 
-    def __init__(self, search: QLineEdit, options_button: QToolButton, parent: QWidget | None = None) -> None:
+    def __init__(self, search: QLineEdit, options_button: QToolButton, parent: QWidget | None = None,
+                 edit_button: QToolButton | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("topBar")
-        self.search, self.options_button = search, options_button
+        self.search, self.options_button, self.edit_button = search, options_button, edit_button
         row = QHBoxLayout(self)
         row.setContentsMargins(8, 4, 8, 4)
         row.setSpacing(4)
@@ -45,6 +46,8 @@ class TopBar(QWidget):
         self.size_slider.setFixedWidth(110)
         self.size_slider.setToolTip("Cỡ ảnh trong lưới")
         row.addWidget(self.size_slider)
+        if edit_button is not None:  # "Chỉnh sửa" menu (Hoàn tác …)
+            row.addWidget(edit_button)
         row.addWidget(options_button)
         self.next_step: str | None = "import"
         self._states: dict[str, StepState] = {k: StepState(False, None) for k in STEPS}

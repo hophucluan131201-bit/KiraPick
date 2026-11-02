@@ -95,9 +95,35 @@ def evidence(a: list[Occ], b: list[Occ], limit: int = MAX_PAIRS_PER_ANSWER) -> l
 class Teacher:
     def __init__(self, store: LearningStore | None) -> None:
         self.store = store
+        self._collected: list[tuple[str, bool, list[PairEvidence]]] | None = None
+
+    # ---- undoable operations (app.undo): people examples are collected during the session transaction and
+    # written afterwards under the operation's reserved id, so an undo can remove exactly them.
+    def start_collecting(self) -> None:
+        self._collected = []
+
+    def stop_collecting(self) -> list[tuple[str, bool, list[PairEvidence]]]:
+        out, self._collected = self._collected or [], None
+        return [item for item in out if item[2]]
+
+    def write_collected(self, items: list[tuple[str, bool, list[PairEvidence]]], op_id: int) -> bool:
+        """Write collected examples under ``op_id``; False if learning is unavailable or failed (logged)."""
+        if self.store is None or not items:
+            return False
+        try:
+            for kind, same, pairs in items:
+                self.store.add_identity(kind, same, pairs, FACE_VECTOR_VERSION, OUTFIT_VERSION, ARCFACE_VERSION,
+                                        BODY_VERSION, answer_id=op_id)
+            return True
+        except Exception:  # noqa: BLE001 - learning is optional
+            log.exception("could not save learning examples of an operation")
+            return False
 
     def _save(self, kind: str, same: bool, pairs: list[PairEvidence]) -> None:
         if self.store is None:
+            return
+        if self._collected is not None:  # an undoable operation: written after the session commit (app.undo)
+            self._collected.append((kind, same, pairs))
             return
         try:
             self.store.add_identity(kind, same, pairs, FACE_VECTOR_VERSION, OUTFIT_VERSION, ARCFACE_VERSION,

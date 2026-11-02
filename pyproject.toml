@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kirapick"
-version = "3.0.0b1.dev4"
+version = "3.0.0b1.dev5"
 description = "Offline, non-destructive AI photo culling for cosplay/street photographers (Windows desktop)."
 requires-python = ">=3.11,<3.15"
 # Supported ranges; exact versions verified so far are recorded in requirements.lock.txt.
@@ -43,5 +43,6 @@ markers = [
     "gui: drives the Qt main window (offscreen)",
     "perf: timing measurements; run explicitly with -m perf",
     "stress: long repeated lifecycle runs; run explicitly with -m stress",
+    "k2: P/X latency repeatability measurement (scripts/k2_repeat.py); run explicitly with -m k2",
 ]
-addopts = "-m 'not perf and not stress'"
+addopts = "-m 'not perf and not stress and not k2'"

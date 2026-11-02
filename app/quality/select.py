@@ -30,6 +30,7 @@ from app.quality.score import Score, photo_scores
 
 Ranker = Callable[[int, Score], Ranked]  # (asset id, technical score) -> blended ranking
 from app.storage.project import utc_now
+from app.storage.project_config import picks_stale, set_picks_stale
 
 LAMBDA = 0.75
 BURST_S = 1.5  # photos of one person closer than this are one burst
@@ -137,6 +138,7 @@ def select_in_view(conn: sqlite3.Connection, n: int, asset_ids: set[int], subjec
 def save_run(conn: sqlite3.Connection, picks: list[Pick], params: dict) -> int:
     """The newest selection replaces the previous one (decisions are not touched here)."""
     conn.execute("DELETE FROM pick_runs")
+    set_picks_stale(conn, False)  # a fresh selection reflects the current subjects
     run_id = int(conn.execute("INSERT INTO pick_runs (created_at, params_json) VALUES (?, ?)",
                               (utc_now(), json.dumps(params))).lastrowid)
     seen: set[int] = set()
@@ -159,6 +161,8 @@ def why_not_picked(conn: sqlite3.Connection, asset_id: int) -> str | None:
     run = conn.execute("SELECT params_json FROM pick_runs").fetchone()
     if run is None or conn.execute("SELECT 1 FROM picks WHERE asset_id = ?", (asset_id,)).fetchone():
         return None
+    if picks_stale(conn):
+        return "Lần ⭐ Chọn ảnh trước được làm trước khi gộp chủ thể: hãy chọn lại để có kết quả theo chủ thể mới."
     params = json.loads(run[0])
     subjects = [r[0] for r in conn.execute(
         "SELECT DISTINCT subject_id FROM occurrences WHERE asset_id = ? AND subject_id IS NOT NULL", (asset_id,))]

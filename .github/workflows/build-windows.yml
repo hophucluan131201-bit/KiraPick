@@ -18,9 +18,16 @@ on:
         description: "Also run the Windows tests: full suite, GUI smoke, Snap/DPI, performance, stress (no build needed)"
         type: boolean
         default: false
+<<<<<<< HEAD
       diag_from_run:
         description: "F3: run id of an internal CUDA build to test --diagnose-grouping on a synthetic session (editions=none)"
         default: ""
+=======
+      k2_repeat:
+        description: "K2: P/X latency repeatability, 20 fresh-process runs per test, measurement only (editions=none)"
+        type: boolean
+        default: false
+>>>>>>> 7fc944a
   push:
     branches: [main, beta]
 
@@ -245,17 +252,26 @@ jobs:
   # shutdown / worker stress. Never blocks anything and never publishes: started by hand ("run_perf") or by "[perf]"
   # in a commit message. Each part prints its OWN notice (suite / gui-windows / snap-dpi / perf / stress): the job is
   # non-blocking, so a green job is not evidence that any part passed (review RV14-01) — read the notices.
+<<<<<<< HEAD
   # F3: the PACKAGED --diagnose-grouping of an already built internal CUDA artifact, positive path, on a synthetic
   # session (no rebuild; nothing published; no real photos).
   diag-positive:
     if: github.event.inputs.diag_from_run != ''
     runs-on: windows-2022
     timeout-minutes: 60
+=======
+  # K2: P/X latency repeatability (measurement only; thresholds live in the perf tests and are unchanged).
+  k2-repeat:
+    if: github.event.inputs.k2_repeat == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 120
+>>>>>>> 7fc944a
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+<<<<<<< HEAD
       - name: Python packages for the synthetic session
         run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt
       - uses: actions/download-artifact@v4
@@ -379,6 +395,24 @@ jobs:
           Check ($lafter -eq $lbefore -and $r7.read_only.unchanged -eq $true) "case7-learning: learning.db names + SHA-256 unchanged"
           Write-Host "::notice title=diag-positive summary ($($failed.Count) failed)::$($lines -join '%0A')"
           if ($failed.Count) { exit 1 }
+=======
+      - name: Python packages
+        run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt "pytest>=9,<10" "pytest-qt>=4.4,<5"
+      - name: 20 fresh-process runs per test
+        shell: pwsh
+        run: |
+          $out = python scripts/k2_repeat.py --runs 20 --out k2 2>&1
+          $code = $LASTEXITCODE
+          $out | Write-Host
+          foreach ($line in ($out | Where-Object { $_ -like "K2 *" })) { Write-Host "::notice title=k2::$line" }
+          exit $code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kirapick-k2-windows
+          path: k2/
+          retention-days: 30
+>>>>>>> 7fc944a
 
   perf:
     if: github.event.inputs.run_perf == 'true' || contains(github.event.head_commit.message, '[perf]')
