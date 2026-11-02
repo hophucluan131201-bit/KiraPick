@@ -68,6 +68,8 @@ from app.storage.sessions import delete_session, open_session, purge_old_session
 from app.ai.models import ModelRegistry, ModelState
 from app.identity import actions
 from app.identity.cluster import merge_suggestions
+from app.storage.project_config import picks_stale
+from app.ui.merge_dialog import MergeDialog
 from app.undo.manager import UndoManager, UndoRefused
 from app.learning.store import LearningStore
 from app.quality import burst, select
@@ -1470,25 +1472,25 @@ class MainWindow(QMainWindow):
             self._fill_people()
 
     def merge_selected_people(self, ids: list[int] | None = None) -> None:
+        """Gộp chủ thể (LOOK merge) with the dialog: target, name, photo preview and warnings; undoable."""
         ids = self._people_to_merge() if ids is None else ids
         if self.project is None or len(ids) < 2:
             return
-        summary = {r["id"]: r for r in actions.subjects_summary(self.project.conn)}
-        # Keep a named person if there is one (its name stays), otherwise the one with most photos.
-        keep = max(ids, key=lambda i: (summary[i]["display_name"] is not None if i in summary else False,
-                                       summary[i]["photos"] if i in summary else 0))
-        names = ", ".join(actions.subject_label(self.project.conn, i) for i in ids)
-        total = sum(summary[i]["photos"] for i in ids if i in summary)
-        if QMessageBox.question(
-                self, "Gộp chủ thể",
-                f"Gộp {names} thành một chủ thể ({total} ảnh), giữ tên \"{actions.subject_label(self.project.conn, keep)}\"?\n"
-                "App sẽ nhớ việc gộp này cả khi nhận diện lại.") != QMessageBox.StandardButton.Yes:
+        dialog = MergeDialog(self.project.conn, self.project.cache_dir, ids, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        with self.project.transaction() as conn:
-            for other in ids:
-                if other != keep:
-                    self.teacher.merged(conn, keep, other)
-                actions.merge_subjects(conn, keep, other)
+        choice = dialog.choice()
+
+        def merge(conn) -> None:  # noqa: ANN001
+            actions.merge_look(conn, choice.keep, choice.others, name=choice.name,
+                               unmark_conflicts=choice.unmark_conflicts, teacher=self.teacher)
+
+        try:
+            self._subject_action(f"gộp {len(ids)} chủ thể", merge)
+        except actions.MergeConflict:
+            QMessageBox.warning(self, "Gộp chủ thể", "Các chủ thể này đã được đánh dấu là người khác nhau. "
+                                                       "Không có gì bị thay đổi.")
+            return
         self.people.blockSignals(True)
         for i in range(self.people.count()):  # merged: clear the ticks
             item = self.people.item(i)
@@ -1496,6 +1498,9 @@ class MainWindow(QMainWindow):
                 item.setCheckState(Qt.CheckState.Unchecked)
         self.people.blockSignals(False)
         self._after_people_change()
+        note = " Kết quả ⭐ Chọn ảnh cũ cần chọn lại." if picks_stale(self.project.conn) else ""
+        self.status.setText(f"Đã gộp {len(ids)} chủ thể thành {actions.subject_label(self.project.conn, choice.keep)}"
+                            f" (Ctrl+Z để hoàn tác).{note}")
 
     def open_review(self) -> ReviewDialog | None:
         if self.project is None:

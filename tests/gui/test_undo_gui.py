@@ -129,3 +129,111 @@ def test_cancelled_rename_adds_nothing(qtbot, env, monkeypatch) -> None:  # noqa
     w.rename_current_person()
     assert not w.act_undo.isEnabled()
     assert QApplication.instance() is not None and isinstance(w.act_undo, QAction)
+
+
+# ------------------------------------------------------------------ 1c: merge dialog
+def _three_people(w) -> list[int]:  # noqa: ANN001
+    """Subjects 1 (photos 0-2), 2 (photo 3 + photo 0 as a second person), 3 'Aki' (photo 4); returns assets."""
+    conn = w.project.conn
+    assets = [r[0] for r in conn.execute("SELECT id FROM assets WHERE status = 'ok' ORDER BY id")]
+    with w.project.transaction():
+        for sid, owned in ((1, assets[:3]), (2, [assets[3], assets[0]]), (3, assets[4:5])):
+            conn.execute("INSERT INTO subjects (id, created_at) VALUES (?, 'n')", (sid,))
+            for a in owned:
+                conn.execute("""INSERT INTO occurrences (asset_id, person_box, prominence, is_main, subject_id,
+                                assignment, analysis_version, created_at) VALUES (?, '[0,0,1,1]', ?, 1, ?, 'auto', 1, 'n')""",
+                             (a, 0.5 if sid == 2 and a == assets[0] else 1.0, sid))
+        actions.rename_subject(conn, 3, "Aki")
+    w._fill_people()
+    return assets
+
+
+def _dialog(w, ids, monkeypatch, configure=None):  # noqa: ANN001, ANN202
+    from app.ui.merge_dialog import MergeDialog
+
+    seen = {}
+
+    def run(self) -> int:  # noqa: ANN001
+        seen["dialog"] = self
+        if configure is not None:
+            if configure(self) is False:
+                return MergeDialog.DialogCode.Rejected
+        return MergeDialog.DialogCode.Accepted if self.ok.isEnabled() else MergeDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(MergeDialog, "exec", run)
+    w.merge_selected_people(ids)
+    return seen["dialog"]
+
+
+def test_merge_dialog_target_name_preview_and_undo(qtbot, env, monkeypatch) -> None:  # noqa: ANN001, F811
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    _three_people(w)
+    before_occ, before_subj = _occ(w), _subjects(w)
+    with w.project.transaction() as conn:  # Keep/Reject must not move
+        decisions.set_flag(conn, 1, "keep")
+    dec_before = _dec(w, 1)
+
+    def pick_subject_1(d) -> None:  # noqa: ANN001
+        assert d.radios[3].isChecked()  # default: the named subject
+        assert d.name.text() == "Aki"
+        assert "ảnh có từ hai chủ thể" in d.summary_text()  # photo 0 has subjects 1 and 2
+        d.radios[1].setChecked(True)  # the user chooses subject 1 as target, keeps the name Aki
+        assert d.name.text() == "Aki"
+
+    _dialog(w, [1, 2, 3], monkeypatch, pick_subject_1)
+    summary = {r["id"]: r for r in actions.subjects_summary(w.project.conn)}
+    assert set(summary) == {1} and summary[1]["display_name"] == "Aki"
+    assert _dec(w, 1) == dec_before
+    assert "Ctrl+Z" in w.status.text()
+    _ctrl_z(qtbot, w)
+    assert _occ(w) == before_occ and _subjects(w) == before_subj and _dec(w, 1) == dec_before
+
+
+def test_merge_dialog_blocks_different_marks_unless_unmarked(qtbot, env, monkeypatch) -> None:  # noqa: ANN001, F811
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    _three_people(w)
+    with w.project.transaction() as conn:
+        actions.mark_different(conn, 1, 3)
+    before = _occ(w)
+    d = _dialog(w, [1, 3], monkeypatch)
+    assert not d.ok.isEnabled() and "đánh dấu là người khác nhau" in d.summary_text()
+    assert _occ(w) == before  # refused: nothing merged
+    _dialog(w, [1, 3], monkeypatch, lambda d: d.unmark.setChecked(True))
+    assert not actions.are_different(w.project.conn, 1, 3)
+    assert {r["id"] for r in actions.subjects_summary(w.project.conn)} == {3, 2}
+    _ctrl_z(qtbot, w)
+    assert actions.are_different(w.project.conn, 1, 3) and _occ(w) == before
+
+
+def test_merge_carries_marks_and_flags_stale_picks(qtbot, env, monkeypatch) -> None:  # noqa: ANN001, F811
+    from app.quality import select
+    from app.storage.project_config import picks_stale
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    assets = _three_people(w)
+    with w.project.transaction() as conn:
+        actions.mark_different(conn, 2, 3)
+        run = conn.execute("INSERT INTO pick_runs (created_at, params_json) VALUES ('n', '{\"mode\": \"per_person\"}')"
+                           ).lastrowid
+        conn.execute("INSERT INTO picks (run_id, asset_id, subject_id, rank, score, reason_json) "
+                     "VALUES (?, ?, 2, 1, 1, '{}')", (run, assets[3]))
+    d = _dialog(w, [1, 2], monkeypatch)
+    assert "cần chọn lại" in d.summary_text()
+    assert actions.are_different(w.project.conn, 1, 3)  # subject 2's mark now applies to the kept subject 1
+    assert picks_stale(w.project.conn) and "chọn lại" in w.status.text()
+    assert "chọn lại" in (select.why_not_picked(w.project.conn, assets[1]) or "")
+    _ctrl_z(qtbot, w)
+    assert not picks_stale(w.project.conn) and actions.are_different(w.project.conn, 2, 3)
+    assert not actions.are_different(w.project.conn, 1, 3)
+
+
+def test_cancelled_merge_dialog_changes_nothing(qtbot, env, monkeypatch) -> None:  # noqa: ANN001, F811
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    _three_people(w)
+    before = _occ(w)
+    _dialog(w, [1, 2], monkeypatch, lambda d: False)
+    assert _occ(w) == before and not w.act_undo.isEnabled()

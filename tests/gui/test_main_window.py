@@ -389,7 +389,9 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
 
     w.people.item(0).setSelected(True)
     w.people.item(1).setSelected(True)
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    from app.ui.merge_dialog import MergeDialog
+
+    monkeypatch.setattr(MergeDialog, "exec", lambda self: MergeDialog.DialogCode.Accepted)
     w.merge_selected_people()
     merged = actions.subjects_summary(w.project.conn)
     assert len(merged) == len(subjects) - 1
@@ -446,10 +448,13 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     items[3].setCheckState(Qt.CheckState.Checked)
     assert w.act_merge.isEnabled() and w.act_merge.text() == "🔗 Gộp 2 chủ thể"
 
+    from app.ui.merge_dialog import MergeDialog
+
     asked = []
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: asked.append(a[2]) or QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(MergeDialog, "exec", lambda self: asked.append(self.summary_text()) or
+                        MergeDialog.DialogCode.Accepted)
     w.act_merge.trigger()
-    assert "4 ảnh" in asked[0] and '"Aki"' in asked[0]
+    assert "Gộp 4 ảnh" in asked[0] and "Aki — 1 ảnh" in asked[0] and QMessageBox  # the named person is offered
     summary = {r["id"]: r for r in actions.subjects_summary(conn)}
     assert set(summary) == {2, 3}  # the named person is kept, with all photos
     assert summary[3]["display_name"] == "Aki" and summary[3]["photos"] == 4
