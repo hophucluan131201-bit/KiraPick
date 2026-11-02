@@ -20,9 +20,14 @@ mình. **Đừng làm theo file `HUONG_DAN_CAI_DAT.txt`** có trong gói tải v
    ```powershell
    powershell -ExecutionPolicy Bypass -File D:\KiraPick-SaoLuu\owner_backup.ps1 -Destination D:\KiraPick-SaoLuu
    ```
-4. **Tải bộ cài.** Mở https://github.com/hophucluan131201-bit/KiraPick/actions/runs/41394908188 (đúng run
-   **41394908188**). Chỉ tải gói **kirapick-windows-cuda** (tải được đến ngày 02/12/2026), rồi giải nén vào
-   `D:\KiraPick-CUDA-dev5a\`.
+4. **Tải bộ cài** (phải đăng nhập GitHub). Bấm thẳng link tải này:
+   https://github.com/hophucluan131201-bit/KiraPick/actions/runs/41394908188/artifacts/13120031488
+   - Hoặc mở **lần chạy 1** của run 41394908188:
+     https://github.com/hophucluan131201-bit/KiraPick/actions/runs/41394908188/attempts/1
+     rồi kéo xuống mục **Artifacts** và tải **kirapick-windows-cuda**, khoảng 2,9 GB.
+   - Trang run bình thường mở **lần chạy 2** (lần chạy lại riêng phần test hiệu năng), nên ở đó chỉ thấy
+     kirapick-perf-windows. Không tải gói đó.
+   - Gói tải được đến ngày 02/12/2026. Giải nén vào `D:\KiraPick-CUDA-dev5a\`.
 5. **Kiểm tra mã.** Lệnh phải in ra đúng 3 dòng, khớp từng ký tự với bảng dưới. Sai thì **không cài**.
    ```powershell
    cd D:\KiraPick-CUDA-dev5a
