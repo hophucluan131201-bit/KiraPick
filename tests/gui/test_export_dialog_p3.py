@@ -416,3 +416,71 @@ def test_copy_names_responsive_while_the_source_is_unreachable(qtbot, tmp_path: 
         settle_threads(qtbot, dialog)
     finally:
         project.close()
+
+
+# --- RB1: "Xuất kèm danh sách ảnh đã chọn" -----------------------------------------------------------------------------
+def _files(root: Path) -> set[str]:
+    return {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
+
+
+def test_customer_list_off_by_default_and_not_remembered(qtbot, fx) -> None:  # noqa: ANN001
+    decisions.set_flag(fx.project.conn, fx.ids["raw_only"], "keep")
+    fx.project.conn.commit()
+    dialog = imported_dialog(qtbot, fx)
+    assert dialog.customer_list.text() == "Xuất kèm danh sách ảnh đã chọn" and not dialog.customer_list.isChecked()
+    wait_plan(qtbot, dialog)
+    result = copy_and_wait(qtbot, dialog)
+    assert result.copied and not (fx.dest / copy_export.MANIFEST_DIR).exists()
+    assert _files(fx.dest) == set(result.copied)  # only the photos at the destination
+    record = fx.project.folder / ed.EXPORT_RECORDS_DIR
+    assert result.manifest_csv.parent == record and result.manifest_json.is_file()  # the internal record stays
+    dialog.customer_list.setChecked(True)
+    again = imported_dialog(qtbot, fx)
+    assert not again.customer_list.isChecked()  # every opening starts unticked
+
+
+def test_customer_list_ticked_writes_the_list(qtbot, fx) -> None:  # noqa: ANN001
+    decisions.set_flag(fx.project.conn, fx.ids["raw_only"], "keep")
+    fx.project.conn.commit()
+    dialog = imported_dialog(qtbot, fx)
+    dialog.customer_list.setChecked(True)
+    wait_plan(qtbot, dialog)
+    result = copy_and_wait(qtbot, dialog)
+    lists = {p for p in _files(fx.dest) if p.startswith(copy_export.MANIFEST_DIR + "/")}
+    assert len(lists) == 2 and result.list_csv.parent == fx.dest / copy_export.MANIFEST_DIR
+    assert result.manifest_csv.parent == fx.project.folder / ed.EXPORT_RECORDS_DIR
+
+
+@pytest.mark.parametrize("customer_list", [False, True])
+def test_cancel_then_retry_in_both_states(qtbot, fx, monkeypatch: pytest.MonkeyPatch,  # noqa: ANN001
+                                          customer_list: bool) -> None:
+    for key in ("raw_only", "jpeg_only", "pair"):
+        decisions.set_flag(fx.project.conn, fx.ids[key], "keep")
+    fx.project.conn.commit()
+    dialog = imported_dialog(qtbot, fx)
+    dialog.customer_list.setChecked(customer_list)
+    wait_plan(qtbot, dialog)
+    real = copy_export._run_group
+    calls = []
+
+    def stop_after_first(run, group):  # noqa: ANN001, ANN202
+        calls.append(group)
+        if len(calls) > 1:
+            raise copy_export.CopyCancelled("test")
+        return real(run, group)
+
+    monkeypatch.setattr(copy_export, "_run_group", stop_after_first)
+    first = copy_and_wait(qtbot, dialog)
+    assert first.cancelled and dialog.retry_button.isVisibleTo(dialog)
+    assert (fx.dest / copy_export.MANIFEST_DIR).exists() is customer_list
+    monkeypatch.setattr(copy_export, "_run_group", real)
+    dialog.result = None
+    dialog.retry()  # plans again and asks the usual confirmation (answered Yes here)
+    qtbot.waitUntil(lambda: dialog.result is not None, timeout=20000)
+    dialog.copy_thread.wait()
+    second = dialog.result
+    assert not second.cancelled and not second.failed
+    assert set(second.statuses.values()) <= {"copied", "already_present"} and second.already_present
+    assert (fx.dest / copy_export.MANIFEST_DIR).exists() is customer_list
+    records = sorted((fx.project.folder / ed.EXPORT_RECORDS_DIR).glob("*.csv"))
+    assert len(records) == 2  # one record per run, cancelled run included

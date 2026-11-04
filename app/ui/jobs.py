@@ -117,10 +117,13 @@ class ExportThread(QThread):
     succeeded = Signal(object)  # ExportResult
     failed = Signal(str)
 
-    def __init__(self, plan: ExportPlan, options: dict[str, str] | None = None) -> None:
+    def __init__(self, plan: ExportPlan, options: dict[str, str] | None = None, *, record_dir: Path | None = None,
+                 customer_list: bool = False) -> None:
         super().__init__()
         self.plan = plan
         self.options = dict(options or {})
+        self.record_dir = record_dir  # the session's folder: the record of the run (never the destination)
+        self.customer_list = customer_list  # "Xuất kèm danh sách ảnh đã chọn": the list also in the destination
         self._cancel = threading.Event()
         self._stop = threading.Event()
 
@@ -135,7 +138,8 @@ class ExportThread(QThread):
     def run(self) -> None:
         try:
             result = run_export(self.plan, progress=self.progress.emit, should_cancel=self._cancel.is_set,
-                                options=self.options, should_stop=self._stop.is_set)
+                                options=self.options, should_stop=self._stop.is_set, record_dir=self.record_dir,
+                                customer_list=self.customer_list)
             self.succeeded.emit(result)
         except Exception as exc:  # noqa: BLE001
             log.exception("export failed")

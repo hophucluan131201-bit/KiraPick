@@ -12,7 +12,9 @@ Safety rules:
   pair is copied under a new stem; free space is measured again before each pair;
 - the destination may not be an imported source folder itself, nor the project folder, nor inside the other folder
   chosen as source;
-- a manifest of every operation and issue is written at the end of every run.
+- a record of every operation and issue is written at the end of every run into the session's own folder
+  (``record_dir``, under %LOCALAPPDATA%\\KiraPick); the same list goes into the destination's ``MANIFEST_DIR``
+  only when the user ticks "Xuất kèm danh sách ảnh đã chọn" (``customer_list``, off by default).
 """
 
 from __future__ import annotations
@@ -176,8 +178,10 @@ class ExportResult:
     renamed: dict[str, str] = field(default_factory=dict)  # planned -> actual (race with another program)
     failed: dict[str, str] = field(default_factory=dict)
     cancelled: bool = False
-    manifest_csv: Path | None = None
+    manifest_csv: Path | None = None  # the record of this run: in record_dir, else the destination's list
     manifest_json: Path | None = None
+    list_csv: Path | None = None  # the list in the destination's MANIFEST_DIR (only with customer_list)
+    list_json: Path | None = None
     copied_ids: list[int] = field(default_factory=list)  # asset id of each entry of `copied`, same order
     already_present: list[str] = field(default_factory=list)  # targets proven identical (full SHA-256): not copied
     statuses: dict[str, str] = field(default_factory=dict)  # planned dest_relative -> OpStatus value, every operation
@@ -857,13 +861,18 @@ def run_export(
     hashes: HashCache | None = None,
     read_meta: Callable[..., PhotoMetadata] = read_metadata,
     should_stop: Callable[[], bool] | None = None,
+    record_dir: Path | None = None,
+    customer_list: bool = False,
 ) -> ExportResult:
     """Copy the plan's files (spec §3.6, §12): sources revalidated, copies verified by SHA-256, existing files never
     overwritten, a pair kept under one stem; a manifest of every operation and issue is written at the end.
 
     ``should_cancel`` (the user's Dừng) is asked between photos and between 1 MiB chunks: a file being copied is
     removed. ``should_stop`` (closing the app / switching folder) is asked between photos only: the current photo
-    is finished first, as the window's question says."""
+    is finished first, as the window's question says.
+
+    ``record_dir`` (the session's folder) receives the record of the run; ``customer_list`` also writes the list
+    into the destination's MANIFEST_DIR. Without either, nothing but the copies is written."""
     result = ExportResult()
     plan.destination.mkdir(parents=True, exist_ok=True)
     run = _Run(plan, result, hashes or HashCache(), read_meta, should_cancel,
@@ -891,10 +900,19 @@ def run_export(
                 run.set(op, OpStatus.FAILED, SOURCE_GONE)
             else:
                 run.set(op, OpStatus.NOT_STARTED)
-    try:
-        result.manifest_csv, result.manifest_json = _write_manifests(plan, result, dict(options or {}))
-    except OSError as exc:
-        log.warning("export list not written: %s", type(exc).__name__)
+    opts = dict(options or {}) | {"customer_list": "yes" if customer_list else "no"}
+    if record_dir is not None:
+        try:
+            result.manifest_csv, result.manifest_json = _write_manifests(plan, result, opts, record_dir)
+        except OSError as exc:
+            log.warning("export record not written: %s", type(exc).__name__)
+    if customer_list:
+        try:
+            result.list_csv, result.list_json = _write_manifests(plan, result, opts, plan.destination / MANIFEST_DIR)
+        except OSError as exc:
+            log.warning("export list not written: %s", type(exc).__name__)
+        if result.manifest_csv is None:
+            result.manifest_csv, result.manifest_json = result.list_csv, result.list_json
     return result
 
 
@@ -942,15 +960,15 @@ def _manifest_rows(plan: ExportPlan, result: ExportResult) -> list[dict[str, obj
     return rows
 
 
-def _write_manifests(plan: ExportPlan, result: ExportResult, options: dict[str, str]) -> tuple[Path, Path]:
+def _write_manifests(plan: ExportPlan, result: ExportResult, options: dict[str, str],
+                     folder: Path) -> tuple[Path, Path]:
     now = datetime.now()
     stamp = now.strftime("%Y%m%d-%H%M%S")
     rows = _manifest_rows(plan, result)
     counts: dict[str, int] = {}
     for row in rows:
         counts[str(row["status"])] = counts.get(str(row["status"]), 0) + 1
-    folder = plan.destination / MANIFEST_DIR
-    folder.mkdir(exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=True)
     name, n = f"kirapick_export_{stamp}", 1
     while (folder / f"{name}.csv").exists() or (folder / f"{name}.json").exists():  # two exports in one second
         n += 1

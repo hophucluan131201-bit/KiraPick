@@ -57,7 +57,7 @@ from app.export.formats import ExportFormat
 from app.export.hashing import HashCache
 from app.export.layout import UNKNOWN_FOLDER, Layout
 from app.export.names import keep_names
-from app.export.sources import Candidate, ExternalIndex, SourceSpec
+from app.export.sources import MANIFEST_DIR, Candidate, ExternalIndex, SourceSpec
 from app.selection.client_list import list_collections
 from app.storage import exports
 from app.storage.project import Project
@@ -71,6 +71,7 @@ ISSUE_PAGE_ROWS = 50  # rows per page of "Cần xem lại": every unsure row of 
 # 0.07 ms, Windows CI 0.14 ms (1 000 photos: 140 ms > 100 ms) → 300 photos stay ≤ ~45 ms on the GUI thread.
 IMPORTED_SYNC_LIMIT = 300
 FORMAT_KEY = "export/format"
+EXPORT_RECORDS_DIR = "export_records"  # in the session's folder (%LOCALAPPDATA%\\KiraPick\\sessions\\…)
 SOURCE_KEY = "export/source"
 LAYOUT_KEY = "export/layout"
 EXTERNAL_ROOT_KEY = "export/external_root"
@@ -304,6 +305,12 @@ class ExportDialog(QDialog):
         dest_row.addWidget(self.dest, 1)
         dest_row.addWidget(browse)
         dbox.addLayout(dest_row)
+        self.customer_list = QCheckBox("Xuất kèm danh sách ảnh đã chọn")
+        self.customer_list.setToolTip(f"Tạo thêm thư mục con {MANIFEST_DIR} (CSV + JSON) trong thư mục đích. "
+                                      "Không tick: thư mục đích chỉ có ảnh; nhật ký xuất vẫn được KiraPick giữ "
+                                      "riêng trong dữ liệu của app.")
+        self.customer_list.setChecked(False)  # off by default, every time (not remembered)
+        dbox.addWidget(self.customer_list)
         layout.addWidget(dest_box)
 
         # Xem trước
@@ -861,7 +868,9 @@ class ExportDialog(QDialog):
         progress = QProgressDialog("Đang sao chép…", "Dừng", 0, len(self.plan.items), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(300)
-        thread = ExportThread(self.plan, options={"scope": self._selection().value})
+        thread = ExportThread(self.plan, options={"scope": self._selection().value},
+                              record_dir=self.project.folder / EXPORT_RECORDS_DIR,
+                              customer_list=self.customer_list.isChecked())
         thread.progress.connect(lambda done, total: progress.setValue(done))
         stop = QPushButton("Dừng")
         progress.setCancelButton(stop)
@@ -900,8 +909,8 @@ class ExportDialog(QDialog):
             parts.append("Nguồn không còn truy cập được (thẻ nhớ / ổ đĩa đã rút?); các file đã chép vẫn còn nguyên.")
         if result.cancelled:
             parts.append("Bạn đã dừng giữa chừng; các file đã chép vẫn còn nguyên.")
-        if result.manifest_csv:
-            parts.append(f"Danh sách đầy đủ (cả file bỏ qua): thư mục con {result.manifest_csv.parent.name}")
+        if result.list_csv:
+            parts.append(f"Danh sách đầy đủ (cả file bỏ qua): thư mục con {result.list_csv.parent.name}")
         left = sum(statuses.count(s.value) for s in (OpStatus.FAILED, OpStatus.NOT_STARTED, OpStatus.SOURCE_CHANGED))
         if left:
             parts.append(f"Còn {left} file chưa chép: bấm 'Thử lại các file chưa chép'.")

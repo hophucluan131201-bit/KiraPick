@@ -76,9 +76,11 @@ def session(tmp_path_factory: pytest.TempPathFactory):  # noqa: ANN201
     fx.project.close()
 
 
+@pytest.mark.parametrize("customer_list", [False, True], ids=["no_list", "with_list"])
 @pytest.mark.parametrize(("source", "fmt", "layout"), list(itertools.product(("imported", "external"), ExportFormat,
                                                                                  Layout)))
-def test_twelve_combinations(session, tmp_path: Path, source: str, fmt: ExportFormat, layout: Layout) -> None:  # noqa: ANN001
+def test_twelve_combinations(session, tmp_path: Path, source: str, fmt: ExportFormat, layout: Layout,  # noqa: ANN001
+                             customer_list: bool) -> None:
     fx = session
     ids = select_assets(fx.project, Selection.KEEP)
     before = tree_digest(fx.root, fx.card)
@@ -100,12 +102,22 @@ def test_twelve_combinations(session, tmp_path: Path, source: str, fmt: ExportFo
         assert all(fx.card.resolve() in op.source.parents for op in plan.operations)  # only from the card
         assert not any(op.source_relative.startswith("DCIM/101NIKON") for op in plan.operations)  # the restart dup
 
-    result = run_export(plan, options={"scope": "keep"})
+    record_dir = tmp_path / "session" / "export_records"
+    result = run_export(plan, options={"scope": "keep"}, record_dir=record_dir, customer_list=customer_list)
     assert set(result.statuses.values()) == {"copied"} and not result.failed
     out = tmp_path / "out"
-    on_disk = {p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()
-               and "_kirapick_danh_sach" not in p.parts}
-    assert on_disk == expected
+    on_disk = {p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()}
+    lists = {p for p in on_disk if p.startswith("_kirapick_danh_sach/")}
+    assert on_disk - lists == expected
+    # RB1: the destination holds only the photos unless "Xuất kèm danh sách ảnh đã chọn" is ticked
+    assert (out / "_kirapick_danh_sach").exists() is customer_list
+    assert len(lists) == (2 if customer_list else 0)
+    assert result.manifest_csv.parent == record_dir and result.manifest_json.is_file()  # the record, always
+    if customer_list:
+        assert result.list_csv.parent == out / "_kirapick_danh_sach"
+        assert result.list_csv.read_bytes() == result.manifest_csv.read_bytes()
+    else:
+        assert result.list_csv is None and result.list_json is None
     for op in plan.operations:
         assert (out / op.dest_relative).read_bytes() == op.source.read_bytes()
     with open(result.manifest_csv, encoding="utf-8-sig", newline="") as fh:

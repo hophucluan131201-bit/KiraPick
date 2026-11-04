@@ -251,7 +251,8 @@ def test_export_dialog_previews_then_copies(qtbot, env: dict, tmp_path: Path) ->
     qtbot.waitUntil(lambda: dialog.result is not None, timeout=20000)
     thread.wait()
     assert sorted(p.name for p in dest.glob("*.jpg")) == ["DSC_0000.jpg", "DSC_0001.jpg"]
-    assert len(list((dest / "_kirapick_danh_sach").glob("kirapick_export_*.csv"))) == 1
+    assert not (dest / "_kirapick_danh_sach").exists()  # RB1: no list at the destination unless ticked
+    assert dialog.result.manifest_csv.is_file() and dest not in dialog.result.manifest_csv.parents  # the record
     dialog.refresh()  # exporting again: nothing new to copy, the copies only seem present until checked in full
     assert "có vẻ đã có ở thư mục này" in dialog.summary.text()
     assert dialog.copy_button.isEnabled() and dialog.copy_button.text() == "Kiểm tra 2 file đã có"  # CR-P3-A02

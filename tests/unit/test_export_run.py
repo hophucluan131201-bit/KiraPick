@@ -18,9 +18,9 @@ from app.export.copy_export import (
     IssueStatus,
     Selection,
     plan_export,
-    run_export,
     select_assets,
 )
+from app.export.copy_export import run_export as _run_export
 from app.export.formats import ExportFormat
 from app.export.hashing import sha256_file
 from app.export.sources import SourceSpec, scan_external
@@ -46,6 +46,12 @@ def _copy_to_card(fx, name: str) -> Path:  # noqa: ANN001
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(fx.root / name, target)
     return target
+
+
+def run_export(plan, **kw):  # noqa: ANN001, ANN003, ANN201
+    """As the window runs it: the record of the run goes to the session's folder (RB1), never the destination."""
+    kw.setdefault("record_dir", plan.destination.parent / "session_records")
+    return _run_export(plan, **kw)
 
 
 def _rows(result) -> list[dict[str, str]]:  # noqa: ANN001
@@ -439,7 +445,7 @@ def test_manifest_rows_cover_ops_and_issues(fx) -> None:  # noqa: ANN001
     data = json.loads(result.manifest_json.read_text(encoding="utf-8"))
     assert set(data) == {"app_version", "exported_at", "options", "counts", "rows"}
     assert data["options"] == {"scope": "keep", "source": "external", "source_folder": "Thẻ nhớ A",
-                               "format": "raw_jpeg", "layout": "single"}
+                               "format": "raw_jpeg", "layout": "single", "customer_list": "no"}
     assert str(card) not in result.manifest_json.read_text(encoding="utf-8")  # the folder name only
     assert data["counts"]["copied"] == len(plan.operations)
     assert data["rows"] == rows or len(data["rows"]) == len(rows)
@@ -584,3 +590,19 @@ def test_second_member_name_race_then_cancel(fx, monkeypatch: pytest.MonkeyPatch
     assert set(result.statuses.values()) == {"not_started"}
     rows = _rows(result)
     assert [r["status"] for r in rows] == ["not_started", "not_started"] and all(not r["exported_as"] for r in rows)
+
+
+# --- RB1: the list in the destination only when asked ----------------------------------------------------------------
+def test_without_record_dir_or_list_only_the_photos_are_written(fx) -> None:  # noqa: ANN001
+    result = _run_export(plan_export(fx.project, [fx.ids["raw_only"]], fx.dest))
+    assert result.copied and result.manifest_csv is None and result.list_csv is None
+    assert sorted(p.name for p in fx.dest.rglob("*")) == ["DSC_0003.NEF"]
+
+
+def test_customer_list_failure_does_not_lose_the_record(fx) -> None:  # noqa: ANN001
+    (fx.dest / copy_export.MANIFEST_DIR).parent.mkdir(parents=True, exist_ok=True)
+    (fx.dest / copy_export.MANIFEST_DIR).write_bytes(b"a file where the list folder would go")
+    record = fx.dest.parent / "rec"
+    result = _run_export(plan_export(fx.project, [fx.ids["raw_only"]], fx.dest), record_dir=record,
+                         customer_list=True)
+    assert result.copied and result.list_csv is None and result.manifest_csv.parent == record

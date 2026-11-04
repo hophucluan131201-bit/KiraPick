@@ -98,8 +98,9 @@ trường hợp không chắc bạn tự chọn "Dùng file này"); ② **Địn
 (không chuyển đổi); ③ **Thư mục đích** — một thư mục, hoặc mỗi chủ thể một thư mục (ảnh chưa rõ
 người vào "Chưa xác định"). Cặp RAW+JPEG luôn cùng tên; không bao giờ ghi đè (file trùng tên khác nội
 dung → tên mới " (1)"); file đã có giống hệt được bỏ qua; nút Dừng dừng ngay cả giữa một file lớn (file
-dở dang bị xoá). Danh sách đầy đủ mọi file và lý do bỏ qua (CSV/JSON) nằm trong thư mục con
-`_kirapick_danh_sach`; "Thử lại các file chưa chép" chép phần còn thiếu. Tab **📋 Tên ảnh đã Chọn**
+dở dang bị xoá). Danh sách đầy đủ mọi file và lý do bỏ qua (CSV/JSON) luôn được lưu trong dữ liệu của app
+(`%LOCALAPPDATA%\KiraPick\sessions\…\export_records`); chỉ khi tick **Xuất kèm danh sách ảnh đã chọn** (mặc định tắt)
+mới có thêm thư mục con `_kirapick_danh_sach` ở thư mục đích; "Thử lại các file chưa chép" chép phần còn thiếu. Tab **📋 Tên ảnh đã Chọn**
 sao chép tên ảnh (mỗi ảnh một dòng, báo khi có ảnh khác nhau trùng tên) mà không cần thẻ hay thư mục
 đích. Tuỳ chọn cũ "Giữ cấu trúc thư mục con" đã bỏ.
 
@@ -218,8 +219,9 @@ same format must be byte-identical, other format matches by capture time ≤ 2 s
 are confirmed by you); ② **format** — RAW + JPEG, RAW only, JPEG only (no conversion); ③ **layout** —
 one folder, or one folder per subject (unknown → "Chưa xác định"). A RAW+JPEG pair keeps one name; nothing
 is overwritten; identical files already there are skipped; Dừng stops even inside a large file (the
-partial file is removed). A full list of every file and every skip reason (CSV/JSON) goes into
-`_kirapick_danh_sach`; "Thử lại các file chưa chép" copies what is missing. The **📋 Tên ảnh đã Chọn** tab
+partial file is removed). A full list of every file and every skip reason (CSV/JSON) is always kept in the
+app's data (`%LOCALAPPDATA%\KiraPick\sessions\…\export_records`); only when **Xuất kèm danh sách ảnh đã chọn** is
+ticked (off by default) does the destination also get a `_kirapick_danh_sach` subfolder; "Thử lại các file chưa chép" copies what is missing. The **📋 Tên ảnh đã Chọn** tab
 copies the kept photos' names (one line per photo, warns about different photos with the same name)
 without a card or destination. The old "Giữ cấu trúc thư mục con" option was removed.
 
