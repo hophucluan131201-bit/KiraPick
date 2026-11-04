@@ -161,7 +161,7 @@ jobs:
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           Start-Sleep -Seconds 5
           $intExe = Join-Path $progs "$intDir\KiraPick.exe"
-          Check (Test-Path $intExe) "internal test installed at $intExe"
+          Check (Test-Path $intExe) "this build installed at $intExe"
           $k = Get-ItemProperty $intKey -ErrorAction SilentlyContinue
           Check ($k -ne $null -and $k.DisplayName -like "$intName*") "own uninstall entry ${intGuid}_is1: '$($k.DisplayName)' version '$($k.DisplayVersion)' at '$($k.InstallLocation)'"
           Check ($k.DisplayVersion -eq $intVer) "installer version $intVer"
@@ -194,7 +194,7 @@ jobs:
           # 5. Uninstall the test build: the official one, the other test build and the data stay
           Start-Process (Join-Path $progs "$intDir\unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           for ($i = 0; $i -lt 60 -and (Test-Path $intExe); $i++) { Start-Sleep -Seconds 1 }
-          Check (-not (Test-Path $intExe) -and -not (Test-Path $intKey)) "internal test uninstalled"
+          Check (-not (Test-Path $intExe) -and -not (Test-Path $intKey)) "this build uninstalled"
           Check ((Test-Path $offExe) -and ((Get-FileHash $offExe).Hash -eq $offHash) -and (Test-Path $offKey)) "official $offVer still installed and unchanged after uninstalling the test build"
           Check (OthersIntact) "other isolated builds still there after uninstalling this one"
           Check ((DataState) -eq $dataBefore) "user data unchanged after uninstalling"
@@ -213,8 +213,6 @@ jobs:
           Check ($LASTEXITCODE -eq 0 -and (DataState).Replace($data, "") -eq $dataBefore.Replace($data, "") -and $aside.Count -eq 1) "restore script: data back byte-identical, the replaced data kept aside ($($aside.Name))"
           Write-Host "::notice title=install check summary ($($failed.Count) failed)::$($lines -join '%0A')"
           if ($failed.Count) { Write-Host "::notice title=install check FAILED::$($failed -join '%0A')"; exit 1 }
-      - uses: actions/upload-artifact@v4
-        if: always()
       - uses: actions/upload-artifact@v4
         if: always()
         with:
