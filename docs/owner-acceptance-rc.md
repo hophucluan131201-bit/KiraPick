@@ -60,3 +60,23 @@ hoặc khôi phục.
    ```powershell
    powershell -ExecutionPolicy Bypass -File D:\KiraPick-SaoLuu\owner_backup.ps1 -Restore D:\KiraPick-SaoLuu\<ngày-giờ>
    ```
+
+## Tải về
+
+- **Bản build:** run 41918781734, từ commit `0a68955` (nhánh `beta`).
+- **Cần đăng nhập GitHub.** Bấm thẳng link tải gói **kirapick-windows-cuda** (khoảng 3,1 GB, tải được đến ngày
+  04/12/2026):
+  https://github.com/hophucluan131201-bit/KiraPick/actions/runs/41918781734/artifacts/13366729899
+- **Giải nén** vào `D:\KiraPick-Beta-RC\`.
+- **Kiểm tra mã.** Trong PowerShell, chạy hai lệnh dưới:
+  ```powershell
+  cd D:\KiraPick-Beta-RC
+  Get-ChildItem -Recurse -File | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name }
+  ```
+- **So từng dòng với bảng dưới.** Ba file của bộ cài phải khớp từng ký tự. Sai một mã thì **không cài**.
+
+| File | SHA-256 |
+|---|---|
+| `KiraPick-Beta-CUDA-3.0.0b1a-Setup.exe` | `7b379701bc276056fcc1604a8062c0664dd55f80545e979842093c3629b18125` |
+| `KiraPick-Beta-CUDA-3.0.0b1a-Setup-1.bin` | `f0fc1077f6f1ae87e68a7bc9622c3f1389337fc4f4321b1375abf24ad01b699f` |
+| `KiraPick-Beta-CUDA-3.0.0b1a-Setup-2.bin` | `b9ec4ecc83f79c656f4492efdbbf9c0b50e4abd835b7b92394712a78596cbf7c` |
