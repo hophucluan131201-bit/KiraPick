@@ -9,12 +9,19 @@ from pathlib import Path
 import pytest
 
 from app.export.formats import ExportFormat
-from app.export.copy_export import ExportError, Selection, plan_export, run_export, select_assets
+from app.export.copy_export import ExportError, Selection, plan_export, select_assets
+from app.export.copy_export import run_export as _run_export
 from app.ingest.fingerprint import full_sha256
 from app.storage import decisions
 from app.storage.project import Project
 from app.workers.import_job import ImportJob
 from tests.integration.test_import_job import _photo
+
+
+def run_export(plan, **kw):  # noqa: ANN001, ANN003, ANN201
+    """These tests check the list in the destination: "Xuất kèm danh sách ảnh đã chọn" ticked (RB1)."""
+    kw.setdefault("customer_list", True)
+    return _run_export(plan, **kw)
 
 
 def _ids(p: Project) -> dict[str, int]:
