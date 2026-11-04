@@ -78,6 +78,16 @@ $savedInit = Get-Content $initFile -Raw -Encoding UTF8
 $suffix = @{ directml = ""; cuda = "a"; openvino = "b" }[$Edition]
 [IO.File]::WriteAllText((Join-Path $Root $editionFile), ($savedEdition -replace 'EDITION = "directml"', "EDITION = `"$Edition`""))
 [IO.File]::WriteAllText((Join-Path $Root $initFile), ($savedInit -replace '__version__ = "([^"]+)"', "__version__ = `"`$1$suffix`""))
+# An internal test build carries the edition suffix in the exe's version strings too (KiraPick.exe properties).
+$versionInfoFile = "packaging\version_info.txt"
+$savedVersionInfo = Get-Content $versionInfoFile -Raw -Encoding UTF8
+$srcVersion = ([regex]::Match($savedInit, '__version__ = "([^"]+)"')).Groups[1].Value
+# internal: a development version (3.0.0b1.dev5); beta: a pre-release (3.0.0b1, 3.0.0rc1); official: the rest.
+$channel = if ($srcVersion -like "*.dev*") { "internal" } elseif ($srcVersion -match '^\d+(\.\d+)*(a|b|rc)\d+$') { "beta" } else { "official" }
+Write-Host "Kênh: $channel (phiên bản gốc $srcVersion)"
+if ($suffix -and $channel -ne "official") {
+    [IO.File]::WriteAllText((Join-Path $Root $versionInfoFile), ($savedVersionInfo -replace "(StringStruct\('(FileVersion|ProductVersion)', '[^']+)'", "`${1}$suffix'"))
+}
 $env:KIRAPICK_EDITION = $Edition
 try {
 
@@ -172,8 +182,17 @@ Copy-Item "LICENSE.md", "THIRD_PARTY_NOTICES.md", "docs\model-licenses.md" $note
 Copy-Item "packaging\notes\HUONG_DAN_CAI_DAT.txt", "LICENSE.md" $dist
 
 $guide = Join-Path $Root "packaging\notes\HUONG_DAN_CAI_DAT.txt"
+# An internal test (".dev") or a beta (pre-release) build: its own installer identity (packaging\installer.iss),
+# its own file names, the Setup.exe only (no portable zip).
+$internal = $channel -ne "official"
+$internalName = @{ "internal-cuda" = "KiraPick-InternalTest-CUDA"; "internal-directml" = "KiraPick-InternalTest";
+                   "beta-cuda" = "KiraPick-Beta-CUDA"; "beta-directml" = "KiraPick-Beta" }["$channel-$Edition"]
+if ($internal -and -not $internalName) { throw "Chưa có tên bộ cài cho kênh $channel, bản $Edition" }
+$setupBase = if ($internal) { "$internalName-$version-Setup" } else { "KiraPick-Setup-$version" }
+$bundleName = if ($internal) { "$internalName-$version-BoCai.zip" } else { "KiraPick-$version-BoCai.zip" }
+$numeric = ((([regex]::Matches($version, "\d+") | Select-Object -First 3 | ForEach-Object { $_.Value }) + @("0", "0", "0")) | Select-Object -First 3) -join "."
 $portable = Join-Path $out "KiraPick-$version-portable.zip"
-if ($Edition -eq "cuda") { $portable = $null }  # > 2 GB: GitHub cannot host it; the installer slices can
+if ($Edition -eq "cuda" -or $internal) { $portable = $null }  # > 2 GB: GitHub cannot host it; the installer slices can
 if ($portable) {
     Compress-Archive -Path $dist -DestinationPath $portable
     Write-Host "Bản giải nén là chạy: $portable"
@@ -181,27 +200,45 @@ if ($portable) {
 
 $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
           "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $iscc -and $internal) { throw "Bản thử nội bộ / beta cần Inno Setup 6 (Setup.exe)" }
 if (-not $iscc) {
     Write-Host "Chưa có Inno Setup 6 nên chưa tạo được file Setup.exe (winget install --id JRSoftware.InnoSetup -e)." -ForegroundColor Yellow
 } else {
     $slice = if ($Edition -eq "cuda") { "/DSliceSize=1800000000" } else { "/DSliceSize=max" }
-    Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "/DEdition=$Edition", $slice, "packaging\installer.iss")
-    $setup = Join-Path $out "KiraPick-Setup-$version.exe"
-    $bundle = Join-Path $out "KiraPick-$version-BoCai.zip"
+    Invoke-Tool "Inno Setup" $iscc @("/Q", "/DAppVersion=$version", "/DNumericVersion=$numeric.0", "/DEdition=$Edition", "/DChannel=$channel", $slice, "packaging\installer.iss")
+    $setup = Join-Path $out "$setupBase.exe"
+    if (-not (Test-Path $setup)) { throw "Không thấy $setupBase.exe" }
+    $bundle = Join-Path $out $bundleName
     # Small Setup.exe + its data file(s) (.bin); they must stay together in one folder.
-    $slices = @(Get-ChildItem $out -Filter "KiraPick-Setup-$version-*.bin" | ForEach-Object { $_.FullName })
+    $slices = @(Get-ChildItem $out -Filter "$setupBase-*.bin" | ForEach-Object { $_.FullName })
     if (-not $slices) { throw "Không thấy file dữ liệu .bin của bộ cài" }
+    # A beta goes with the backup script its guide asks for first (step 1: back up %LOCALAPPDATA%\KiraPick).
+    $extras = @($guide)
+    if ($channel -eq "beta") { $extras += Join-Path $Root "scripts\owner_backup.ps1" }
     if ($Edition -eq "cuda") {
         # Too big for one zip on GitHub (2 GB per file): publish Setup.exe + its .bin slices + the guide.
-        Copy-Item $guide $out
+        Copy-Item $extras $out
         Write-Host "Bộ cài CUDA: tải Setup.exe và mọi file .bin vào cùng một thư mục" -ForegroundColor Green
     } else {
-        Compress-Archive -Path (@($setup) + $slices + @($guide)) -DestinationPath $bundle
+        Compress-Archive -Path (@($setup) + $slices + $extras) -DestinationPath $bundle
         Write-Host "Bộ cài (gửi file này cho bạn bè): $bundle" -ForegroundColor Green
     }
 }
 Get-ChildItem $out | Format-Table Name, @{ n = "MB"; e = { [math]::Round($_.Length / 1MB) } } | Out-String | Write-Host
+if ($env:GITHUB_ACTIONS -eq "true") {  # provenance, readable through the API (artifacts are not)
+    foreach ($f in Get-ChildItem $out -File) {
+        Write-Host ("::notice title=artifact {0}::{1} bytes sha256 {2}" -f $f.Name, $f.Length, (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower())
+    }
+    $identity = Join-Path $out "installer-identity.iss"
+    if (Test-Path $identity) {
+        $keys = Get-Content $identity | Where-Object { $_ -match "^(AppId|AppName|AppVersion|AppVerName|DefaultDirName|OutputBaseFilename|UninstallDisplayName|VersionInfoVersion|VersionInfoTextVersion)=" }
+        Write-Host ("::notice title=installer identity (as compiled)::" + ($keys -join " | "))
+        $run = @(Get-Content $identity | Where-Object { $_ -match "^\[Run\]" }).Count
+        Write-Host "::notice title=installer [Run] sections::$run (0 = the app is not started after installing)"
+    }
+}
 } finally {
     [IO.File]::WriteAllText((Join-Path $Root $editionFile), $savedEdition)
     [IO.File]::WriteAllText((Join-Path $Root $initFile), $savedInit)
+    [IO.File]::WriteAllText((Join-Path $Root $versionInfoFile), $savedVersionInfo)
 }

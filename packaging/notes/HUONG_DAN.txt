@@ -1,17 +1,20 @@
-﻿KIRAPICK 2.0
+﻿KIRAPICK 3.0 BETA (3.0.0b1)
 =========================================
+
+Bản BETA riêng: cài bên cạnh KiraPick 2.2.x, dùng chung dữ liệu. Sao lưu trước khi dùng
+(xem HUONG_DAN_CAI_DAT.txt). Thử trên BẢN SAO của một buổi chụp.
 
 Ứng dụng lọc ảnh cosplay / đường phố chạy hoàn toàn trên máy tính của bạn.
 - KHÔNG cần Internet sau khi cài. Ứng dụng không gửi ảnh hay dữ liệu đi đâu cả.
 - KHÔNG bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc. Xuất ảnh = sao chép.
 
 CÀI ĐẶT
-1. Chạy file KiraPick-Setup-....exe.
+1. Chạy file KiraPick-Beta-...-Setup.exe (đọc HUONG_DAN_CAI_DAT.txt trước: sao lưu).
 2. Nếu Windows hiện "Windows protected your PC" (Windows đã bảo vệ máy tính):
    bấm "More info" (Thông tin thêm) -> "Run anyway" (Vẫn chạy).
    Lý do: bộ cài chưa có chữ ký số trả phí, không phải virus.
 3. Bấm Next cho tới khi xong. Không cần quyền Administrator.
-   Ứng dụng cài vào: %LOCALAPPDATA%\Programs\KiraPick
+   Ứng dụng cài vào: %LOCALAPPDATA%\Programs\KiraPick-Beta (bản CUDA: KiraPick-Beta-CUDA)
 
 CÁCH DÙNG (4 BƯỚC, MỖI BƯỚC XONG SẼ DỪNG CHỜ BẠN)
 1. 📂 Nhập ảnh       : chọn thư mục ảnh của buổi chụp (RAW NEF/CR2/CR3/ARW..., JPEG).
@@ -21,6 +24,7 @@ CÁCH DÙNG (4 BƯỚC, MỖI BƯỚC XONG SẼ DỪNG CHỜ BẠN)
 3. 📊 Phân tích ảnh   : chấm điểm kỹ thuật (nét ở mắt, mặt, ánh sáng, bố cục).
 4. ⭐ Chọn ảnh        : nhập số ảnh muốn chọn cho mỗi người; ảnh AI chọn có nhãn "AI".
 Xem lại bằng phím K (giữ) / X (loại) / U (bỏ đánh dấu), rồi "⤴ Xuất ảnh" -> "Ảnh đã Giữ".
+Gộp nhầm, đổi tên nhầm, bấm nhầm P/X: Ctrl+Z (Chỉnh sửa -> Hoàn tác).
 
 Phím tắt hiện ở thanh nhỏ dưới khu vực ảnh; F1 để xem đầy đủ.
 Xem ảnh lớn: Space. Về lưới: Esc. Phóng tới mắt để xem nét: E. Phóng to: + / cuộn chuột.
@@ -43,7 +47,7 @@ DỮ LIỆU CỦA ỨNG DỤNG
 - %LOCALAPPDATA%\KiraPick\sessions : ghi nhớ từng thư mục ảnh (tự xoá sau 30 ngày không mở)
 - %LOCALAPPDATA%\KiraPick\learning : bộ nhớ học
 - %LOCALAPPDATA%\KiraPick\logs     : file log (gửi kèm khi báo lỗi)
-Gỡ cài đặt: Start -> "Gỡ cài đặt KiraPick", hoặc Settings -> Apps -> Installed apps -> KiraPick -> Uninstall.
+Gỡ cài đặt: Start -> "Gỡ cài đặt KiraPick Beta" (hoặc "... Beta CUDA").
 Gỡ chỉ xoá chương trình; ảnh và dữ liệu trên vẫn giữ nguyên.
 
 KIỂM TRA KHI CÓ LỖI
