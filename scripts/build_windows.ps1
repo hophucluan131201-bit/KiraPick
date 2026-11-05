@@ -85,7 +85,7 @@ $srcVersion = ([regex]::Match($savedInit, '__version__ = "([^"]+)"')).Groups[1].
 # internal: a development version (3.0.0b1.dev5); beta: a pre-release (3.0.0b1, 3.0.0rc1); official: the rest.
 $channel = if ($srcVersion -like "*.dev*") { "internal" } elseif ($srcVersion -match '^\d+(\.\d+)*(a|b|rc)\d+$') { "beta" } else { "official" }
 Write-Host "Kênh: $channel (phiên bản gốc $srcVersion)"
-if ($suffix -and $channel -ne "official") {
+if ($suffix) {  # every channel: KiraPick.exe properties show the edition version (3.0.0a)
     [IO.File]::WriteAllText((Join-Path $Root $versionInfoFile), ($savedVersionInfo -replace "(StringStruct\('(FileVersion|ProductVersion)', '[^']+)'", "`${1}$suffix'"))
 }
 $env:KIRAPICK_EDITION = $Edition
