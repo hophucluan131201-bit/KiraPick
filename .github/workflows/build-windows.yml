@@ -2,7 +2,7 @@
 # Which edition is built and published is chosen by a marker in the pushed commit message
 # (main or beta branch):
 #   [release]          DirectML edition, version from app/__init__.py (official if it has no a/b/rc suffix)
-#   [release-cuda]     CUDA edition (NVIDIA), version + "a", always a pre-release
+#   [release-cuda]     CUDA edition (NVIDIA), version + "a" (official unless the version is a beta, e.g. 3.0.0b1a)
 #   [release-openvino] OpenVINO edition (Intel CPU), version + "b", always a pre-release
 #   [release-all]      all three
 # Actions tab -> "Build Windows installer" -> Run workflow: build all three, artifacts only (no release).
@@ -331,10 +331,13 @@ jobs:
             $files = Get-ChildItem dist/installer -File -Filter *.zip | ForEach-Object { $_.FullName }
           }
           if (gh release view $tag 2>$null) { Write-Host "Release $tag already exists: left untouched"; exit 0 }
-          if ($edition -ne "directml" -or $version -match '(a|b|rc)\d+$') {  # betas: pre-release
+          $pre = (python -c "from app.edition import is_prerelease; print(is_prerelease('$version', '$edition'))").Trim()
+          if ($pre -eq "True") {  # betas and OpenVINO: pre-release
             gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease
           } else {
-            gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file packaging/notes/RELEASE_NOTES.md --latest
+            # official; only the DirectML edition is marked "Latest" (the updater of each edition finds its own tag)
+            $latest = if ($edition -eq "directml") { "--latest" } else { "--latest=false" }
+            gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file packaging/notes/RELEASE_NOTES.md $latest
           }
 
   # Tests on a real Windows machine (Python 3.12): the full test suite, a GUI smoke run on the real `windows` platform

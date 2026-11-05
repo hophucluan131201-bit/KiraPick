@@ -56,7 +56,8 @@ def test_edition_versions_and_names() -> None:
     assert version_for("2.2.0", "directml") == "2.2.0"
     assert version_for("2.2.0", "cuda") == "2.2.0a"
     assert version_for("2.2.0", "openvino") == "2.2.0b"
-    assert release_name("2.2.0a", "cuda") == "KiraPick 2.2.0a – NVIDIA CUDA (beta)"
+    assert release_name("3.0.0a", "cuda") == "KiraPick 3.0.0a – NVIDIA CUDA"  # official since 3.0 (owner)
+    assert release_name("3.0.0b1a", "cuda") == "KiraPick 3.0.0b1a – NVIDIA CUDA (beta)"
     assert release_name("2.2.0b", "openvino") == "KiraPick 2.2.0b – OpenVINO (beta)"
     assert release_name("2.2.0", "directml") == "KiraPick 2.2.0"
     assert release_name("2.2.0b1", "directml") == "KiraPick 2.2.0b1 (beta)"
