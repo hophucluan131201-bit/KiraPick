@@ -1,12 +1,14 @@
-## KiraPick 3.0.0b1 — Private Beta
+## KiraPick 3.0.0
 
-Bản **beta riêng** (không phải bản chính thức), chỉ gửi trực tiếp cho người thử, không đăng lên trang phát hành.
-Cài **bên cạnh** KiraPick 2.2.x: không thay, không gỡ bản chính thức. Xem `HUONG_DAN_CAI_DAT.txt` trước khi cài.
+**Hai bản cài** (chọn một; xem `HUONG_DAN_CAI_DAT.txt`):
+- **KiraPick 3.0.0 (DirectML) – bản chính thức:** mọi máy Windows 10/11; dùng card đồ hoạ bất kỳ, không được thì CPU.
+  Tải `KiraPick-3.0.0-BoCai.zip`.
+- **KiraPick 3.0.0a – NVIDIA CUDA:** máy có card NVIDIA (driver mới). Bộ cài khoảng 3 GB: tải `KiraPick-Setup-3.0.0a.exe`
+  và mọi file `KiraPick-Setup-3.0.0a-*.bin` vào cùng một thư mục.
 
-**Hai bản cài**
-- **KiraPick Beta 3.0.0b1 (DirectML):** mọi máy Windows 10/11; dùng card đồ hoạ bất kỳ, không được thì CPU.
-- **KiraPick Beta CUDA 3.0.0b1a:** máy có card NVIDIA (driver mới). Bộ cài khoảng 3 GB: `Setup.exe` + các file
-  `.bin`, để chung một thư mục.
+**Nâng cấp từ 2.2.x:** bộ cài 3.0 thay bản 2.2.x (cùng một ứng dụng). **Sao lưu trước** bằng `owner_backup.ps1` có
+trong gói: mở một buổi chụp cũ bằng 3.0 sẽ nâng cấp dữ liệu của buổi đó, và 2.2.x không mở lại được nữa (xem "Giới hạn
+đã biết"). Nút "Cập nhật KiraPick" trong 2.2.x cũng đưa bạn lên 3.0.
 
 ### Mới trong 3.0
 
@@ -46,7 +48,7 @@ Cài **bên cạnh** KiraPick 2.2.x: không thay, không gỡ bản chính thứ
 ### Giới hạn đã biết
 
 - **Bộ cài chưa có chữ ký số.** Windows SmartScreen có thể chặn: chỉ bấm **More info → Run anyway** khi mã SHA-256
-  khớp với mã người gửi đưa cho bạn.
+  của file khớp với mã GitHub ghi cạnh file trên trang phát hành.
 - **CUDA và DirectML:**
   - Bản DirectML chạy TOPIQ, CLIP và chấm chất lượng kỹ thuật bằng **CPU** (card không chạy được các mô hình này), nên
     chậm hơn.
@@ -65,10 +67,10 @@ Cài **bên cạnh** KiraPick 2.2.x: không thay, không gỡ bản chính thứ
   - Trên máy kiểm tra của GitHub (10.000 ảnh), bấm P/X mất khoảng 30–46 ms.
   - Thỉnh thoảng có một lần chậm hơn 100 ms khi Python dọn bộ nhớ.
   - Buổi chụp rất lớn mở và phân tích lâu hơn.
-- **Cập nhật tự động:**
-  - Nút "Cập nhật KiraPick" không đưa bản beta cho người dùng 2.2.x.
-  - Nút này cũng không cập nhật bản beta sang một bản beta khác.
-  - Bản beta mới sẽ được gửi riêng.
+- **Quay lại 2.2.x:** gỡ 3.0, cài lại bản 2.2.1 (hoặc 2.2.0a) từ trang phát hành, rồi khôi phục bản sao lưu
+  (`owner_backup.ps1 -Restore …`, xem `HUONG_DAN_CAI_DAT.txt`).
+- **Đã cài bản thử "KiraPick Beta" / "KiraPick Internal Test":** các bản đó nằm riêng, không bị bản 3.0 thay; gỡ khi
+  không cần nữa (Start → "Gỡ cài đặt KiraPick Beta…").
 - **Giấy phép:** ArcFace, TOPIQ và CLIP chỉ dùng phi thương mại / cá nhân (xem `LICENSES.txt`).
 
 ### Không đổi

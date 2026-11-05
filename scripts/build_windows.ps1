@@ -214,7 +214,7 @@ if (-not $iscc) {
     if (-not $slices) { throw "Không thấy file dữ liệu .bin của bộ cài" }
     # A beta goes with the backup script its guide asks for first (step 1: back up %LOCALAPPDATA%\KiraPick).
     $extras = @($guide)
-    if ($channel -eq "beta") { $extras += Join-Path $Root "scripts\owner_backup.ps1" }
+    $extras += Join-Path $Root "scripts\owner_backup.ps1"  # every package: the guide asks for a backup first
     if ($Edition -eq "cuda") {
         # Too big for one zip on GitHub (2 GB per file): publish Setup.exe + its .bin slices + the guide.
         Copy-Item $extras $out

@@ -1,20 +1,20 @@
-﻿KIRAPICK 3.0 BETA (3.0.0b1)
+﻿KIRAPICK 3.0
 =========================================
 
-Bản BETA riêng: cài bên cạnh KiraPick 2.2.x, dùng chung dữ liệu. Sao lưu trước khi dùng
-(xem HUONG_DAN_CAI_DAT.txt). Thử trên BẢN SAO của một buổi chụp.
+Đang dùng KiraPick 2.2? Sao lưu trước khi cài (xem HUONG_DAN_CAI_DAT.txt): mở một buổi chụp cũ
+bằng bản 3.0 sẽ nâng cấp dữ liệu của buổi đó, và 2.2 không mở lại được nữa.
 
 Ứng dụng lọc ảnh cosplay / đường phố chạy hoàn toàn trên máy tính của bạn.
 - KHÔNG cần Internet sau khi cài. Ứng dụng không gửi ảnh hay dữ liệu đi đâu cả.
 - KHÔNG bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc. Xuất ảnh = sao chép.
 
 CÀI ĐẶT
-1. Chạy file KiraPick-Beta-...-Setup.exe (đọc HUONG_DAN_CAI_DAT.txt trước: sao lưu).
+1. Chạy file KiraPick-Setup-....exe (đọc HUONG_DAN_CAI_DAT.txt trước: sao lưu).
 2. Nếu Windows hiện "Windows protected your PC" (Windows đã bảo vệ máy tính):
    bấm "More info" (Thông tin thêm) -> "Run anyway" (Vẫn chạy).
    Lý do: bộ cài chưa có chữ ký số trả phí, không phải virus.
 3. Bấm Next cho tới khi xong. Không cần quyền Administrator.
-   Ứng dụng cài vào: %LOCALAPPDATA%\Programs\KiraPick-Beta (bản CUDA: KiraPick-Beta-CUDA)
+   Ứng dụng cài vào: %LOCALAPPDATA%\Programs\KiraPick
 
 CÁCH DÙNG (4 BƯỚC, MỖI BƯỚC XONG SẼ DỪNG CHỜ BẠN)
 1. 📂 Nhập ảnh       : chọn thư mục ảnh của buổi chụp (RAW NEF/CR2/CR3/ARW..., JPEG).
@@ -47,7 +47,7 @@ DỮ LIỆU CỦA ỨNG DỤNG
 - %LOCALAPPDATA%\KiraPick\sessions : ghi nhớ từng thư mục ảnh (tự xoá sau 30 ngày không mở)
 - %LOCALAPPDATA%\KiraPick\learning : bộ nhớ học
 - %LOCALAPPDATA%\KiraPick\logs     : file log (gửi kèm khi báo lỗi)
-Gỡ cài đặt: Start -> "Gỡ cài đặt KiraPick Beta" (hoặc "... Beta CUDA").
+Gỡ cài đặt: Start -> "Gỡ cài đặt KiraPick", hoặc Settings -> Apps -> Installed apps -> KiraPick -> Uninstall.
 Gỡ chỉ xoá chương trình; ảnh và dữ liệu trên vẫn giữ nguyên.
 
 KIỂM TRA KHI CÓ LỖI

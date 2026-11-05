@@ -1,77 +1,63 @@
-﻿HƯỚNG DẪN CÀI ĐẶT KIRAPICK BETA 3.0.0b1 (bản beta riêng)
+﻿HƯỚNG DẪN CÀI ĐẶT KIRAPICK 3.0.0
 =========================================================
 
-Đây là bản BETA gửi riêng cho người thử, không phải bản chính thức. Nó cài BÊN CẠNH KiraPick 2.2.x
-(không thay, không gỡ bản chính thức), nhưng dùng CHUNG dữ liệu %LOCALAPPDATA%\KiraPick.
-=> LÀM BƯỚC 1 (SAO LƯU) TRƯỚC KHI CÀI.
-
 KHÔNG cần cài Git, Python hay gì khác. Máy cần Windows 10/11 64-bit, khoảng 3 GB ổ trống
-(bản CUDA: khoảng 6 GB).
+(bản CUDA: khoảng 6 GB). Có card đồ hoạ thì AI chạy nhanh hơn, không có vẫn chạy được.
 
 CHỌN BẢN NÀO?
-  - KiraPick Beta 3.0.0b1 (DirectML): mọi máy. Gói tải: KiraPick-Beta-3.0.0b1-BoCai.zip
-      (bên trong: KiraPick-Beta-3.0.0b1-Setup.exe + file .bin + owner_backup.ps1 + file này).
-  - KiraPick Beta CUDA 3.0.0b1a: máy có card NVIDIA (driver mới). Không có file .zip; tải TẤT CẢ:
-      KiraPick-Beta-CUDA-3.0.0b1a-Setup.exe, mọi file KiraPick-Beta-CUDA-3.0.0b1a-Setup-*.bin,
+  - KiraPick 3.0.0 (bản chính thức, DirectML): cho mọi máy. Tải KiraPick-3.0.0-BoCai.zip
+      (bên trong: KiraPick-Setup-3.0.0.exe + file .bin + owner_backup.ps1 + file này).
+  - KiraPick 3.0.0a - NVIDIA CUDA: cho máy có card NVIDIA (GTX 10xx trở lên, driver mới).
+      Không có file .zip: tải TẤT CẢ KiraPick-Setup-3.0.0a.exe, mọi file KiraPick-Setup-3.0.0a-*.bin,
       owner_backup.ps1 và file này vào CÙNG MỘT thư mục.
+  Bản 3.0 THAY bản 2.2.x đang có trên máy (cùng một ứng dụng).
+
+CÁCH DÁN LỆNH: bấm Start, gõ PowerShell, Enter. Chép lệnh (Ctrl+C), bấm vào cửa sổ PowerShell,
+nhấp chuột phải để dán, rồi Enter. Máy không có ổ D: thì thay D: bằng C: trong mọi lệnh.
 
 -----------------------------------------------------------------
-BƯỚC 0 - KIỂM TRA FILE TẢI VỀ
+BƯỚC 1 - ĐẶT FILE VÀO MỘT THƯ MỤC
 -----------------------------------------------------------------
-Người gửi bản beta đưa bạn mã SHA-256 của từng file. Mở PowerShell trong thư mục chứa các file rồi chạy:
-  Get-ChildItem -File | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name }
-Mọi mã phải khớp từng ký tự. Sai một mã thì KHÔNG cài, báo lại người gửi.
+  - Bản DirectML: nhấp phải file .zip -> "Extract All..." -> gõ D:\KiraPick-3.0 -> "Extract".
+  - Bản CUDA: chép tất cả các file đã tải vào thư mục D:\KiraPick-3.0
 
 -----------------------------------------------------------------
-BƯỚC 1 - SAO LƯU (BẮT BUỘC)
+BƯỚC 2 - SAO LƯU (rất nên làm nếu đang dùng KiraPick 2.2)
 -----------------------------------------------------------------
-1. Đóng MỌI cửa sổ KiraPick (cả bản 2.2.x và các bản thử).
-2. Mở PowerShell trong thư mục chứa owner_backup.ps1, chạy:
-     powershell -ExecutionPolicy Bypass -File .\owner_backup.ps1 -Destination D:\KiraPick-SaoLuu
-3. Cuối cùng phải có dòng màu xanh "kiểm tra SHA-256: khớp" và đường dẫn bản sao lưu
-   (ví dụ D:\KiraPick-SaoLuu\20261104-153000). GHI LẠI đường dẫn này.
-   Script chỉ chép %LOCALAPPDATA%\KiraPick và cài đặt của app; ảnh gốc không nằm ở đây và không bị đụng tới.
-   Script không bao giờ ghi đè một bản sao lưu cũ. Giữ lại bản sao lưu làm trước lần đầu dùng bản 3.0.
+Mở một buổi chụp cũ bằng bản 3.0 sẽ nâng cấp dữ liệu của buổi đó; sau đó KiraPick 2.2 không mở lại
+được buổi đó nữa. Sao lưu để có thể quay lại.
+1. Đóng MỌI cửa sổ KiraPick.
+2. Dán vào PowerShell:
+     powershell -ExecutionPolicy Bypass -File D:\KiraPick-3.0\owner_backup.ps1 -Destination D:\KiraPick-SaoLuu
+3. Cuối cùng phải có dòng MÀU XANH "... kiểm tra SHA-256: khớp". Chụp màn hình dòng
+   "Bản sao lưu nằm ở: D:\KiraPick-SaoLuu\..." để nhớ đường dẫn.
+   Script chỉ chép dữ liệu KiraPick (không chép ảnh) và không bao giờ ghi đè bản sao lưu cũ.
 
 -----------------------------------------------------------------
-BƯỚC 2 - CÀI ĐẶT
+BƯỚC 3 - CÀI ĐẶT
 -----------------------------------------------------------------
-1. Bản DirectML: nhấp phải file .zip -> "Extract All..." -> "Extract".
-   Bản CUDA: không cần giải nén, các file đã nằm chung một thư mục.
-2. Nhấp đúp KiraPick-Beta-...-Setup.exe (file .bin PHẢI nằm cạnh file .exe).
-3. Bộ cài CHƯA CÓ CHỮ KÝ SỐ nên Windows có thể hiện "Windows protected your PC".
-   Chỉ khi các mã ở Bước 0 đã khớp: bấm "More info" -> "Run anyway".
-   DỪNG LẠI nếu Windows Defender báo virus, hoặc tên file / nhà phát hành khác với ở trên
-   (màn hình phải ghi "Unknown publisher").
-4. Đồng ý giấy phép -> Next -> Install -> Finish. Không cần quyền Administrator.
-   Bộ cài không tự mở app. Mở bằng "KiraPick Beta" (hoặc "KiraPick Beta CUDA") trong menu Start.
-   KiraPick 2.2.x vẫn còn, mở bằng biểu tượng "KiraPick" như cũ.
+1. Mở D:\KiraPick-3.0, nhấp đúp KiraPick-Setup-3.0.0.exe (bản CUDA: KiraPick-Setup-3.0.0a.exe).
+   File .bin PHẢI nằm cạnh file .exe.
+2. Nếu hiện khung xanh "Windows protected your PC": bộ cài chưa có chữ ký số, KHÔNG phải virus.
+   Bấm "More info" -> "Run anyway" (màn hình phải ghi "Unknown publisher").
+   DỪNG LẠI nếu Windows Defender báo virus.
+3. "I accept the agreement" -> Next -> Next -> Install -> Finish. Không cần quyền Administrator.
+   Nếu bộ cài hỏi "insert disk" / không thấy file .bin: file .bin chưa nằm cạnh file .exe.
+Mở app bằng biểu tượng "KiraPick" ngoài màn hình hoặc trong menu Start.
 
 -----------------------------------------------------------------
-LƯU Ý QUAN TRỌNG KHI DÙNG BẢN BETA
+BƯỚC 4 - DÙNG (4 nút trên thanh công cụ, làm lần lượt)
 -----------------------------------------------------------------
-- Mở một thư mục ảnh bằng bản 3.0 sẽ NÂNG CẤP phiên làm việc của thư mục đó. Sau đó KiraPick 2.2.x
-  KHÔNG mở được thư mục đó nữa (bản cũ được giữ ở project.snorlu.db.v5.bak). Nên thử trên BẢN SAO
-  của một buổi chụp.
-- Gom chủ thể theo "trang phục / look": một người mặc hai bộ thành hai chủ thể; gộp tay nếu cần
-  (🔗 Gộp), gộp nhầm thì Ctrl+Z.
-- Ctrl+Z (Chỉnh sửa -> Hoàn tác): thao tác chủ thể còn hoàn tác được sau khi mở lại app; P/X/sao/❤ thì không.
-- Xuất ảnh: mặc định thư mục đích CHỈ có ảnh. Tick "Xuất kèm danh sách ảnh đã chọn" nếu muốn thêm
+1. 📂 Nhập ảnh          -> chọn thư mục ảnh của một buổi chụp (RAW hoặc JPEG).
+2. 🧠 Nhận diện chủ thể -> AI gom ảnh theo từng trang phục / người. Một nhóm bị tách đôi:
+                          tick 2 ô của chúng rồi bấm "🔗 Gộp". Gộp nhầm: Ctrl+Z.
+3. 📊 Phân tích ảnh      -> AI chấm điểm (nét, mặt, sáng, bố cục, thẩm mỹ).
+4. ⭐ Chọn ảnh           -> nhập số ảnh muốn chọn cho mỗi chủ thể.
+Xem lại: P = giữ, X = loại, số 1-5 = sao, F = yêu thích; bấm nhầm thì Ctrl+Z.
+Cuối cùng: "⤴ Xuất ảnh" -> chọn ảnh, định dạng (RAW + JPEG, chỉ RAW, chỉ JPEG), thư mục đích -> Sao chép.
+  Mặc định thư mục đích CHỈ có ảnh; tick "Xuất kèm danh sách ảnh đã chọn" nếu muốn có thêm
   thư mục con _kirapick_danh_sach (danh sách CSV/JSON).
-- Bản DirectML chấm thẩm mỹ / chất lượng bằng CPU nên chậm hơn bản CUDA.
-- Chi tiết: RELEASE_NOTES.md (trong thư mục cài đặt, mục docs).
-
------------------------------------------------------------------
-QUAY LẠI NHƯ CŨ
------------------------------------------------------------------
-1. Gỡ bản beta: Start -> "Gỡ cài đặt KiraPick Beta" (hoặc "... Beta CUDA").
-   Gỡ chỉ xoá chương trình beta; KiraPick 2.2.x và dữ liệu vẫn giữ nguyên.
-2. Muốn dùng lại 2.2.x cho các thư mục đã mở bằng bản 3.0: đóng mọi KiraPick rồi khôi phục bản sao lưu
-   của Bước 1:
-     powershell -ExecutionPolicy Bypass -File .\owner_backup.ps1 -Restore D:\KiraPick-SaoLuu\<ngày-giờ>
-   - Dữ liệu KiraPick trở về đúng lúc sao lưu: mọi thao tác làm sau lúc đó không còn trong app.
-   - Script không xoá gì: dữ liệu hiện tại được cất ở %LOCALAPPDATA%\KiraPick.truoc-khoi-phuc-<ngày-giờ>.
-   - Ảnh gốc và ảnh đã xuất không bị ảnh hưởng.
+Mẹo: Space = xem ảnh lớn, Esc = về lưới, E = phóng tới mắt, Z = phóng to. Phím tắt đầy đủ: F1.
 
 -----------------------------------------------------------------
 YÊN TÂM VỀ ẢNH CỦA BẠN
@@ -80,8 +66,20 @@ YÊN TÂM VỀ ẢNH CỦA BẠN
 - KiraPick chạy offline, không gửi ảnh hay dữ liệu đi đâu (chỉ nút "Cập nhật KiraPick" dùng mạng, khi bạn bấm).
 
 -----------------------------------------------------------------
+QUAY LẠI KIRAPICK 2.2 (chỉ khi cần)
+-----------------------------------------------------------------
+1. Gỡ 3.0: Start -> "Gỡ cài đặt KiraPick" (hoặc Settings -> Apps -> KiraPick -> Uninstall).
+2. Cài lại bản 2.2.1 (hoặc 2.2.0a cho CUDA) từ trang phát hành KiraPick trên GitHub.
+3. Đóng mọi KiraPick, xem tên bản sao lưu:
+     Get-ChildItem D:\KiraPick-SaoLuu -Directory | Select-Object Name
+   rồi dán lệnh dưới, thay TEN_BAN_SAO_LUU bằng tên bản sao lưu của Bước 2 (ví dụ 20261105-153000):
+     powershell -ExecutionPolicy Bypass -File D:\KiraPick-3.0\owner_backup.ps1 -Restore D:\KiraPick-SaoLuu\TEN_BAN_SAO_LUU
+   Phải thấy dòng xanh "Đã khôi phục ... SHA-256: khớp". Script không xoá gì: dữ liệu hiện tại được cất
+   sang thư mục KiraPick.truoc-khoi-phuc-<ngày-giờ>.
+Ảnh gốc và ảnh đã xuất không bị ảnh hưởng.
+
+-----------------------------------------------------------------
 KHI GẶP LỖI
 -----------------------------------------------------------------
-Chụp màn hình và gửi người chia sẻ bản beta, kèm thư mục log:
-  Windows + R -> dán %LOCALAPPDATA%\KiraPick\logs -> Enter -> gửi các file trong thư mục mở ra.
-Chép thư mục log ra chỗ khác TRƯỚC khi gỡ cài đặt hoặc khôi phục.
+Chụp màn hình lỗi và gửi cho người đã chia sẻ ứng dụng cho bạn, kèm thư mục log:
+  bấm Windows + R, dán %LOCALAPPDATA%\KiraPick\logs rồi Enter, gửi các file trong thư mục mở ra.
