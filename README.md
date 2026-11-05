@@ -15,31 +15,44 @@ những tấm đẹp, khác dáng nhau để bạn duyệt lại.
 - **Không cần Internet** sau khi cài; không gửi ảnh hay dữ liệu đi đâu.
 - **Không bao giờ sửa, xoá, đổi tên hay di chuyển ảnh gốc.** Xuất ảnh = sao chép.
 - Đọc RAW (Nikon NEF ưu tiên, Canon CR2/CR3, Sony ARW, …) và JPEG.
-- **Bản 2.0** (chính thức): gom ảnh theo chủ thể bằng khuôn mặt **ArcFace** (InsightFace, chỉ dùng phi thương
-  mại / nghiên cứu) và dáng người **YoutuReID**, **tự học** từ các lần bạn gộp / tách chủ thể, phát hiện mắt
-  nhắm / nhìn xuống, *gợi ý thẩm mỹ* bằng AI (TOPIQ, phi thương mại)
-  (xem [Lưu ý miễn trừ](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer)).
-- Giới hạn: điểm chủ yếu là điểm kỹ thuật, gợi ý thẩm mỹ chỉ chiếm phần nhỏ; ngưỡng gom mới được kiểm tra trên
-  một buổi chụp; luôn xem lại kết quả AI trước khi giao ảnh. Chi tiết: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) (tiếng Anh).
+- **Bản 3.0** (chính thức, hai bản cài):
+  - **3.0.0 (DirectML):** mọi máy;
+  - **3.0.0a (NVIDIA CUDA):** máy có card NVIDIA, AI chạy nhanh khoảng gấp đôi.
+- Cách gom và chấm của bản 3.0:
+  - gom ảnh theo chủ thể bằng khuôn mặt **ArcFace** (InsightFace, chỉ dùng phi thương mại / nghiên cứu) và dáng người
+    **YoutuReID**;
+  - **tự học** từ các lần bạn gộp / tách;
+  - chấm nét ở mắt, mắt nhắm/mở, thẩm mỹ (TOPIQ, CLIP);
+  - **gộp chủ thể có xem trước**, **Hoàn tác (Ctrl+Z)**, **xuất ảnh nâng cao** (RAW + JPEG, thẻ nhớ, mỗi chủ thể một
+    thư mục).
+  - Xem [Lưu ý miễn trừ](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer).
+- Giới hạn: AI gom theo trang phục (một người mặc hai bộ = hai nhóm, gộp tay khi cần); luôn xem lại kết quả AI trước
+  khi giao ảnh. Chi tiết: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) (tiếng Anh).
 
 ### Cài đặt (không cần biết lập trình)
 
 1. Vào trang **[Releases](https://github.com/hophucluan131201-bit/KiraPick/releases)**
    (cột bên phải trang GitHub → *Releases*).
-2. Tải file **`KiraPick-…-BoCai.zip`** của phiên bản mới nhất.
-3. Nhấp phải → *Extract All* (Giải nén) → mở **`HUONG_DAN_CAI_DAT.txt`** và làm theo.
-   Không cần cài Git hay Python.
+2. Chọn bản:
+   - **KiraPick 3.0.0 (DirectML)**, cho mọi máy: tải **`KiraPick-3.0.0-BoCai.zip`**, nhấp phải → *Extract All*.
+   - **KiraPick 3.0.0a – NVIDIA CUDA**, cho máy có card NVIDIA: tải `KiraPick-Setup-3.0.0a.exe`, mọi file `.bin`,
+     `owner_backup.ps1` và `HUONG_DAN_CAI_DAT.txt` vào cùng một thư mục.
+3. Mở **`HUONG_DAN_CAI_DAT.txt`** và làm theo. Không cần cài Git hay Python.
+   - **Đang dùng 2.2?** Sao lưu trước bằng `owner_backup.ps1` (có trong gói).
+   - Sau khi mở bằng 3.0, các buổi chụp cũ không mở lại được bằng 2.2.
 4. Nếu Windows báo *“Windows protected your PC”*: bấm **More info → Run anyway**
    (bộ cài chưa có chữ ký số trả phí, không phải virus).
 
-Máy cần Windows 10/11 64-bit. Có card đồ hoạ (NVIDIA, AMD, Intel) thì AI chạy trên card qua
-DirectML; không có thì chạy bằng CPU.
+Máy cần Windows 10/11 64-bit.
+- **Bản DirectML:** dùng card đồ hoạ bất kỳ (NVIDIA, AMD, Intel); không có card thì chạy bằng CPU.
+- **Bản CUDA:** chạy mọi mô hình AI trên card NVIDIA.
 
 ### Cách dùng: 4 bước, mỗi bước xong sẽ dừng chờ bạn
 
 1. **📂 Nhập ảnh** — chọn thư mục ảnh của một buổi chụp.
 2. **🧠 Nhận diện chủ thể** — AI gom ảnh theo từng người. Kiểm tra danh sách **CHỦ THỂ** bên trái:
-   tick ô vuông của nhiều người rồi bấm **🔗 Gộp chủ thể** nếu một người bị tách thành nhiều nhóm;
+   tick ô vuông của nhiều người rồi bấm **🔗 Gộp** nếu một người bị tách thành nhiều nhóm (hộp thoại cho chọn chủ thể
+   giữ lại, đặt tên, xem ảnh từng bên; gộp nhầm thì **Ctrl+Z**);
    chuột phải vào ảnh để bỏ ảnh khỏi một chủ thể, gán cho chủ thể khác, hoặc **➕ Tạo chủ thể mới** nếu đó là
    người chưa có trong danh sách. Ô phía trên danh sách đổi cách xếp (theo số, thời gian chụp, nhiều ảnh nhất,
    tên); nhấp phải vào danh sách → **🔢 Đánh số lại** để có số 1, 2, 3… liền nhau.
@@ -48,9 +61,9 @@ DirectML; không có thì chạy bằng CPU.
    Giữ/Loại/cho sao/❤; chỉ hiện khi đã học đủ ≥ 60 lựa chọn và đoán đúng rõ hơn đoán mò). Bảng bên phải có
    thanh điểm và lý do cho từng tiêu chí; lưới ảnh hiện “K 78 · G 85” và xếp được theo K, G hoặc K + G.
    🎓 **AI đã học → So sánh ảnh…**: chọn tấm thích hơn trong từng cặp ảnh giống nhau để app học gu nhanh hơn.
-   ⚙ **Tuỳ chọn**: tỷ lệ K/G, **🔄 Cập nhật mô hình AI** (cần mạng, chỉ khi bạn bấm).
+   ⚙ **Tuỳ chọn**: tỷ lệ K/G, **🔄 Cập nhật KiraPick** (cần mạng, chỉ khi bạn bấm).
 4. **⭐ Chọn ảnh** — nhập số ảnh muốn chọn cho mỗi người (xếp theo K + G). Ảnh AI chọn có nhãn **AI** và xếp lên đầu.
-   Duyệt lại bằng **K** (giữ) / **X** (loại) / **U** (bỏ đánh dấu), rồi **⤴ Xuất ảnh → Ảnh đã Giữ**.
+   Duyệt lại bằng **P** (giữ) / **X** (loại) / **U** (bỏ đánh dấu), rồi **⤴ Xuất ảnh → Ảnh đã Giữ**.
 
 Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng phím tắt nhỏ luôn hiện dưới khu vực ảnh
 (ẩn/hiện bằng **⌨ Phím tắt**, **F1** xem đầy đủ).
@@ -69,6 +82,7 @@ Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng
 | 1–5, 0 | chấm sao, xoá sao |
 | F | yêu thích |
 | Q / W / R | chấm nét: nét căng / hơi soft / lệch nét – rung (bấm lại để bỏ); app học độ nét riêng cho từng máy + ống kính |
+| Ctrl+Z | hoàn tác (Chỉnh sửa → Hoàn tác): gộp / đổi tên / tách chủ thể (còn sau khi mở lại app), P / X / sao / ❤ (trong lần mở này) |
 | Ctrl+I / Ctrl+E | nhập thư mục / xuất ảnh |
 | Ctrl+F | tìm tên file (nhiều số cách nhau bằng dấu cách: `9645 9650`) |
 | Ctrl+L | danh sách khách chọn: dán tin nhắn của khách, vd `9645, 9657-9660, DSC_9665.jpg` |
@@ -122,7 +136,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\make_shortcut.ps1   # biểu 
 
 - Kiểm thử: `.\.venv\Scripts\python -m pytest`
 - Tải mô hình AI (một lần, cần Internet): `.\.venv\Scripts\python scripts\fetch_models.py`
-- Bộ cài: GitHub Actions tự build khi commit trên `main` có chữ `[release]`; build tay:
+- Bộ cài: GitHub Actions tự build và phát hành khi commit trên `main` có chữ `[release]` (DirectML) /
+  `[release-cuda]` (CUDA); build tay:
   `powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1`
 
 ---
@@ -136,31 +151,46 @@ open/closed, face, exposure, framing) and picks the best, varied shots for you t
 - **No Internet needed** after installation; no photo or data ever leaves the computer.
 - **Never edits, deletes, renames or moves original photos.** Export = copy.
 - Reads RAW (Nikon NEF first, Canon CR2/CR3, Sony ARW, …) and JPEG.
-- **Version 2.0** (stable): groups photos by subject with **ArcFace** faces (InsightFace, non-commercial
-  research use only) and **YoutuReID** whole-body vectors, **learns** from your merge / split
-  corrections, detects closed / downcast eyes and gives an AI *aesthetic hint* (TOPIQ, non-commercial)
-  (see the [disclaimer](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer)).
-- Limits: scores are mostly technical, the aesthetic hint weighs little; grouping thresholds were
-  checked on one shoot so far; always review AI results before delivering photos. Details: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
+- **Version 3.0** (stable, two installers):
+  - **3.0.0 (DirectML):** any computer;
+  - **3.0.0a (NVIDIA CUDA):** NVIDIA cards, about twice as fast.
+- How 3.0 groups and scores:
+  - groups photos by subject with **ArcFace** faces (InsightFace, non-commercial research use only) and
+    **YoutuReID** whole-body vectors;
+  - **learns** from your merge / split corrections;
+  - scores focus at the eyes, eyes open/closed and aesthetics (TOPIQ, CLIP);
+  - **merge with preview**, **Undo (Ctrl+Z)**, **advanced export** (RAW + JPEG, memory cards, one folder per
+    subject).
+  - See the [disclaimer](#lưu-ý-miễn-trừ-trách-nhiệm--disclaimer).
+- Limits: grouping is per outfit (one person in two costumes = two groups; merge by hand when needed); always
+  review AI results before delivering photos. Details: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 ### Install (no programming needed)
 
 1. Open the **[Releases](https://github.com/hophucluan131201-bit/KiraPick/releases)** page
    (right-hand column of the GitHub page → *Releases*).
-2. Download **`KiraPick-…-BoCai.zip`** of the latest version (*bộ cài* = installer).
-3. Right-click → *Extract All* → open **`HUONG_DAN_CAI_DAT.txt`** (Vietnamese guide) and run
-   `KiraPick-Setup-….exe`. No Git or Python needed; no administrator rights needed.
+2. Pick an edition:
+   - **KiraPick 3.0.0 (DirectML)**, any computer: download **`KiraPick-3.0.0-BoCai.zip`** (*bộ cài* = installer) and
+     extract it.
+   - **KiraPick 3.0.0a – NVIDIA CUDA**, NVIDIA cards: download `KiraPick-Setup-3.0.0a.exe`, every `.bin`,
+     `owner_backup.ps1` and `HUONG_DAN_CAI_DAT.txt` into one folder.
+3. Follow **`HUONG_DAN_CAI_DAT.txt`** (Vietnamese guide) and run `KiraPick-Setup-….exe`. No Git, Python or
+   administrator rights needed.
+   - **Upgrading from 2.2?** Back up first with `owner_backup.ps1` (in the package).
+   - Shoots opened in 3.0 no longer open in 2.2.
 4. If Windows shows *“Windows protected your PC”*: click **More info → Run anyway**
    (the installer is not code-signed; it is not a virus).
 
-Requires Windows 10/11 64-bit. With a graphics card (NVIDIA, AMD, Intel) the AI runs on it through
-DirectML; otherwise on the CPU.
+Requires Windows 10/11 64-bit.
+- **DirectML edition:** any graphics card (NVIDIA, AMD, Intel), or the CPU.
+- **CUDA edition:** runs every AI model on an NVIDIA card.
 
 ### Use: 4 steps, each one waits for you
 
 1. **📂 Nhập ảnh** (Import) — pick the folder of one shoot.
 2. **🧠 Nhận diện chủ thể** (Find people) — AI groups photos by person. Check the **CHỦ THỂ** (people)
-   list: tick several people and press **🔗 Gộp chủ thể** (merge) if one person was split; right-click
+   list: tick several people and press **🔗 Gộp** (merge; a dialog picks the subject to keep, its name, and shows
+   each side's photos; undo with **Ctrl+Z**) if one person was split; right-click
    photos to remove them from a subject, assign them to another, or **➕ Tạo chủ thể mới** (new subject) for
    someone not in the list yet. The box above the list changes its order (number, capture time, most photos,
    name); right-click the list → **🔢 Đánh số lại** renumbers subjects 1, 2, 3… in shooting order.
@@ -169,9 +199,9 @@ DirectML; otherwise on the CPU.
    your keeps/rejects/stars/❤; shown only after ≥ 60 decisions and when it predicts clearly better than
    chance). The right panel has a bar and a reason per criterion; the grid shows “K 78 · G 85” and sorts by
    K, G or K + G. 🎓 → **So sánh ảnh…** asks which of two similar photos you prefer, to learn faster.
-   ⚙ Options: the K/G ratio and **🔄 AI-model update** (needs the Internet, only when you click it).
+   ⚙ Options: the K/G ratio and **🔄 Cập nhật KiraPick** (app update; needs the Internet, only when you click it).
 4. **⭐ Chọn ảnh** (Pick) — enter how many photos per person (ranked by K + G). AI picks get an **AI** badge and go
-   first. Review with **K** (keep) / **X** (reject) / **U** (clear), then **⤴ Xuất ảnh → Ảnh đã Giữ**
+   first. Review with **P** (keep) / **X** (reject) / **U** (clear), then **⤴ Xuất ảnh → Ảnh đã Giữ**
    (export kept photos).
 
 The **▦ Lưới ảnh | 🔍 Xem lớn** switch changes between grid and large view. A small cheat sheet of
@@ -190,6 +220,7 @@ keys sits under the photos (toggle with **⌨ Phím tắt**, **F1** shows all).
 | C, G / Esc | **Compare** 2–4 marked photos side by side; back to the grid |
 | 1–5, 0 | star rating, clear rating |
 | F | favourite |
+| Ctrl+Z | undo (Chỉnh sửa → Hoàn tác): merge / rename / split subjects (kept across restarts), P / X / stars / ❤ (this session) |
 | Ctrl+I / Ctrl+E | import folder / export |
 | Ctrl+F | search file names (several numbers separated by spaces: `9645 9650`) |
 | Ctrl+L | client pick list: paste the client's message, e.g. `9645, 9657-9660, DSC_9665.jpg` |
@@ -248,7 +279,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\make_shortcut.ps1   # desktop
   Licenses: [`docs/model-licenses.md`](docs/model-licenses.md).
 - Read-only check of a photo folder:
   `.\.venv\Scripts\python -m app.ingest.cli "D:\Photos\Shoot" --verify --verify-untouched --json report.json`
-- Installer: GitHub Actions builds it on Windows for commits on `main` containing `[release]`
+- Installer: GitHub Actions builds and publishes it on Windows for commits on `main` containing `[release]`
+  (DirectML) / `[release-cuda]` (CUDA)
   (`.github/workflows/build-windows.yml`): PyInstaller (`packaging/kirapick.spec`) with ONNX Runtime
   DirectML, SHA-256-verified models, `KiraPick.exe --self-test` with the network blocked, Inno Setup
   per-user installer, portable zip. Local build: `powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1`.
