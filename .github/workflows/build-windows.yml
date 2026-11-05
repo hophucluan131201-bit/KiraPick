@@ -331,13 +331,15 @@ jobs:
             $files = Get-ChildItem dist/installer -File -Filter *.zip | ForEach-Object { $_.FullName }
           }
           if (gh release view $tag 2>$null) { Write-Host "Release $tag already exists: left untouched"; exit 0 }
+          # Each edition has its own page text (packaging/release-notes/<edition>.md); RELEASE_NOTES.md otherwise
+          $notes = if (Test-Path "packaging/release-notes/$edition.md") { "packaging/release-notes/$edition.md" } else { "packaging/notes/RELEASE_NOTES.md" }
           $pre = (python -c "from app.edition import is_prerelease; print(is_prerelease('$version', '$edition'))").Trim()
           if ($pre -eq "True") {  # betas and OpenVINO: pre-release
-            gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file packaging/notes/RELEASE_NOTES.md --prerelease
+            gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file $notes --prerelease
           } else {
             # official; only the DirectML edition is marked "Latest" (the updater of each edition finds its own tag)
             $latest = if ($edition -eq "directml") { "--latest" } else { "--latest=false" }
-            gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file packaging/notes/RELEASE_NOTES.md $latest
+            gh release create $tag $files --target "${{ github.sha }}" --title "$title" --notes-file $notes $latest
           }
 
   # Tests on a real Windows machine (Python 3.12): the full test suite, a GUI smoke run on the real `windows` platform
