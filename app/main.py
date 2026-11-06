@@ -48,6 +48,10 @@ def main(argv: list[str] | None = None) -> int:
         from app.diagnostics.grouping import run_cli
 
         return run_cli(argv[argv.index("--diagnose-grouping") + 1:])
+    if "--grp1-counts" in argv:  # GRP-1 trial numbers, read-only, no window
+        from app.diagnostics.grp1 import run_cli as grp1
+
+        return grp1(argv[argv.index("--grp1-counts") + 1:])
     if "--self-test" in argv:  # packaged app check, no window: KiraPick.exe --self-test report.json
         rest = argv[argv.index("--self-test") + 1:]  # [report.json] [a photo folder to try, read-only]
         report = Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json"
