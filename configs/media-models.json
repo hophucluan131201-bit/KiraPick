@@ -1,0 +1,22 @@
+{
+  "_comment": "Media sự kiện (commercial use): the only model weights Media may load (docs/design/media-su-kien.md §12). status: verified | approved_with_risk | pending | not_used. Media loads only verified / approved_with_risk; a pending weight is excluded, and blocks the build from the milestone in block_from when it has no fallback. Every id must exist in configs/model-manifest.json.",
+  "models": [
+    {"id": "person_detector_s", "status": "pending", "needed_for": "shot size, main subject", "fallback": null, "block_from": 1,
+     "terms": "Apache-2.0 (code and weights, Megvii YOLOX 0.1.1rc0); training data COCO: to verify"},
+    {"id": "person_detector_m", "status": "pending", "needed_for": "shot size on GPU", "fallback": "person_detector_s", "block_from": null,
+     "terms": "Apache-2.0; training data COCO: to verify"},
+    {"id": "face_detector", "status": "pending", "needed_for": "shot size, people", "fallback": null, "block_from": 1,
+     "terms": "MIT (opencv_zoo YuNet 2023mar); training data: to verify"},
+    {"id": "face_embedder", "status": "pending", "needed_for": "grouping people (SFace)", "fallback": "manual people only", "block_from": 2,
+     "terms": "Apache-2.0 (opencv_zoo SFace 2021dec); training data: to verify"},
+    {"id": "clip_l14_image", "status": "approved_with_risk", "needed_for": "content suggestions, scene-change moments, booth suggestions", "fallback": "manual content, time-gap moments", "block_from": null,
+     "terms": "MIT code; OpenAI model card: deployed use out of scope. Owner accepted the risk for Media (MOD-1, 2026-11-06)"},
+    {"id": "clip_prompts", "status": "approved_with_risk", "needed_for": "content suggestions", "fallback": "manual content", "block_from": null,
+     "terms": "derived from OpenAI CLIP text tower; same decision as clip_l14_image"},
+    {"id": "face_mesh", "status": "pending", "needed_for": "eyes open (auto-pick, not in Beta)", "fallback": null, "block_from": null,
+     "terms": "Apache-2.0 (MediaPipe Face Landmarker v2); model card terms: to verify"},
+    {"id": "face_blendshapes", "status": "pending", "needed_for": "eyes open (auto-pick, not in Beta)", "fallback": null, "block_from": null,
+     "terms": "Apache-2.0 (MediaPipe); model card terms: to verify"}
+  ],
+  "never": ["face_embedder_arcface", "body_reid", "aesthetic", "tech_iqa", "face_iqa", "laion_aesthetic", "face_quality"]
+}

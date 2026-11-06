@@ -42,3 +42,31 @@ Runtime components: ONNX Runtime (MIT), NVIDIA CUDA 13 / cuDNN 9 redistributable
 
 Models change only with a new KiraPick installer (⚙ Tuỳ chọn → “Cập nhật KiraPick” downloads it from the
 GitHub releases, SHA-256 checked); every bundled model is listed above with its licence.
+
+## Media sự kiện — terms check for commercial use (Mốc 0, 2026-11-06)
+
+Media is commercial work (owner, 2026-11-06). It may load only the weights in `configs/media-models.json` with status
+`verified` or `approved_with_risk` (`app/media/models.py`; tests in `tests/unit/test_media_models.py`). ArcFace, TOPIQ,
+LAION, YoutuReID and eDifFIQA are listed under `never`.
+
+What was checked, from the primary sources (2026-11-06):
+
+| Weight | Code / weights licence | Training data | Finding | Status |
+|---|---|---|---|---|
+| YOLOX-S / -M (`person_detector_s/m`) | Repo LICENSE: Apache-2.0 (Megvii 2021-2022). The text does not name the released weights. | COCO (the README's training recipe; not stated per weight). COCO annotations CC BY 4.0; images under their own Flickr licences. | No commercial restriction found on code or weights. Residual risk: the weights are not explicitly covered by the licence text, and COCO images carry their own terms. | `pending`: needs an owner decision (MOD-3) |
+| YuNet 2023mar (`face_detector`) | opencv_zoo: "All files in this directory are licensed under MIT License". Training repo libfacedetection.train: BSD-3-Clause; no separate weights licence. | **WIDER FACE** (libfacedetection.train README). WIDER FACE's own terms are for non-commercial research. | Weights MIT, but trained on a research-only dataset. Whether dataset terms carry over to weights is legally unsettled. | `pending`: needs MOD-3 |
+| SFace 2021dec (`face_embedder`) | opencv_zoo: "All files in this directory are licensed under Apache 2.0 License". | **Not stated** in opencv_zoo; the page refers only to the SFace paper. Face-recognition training sets of that period are typically research-only. | Weights Apache-2.0; training data unverified. | `pending`: needs MOD-3 |
+| MediaPipe Face Landmarker v2 + blendshapes (`face_mesh`, `face_blendshapes`) | Google's model cards for Face Mesh V2 and Blendshape V2 state Apache License 2.0. No licence text found for the `.task` bundle itself. | Not checked. | Not needed in the Beta (eyes-open scoring is for auto-pick, UX-2 = later). | `pending` (not blocking) |
+| CLIP ViT-L/14 (`clip_l14_image`, `clip_prompts`) | MIT code; OpenAI model card: deployed use out of scope. | OpenAI internal data. | Owner accepted the risk for Media (MOD-1). | `approved_with_risk` |
+
+**Consequence today:**
+- `scripts/media_model_report.py --milestone 1` **blocks** the first Media build: YOLOX-S and YuNet are needed from
+  milestone 1 and have no fallback.
+- Nothing ships until the owner decides MOD-3, or replacements with commercial-clean training data are found.
+
+Sources:
+- https://github.com/Megvii-BaseDetection/YOLOX (LICENSE, README)
+- https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
+- https://github.com/ShiqiYu/libfacedetection.train
+- https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface
+- MediaPipe model cards: Face Mesh V2, Blendshape V2 (storage.googleapis.com/mediapipe-assets)
