@@ -402,6 +402,14 @@ jobs:
           $lines += "installed files: $($files.Count); models: " + (($models | Where-Object { $_.path -notlike '*.sha256' } | ForEach-Object { Split-Path $_.path -Leaf }) -join ", ")
           $lines += "docs: " + ($docs -join ", ")
           Write-Host "::notice title=inventory $env:TAG::$($lines -join '%0A')"
+          $mlines = @($models | ForEach-Object { "$($_.path) $($_.bytes) $($_.sha256)" + $(if ($sidecars.ContainsKey($_.path + ".sha256")) { " sidecar=" + $sidecars[$_.path + ".sha256"] } else { "" }) })
+          Write-Host "::notice title=inventory models $env:TAG::$($mlines -join '%0A')"
+          $dlines = @($licTexts.Keys | Sort-Object | ForEach-Object { $v = $licTexts[$_]; "$_ apache2_full=$($v.apache2_full) lgpl3_full=$($v.lgpl3_full) lgpl21_full=$($v.lgpl21_full) ccby4_full=$($v.ccby4_full) polyform=$($v.mentions_polyform) insightface=$($v.mentions_insightface)" })
+          Write-Host "::notice title=inventory docs $env:TAG::$($dlines -join '%0A')"
+          $alines = @($assets | ForEach-Object { "$($_.name) $($_.bytes) $($_.sha256)" })
+          Write-Host "::notice title=inventory assets $env:TAG::$($alines -join '%0A')"
+          $other = @($files | Where-Object { $_.path -like "*.dll" -and ($_.path -match "(?i)cudnn|cublas|cufft|curand|nvrtc|cudart|DirectML|onnxruntime|Qt6|libraw|opencv") } | ForEach-Object { "$($_.path) $($_.bytes)" })
+          Write-Host "::notice title=inventory runtime dlls $env:TAG::$($other -join '%0A')"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
