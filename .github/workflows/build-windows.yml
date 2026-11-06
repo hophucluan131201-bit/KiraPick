@@ -22,6 +22,10 @@ on:
         description: "K2: P/X latency repeatability, 20 fresh-process runs per test, measurement only (editions=none)"
         type: boolean
         default: false
+      lic1_checks:
+        description: "LIC-1 checks on Windows: the allow-list tests with the verified weights, then the same with every outbound connection of python.exe blocked by the Windows firewall (editions=none)"
+        type: boolean
+        default: false
       inspect_release:
         description: "Rights inventory: JSON list of published release tags, e.g. [\"v3.0.0\",\"v3.0.0a\"] (editions=none). Downloads, installs silently, lists files + SHA-256; never runs the app"
         default: ""
@@ -43,15 +47,18 @@ jobs:
           EVENT: ${{ github.event_name }}
           WANTED: ${{ github.event.inputs.editions }}
           INSPECT: ${{ github.event.inputs.inspect_release }}
+          LIC1: ${{ github.event.inputs.lic1_checks }}
         run: |
           python3 - <<'EOF'
           import json, os, sys
           msg, event = os.environ.get("MESSAGE", ""), os.environ["EVENT"]
           wanted = (os.environ.get("WANTED") or "").strip()
-          if event != "push" and (os.environ.get("INSPECT") or "").strip():
-              # Release inspection never builds: an empty editions box means "none" (CI-1); asking for both is an error
+          checks_only = (os.environ.get("INSPECT") or "").strip() or os.environ.get("LIC1") == "true"
+          if event != "push" and checks_only:
+              # Release inspection / LIC-1 checks never build: an empty editions box means "none" (CI-1);
+              # asking for both is an error
               if wanted not in ("", "none"):
-                  print(f"::error::inspect_release is set: editions must be empty or 'none', got '{wanted}' (no build)")
+                  print(f"::error::inspect_release / lic1_checks set: editions must be empty or 'none', got '{wanted}' (no build)")
                   sys.exit(1)
               editions = []
           elif event != "push":
@@ -438,6 +445,54 @@ jobs:
           name: inventory-${{ matrix.tag }}
           path: inventory/
           retention-days: 30
+
+  lic1-checks:
+    if: github.event.inputs.lic1_checks == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Python packages
+        run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt "pytest>=9,<10" "pytest-qt>=4.4,<5"
+      - name: Verified weights only (the allow-list decides what is fetched)
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -q onnx==1.23.2
+          python scripts/fetch_models.py --purpose identity,quality,gpu
+          python scripts/shrink_models.py --dest models/weights
+          Get-ChildItem models/weights | ForEach-Object { Write-Host "$($_.Name) $($_.Length)" }
+      - name: LIC-1 tests (network open)
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $tests = "tests/unit/test_model_policy.py tests/unit/test_load_log.py tests/unit/test_provenance.py tests/unit/test_old_cache.py tests/unit/test_user_edits.py tests/unit/test_fallback_paths.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_network_blocked.py tests/unit/test_selftest.py tests/unit/test_media_models.py tests/gui/test_manual_grouping.py tests/gui/test_mode_picker.py".Split(" ")
+          python -m pytest -q -p no:cacheprovider -rs @tests *>&1 | Tee-Object -FilePath lic1.log
+          Write-Host "::notice title=LIC-1 tests (network open)::$((Get-Content lic1.log -Tail 3) -join ' | ')"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Same tests and the self-test with the Windows firewall blocking python.exe
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $py = (Get-Command python).Source
+          New-NetFirewallRule -DisplayName "KiraPick LIC-1 no network" -Direction Outbound -Action Block -Program $py | Out-Null
+          try {
+            python -c "import socket; socket.create_connection(('example.com', 443), timeout=5)"
+            if ($LASTEXITCODE -eq 0) { Write-Host "::error::the firewall rule did not block python.exe"; exit 1 }
+            Write-Host "::notice title=firewall::outbound connections of python.exe are blocked"
+            $tests = "tests/unit/test_network_blocked.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_selftest.py tests/gui/test_mode_picker.py".Split(" ")
+            python -m pytest -q -p no:cacheprovider -rs @tests *>&1 | Tee-Object -FilePath lic1fw.log
+            $code = $LASTEXITCODE
+            Write-Host "::notice title=LIC-1 tests (firewall)::$((Get-Content lic1fw.log -Tail 3) -join ' | ')"
+            python -c "from app import selftest; import sys, json, pathlib; p = pathlib.Path('selftest_fw.json'); rc = selftest.run(p); d = json.loads(p.read_text(encoding='utf-8')); print('ok', d['ok'], 'network_attempts', d['network_attempts'], 'opened', sorted(d['report_a']['personal']['opened'])); sys.exit(rc)"
+            if ($LASTEXITCODE -ne 0 -or $code -ne 0) { exit 1 }
+          } finally {
+            Remove-NetFirewallRule -DisplayName "KiraPick LIC-1 no network"
+          }
 
   k2-repeat:
     if: github.event.inputs.k2_repeat == 'true'

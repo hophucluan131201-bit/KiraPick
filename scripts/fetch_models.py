@@ -71,6 +71,11 @@ def main() -> int:
     if args.purpose:
         wanted = set(args.purpose.split(","))
         registry.specs = {k: v for k, v in registry.specs.items() if v.purpose in wanted}
+    # Only weights the allow-list verifies are fetched (LIC-1 S8): pending / never ones are not downloaded at all
+    for model_id in [k for k in registry.specs if not registry.policy.verified(k)]:
+        entry = registry.policy.entry(model_id)
+        print(f"KHÔNG TẢI {registry.specs[model_id].file}: {entry.status if entry else 'không có'} trong danh sách cho phép")
+        del registry.specs[model_id]
     registry.models_dir.mkdir(parents=True, exist_ok=True)
     failures = 0
     for status in registry.all_status():
