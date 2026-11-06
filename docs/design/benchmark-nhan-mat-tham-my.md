@@ -1,252 +1,206 @@
-# Kế hoạch đo trước khi đổi mô hình nhận mặt và chấm thẩm mỹ (bản 2, 2026-11-06)
+# Kế hoạch đo trước khi đổi mô hình nhận mặt và chấm thẩm mỹ (bản 3, 2026-11-06)
 
-**Chủ dự án đã chốt (2026-11-06):**
-- **Giữ cả bốn cấu hình** F-SF, F-AU, F-SF+R, F-AU+R.
-- **Báo riêng phần cải thiện khi thêm YoutuReID** vào SFace và vào AuraFace, nhất là với ảnh quay lưng, che mặt và mặt quá
-  nhỏ (mục 2.5).
-- **Tách kết luận đo khỏi đề xuất đóng gói** (mục 4).
-- **Xác minh quyền dùng và phân phối YoutuReID** trước khi đề xuất giữ nó trong bản thương mại (mục 4.2).
-- Đổi cấu hình mặc định chờ chủ dự án duyệt.
-
-- **Phạm vi:** nhánh `beta`, tài liệu.
-- **Cấu hình mô hình đang chạy giữ nguyên** cho tới khi chủ dự án duyệt phương án thay thế.
-- **Cần duyệt riêng:** thay cấu hình mặc định, đóng gói để phân phối, merge vào `main`, tag và phát hành.
+- **Phạm vi:** nhánh `beta`, chỉ là tài liệu. Chưa tải trọng số mới, chưa chạy phép đo nào.
+- **Cấu hình mô hình đang chạy giữ nguyên.**
 - **Nguồn rà soát:** `docs/design/thay-the-arcface-topiq.md`.
+- **Kết quả đo và đề xuất thay mô hình là hai tài liệu riêng** (mục 4).
 
 **Quy ước:**
-- **[Repo]**: đã xác minh trong mã nguồn hoặc tài liệu của repo.
+- **[Repo]**: đã xác minh trong repo.
 - **[Thiếu]**: đầu vào chưa có.
-- **[Chờ duyệt]**: cần chủ dự án quyết định.
+- **[Chờ duyệt]**: chờ chủ dự án quyết.
+
+## 0. Trạng thái phê duyệt
+
+| Việc | Trạng thái |
+|---|---|
+| Giữ **bốn cấu hình** F-SF, F-AU, F-SF+R, F-AU+R **trong kế hoạch** | **Chủ dự án đã xác nhận** (2026-11-06) |
+| Yêu cầu báo riêng phần cải thiện của YoutuReID từng cặp, nhất là ảnh quay lưng / che mặt / mặt nhỏ | **Chủ dự án đã yêu cầu** (2026-11-06) |
+| Tách kết luận đo khỏi đề xuất đóng gói | **Chủ dự án đã yêu cầu** (2026-11-06) |
+| Xác minh quyền dùng và phân phối YoutuReID trước khi đề xuất giữ nó trong bản thương mại | **Chủ dự án đã yêu cầu**; kết quả xác minh ở mục 1.2 |
+| Duyệt **tiêu chí** đo (BM-2) | [Chờ duyệt] |
+| **Tải** trọng số AuraFace, mở mạng tới huggingface.co (BM-4) | [Chờ duyệt] |
+| **Chạy** phép đo các cấu hình chỉ dùng mặt (BM-0) | [Chờ duyệt] |
+| **Chạy** hai phép đo `+R`, cần căn cứ dùng YoutuReID cho việc đo nội bộ (BM-6) | [Chờ duyệt]; **đang chờ** |
+| Chạy lại ArcFace (BM-1) | [Chờ duyệt]; đề xuất: không |
+| LAION trong phép so thẩm mỹ (BM-3) | [Chờ duyệt] |
+| **Thay cấu hình mặc định** (BM-7) | [Chờ duyệt]; chỉ trình sau khi có kết quả đo |
+| **Đóng gói** để phân phối (BM-8) | [Chờ duyệt]; chỉ trình sau khi có kết quả đo và căn cứ quyền phân phối |
 
 ## 1. Đầu vào của từng cấu hình
 
 ### 1.1 Trọng số
 
-| Mã | Thành phần | File | Nguồn chính thức / revision | SHA-256 | Giấy phép / điều kiện phân phối | Nạp khi chạy (đo) | Có trong bộ cài hiện tại |
+| Mã | Thành phần | File | Nguồn / revision | SHA-256 | Giấy phép | Nạp khi đo | Có trong bộ cài hiện tại |
 |---|---|---|---|---|---|---|---|
-| W1 | Dò mặt YuNet 2023mar | `face_detection_yunet_2023mar.onnx` | opencv_zoo@48b10fa [Repo: manifest] | `8f2383e4…52fa4` [Repo] | MIT (opencv_zoo); huấn luyện trên WIDER FACE (dữ liệu chỉ cho nghiên cứu) | Có, mọi cấu hình | Có |
-| W2 | Nhận mặt SFace 2021dec | `face_recognition_sface_2021dec.onnx` | opencv_zoo@48b10fa [Repo] | `0ba9fbfa…79` [Repo] | Apache-2.0; dữ liệu huấn luyện không công bố | Có (F-SF) | Có |
-| W3 | Nhận mặt **AuraFace v1** | file nhận mặt trong `fal/AuraFace-v1` (tên file, revision, kích thước: **[Thiếu]**) | huggingface.co/fal/AuraFace-v1, ghi revision khi tải | **[Thiếu]** | Model card: Apache-2.0; dữ liệu "thương mại", không nêu tên. **Chỉ dùng file nhận mặt** | Có (F-AU) | **Không** (chỉ nằm trong máy đo) |
-| W3x | Các file **dò mặt / căn chỉnh / tuổi-giới** đi kèm trong repo AuraFace | các file khác trong `fal/AuraFace-v1` | như W3 | **[Thiếu]** | Theo bản sao `imagent/auraface-onnx`: đây là mô hình InsightFace, **phi thương mại** | **Không bao giờ nạp**; không tải về | Không |
-| W4 | Dáng người YoutuReID | `person_reid_youtu_2021nov.onnx` | opencv_zoo@48b10fa [Repo]; nguồn gốc ReID-Team/ReID_extra_testdata | `05796833…580d` [Repo] | **Quyền thương mại chưa rõ** (mục 4.2) | Có (F-SF+R, F-AU+R) | Có |
-| W5 | ArcFace w600k_r50 (baseline) | `w600k_r50.onnx` | InsightFace v0.7 [Repo] | `4c06341c…9e43` [Repo] | **Phi thương mại**; dùng trong bản thương mại cần giấy phép của InsightFace cho đúng trọng số này | **Không chạy lại** (mục 2.2) | Có (Chụp cá nhân hiện tại) |
-| W6 | CLIP ViT-L/14 ảnh | `clip_l14_image.onnx` (chuyển lúc build) | OpenAI ViT-L-14.pt, SHA nguồn `b8cca3fd…3836` [Repo] | theo file `.sha256` lúc build [Repo] | MIT (mã); model card "ngoài phạm vi"; **chủ dự án đã chấp nhận rủi ro** (2026-10-28, MOD-1) | Có (Q-CL) | Có |
-| W7 | Đầu LAION aesthetic | `laion_aesthetic.onnx` (chuyển lúc build) | improved-aesthetic-predictor [Repo] | theo `.sha256` [Repo] | Apache-2.0; huấn luyện trên điểm AVA / SAC / LAION-Logos (**điều khoản dữ liệu chờ xác minh**) | Có (Q-CL) | Có |
-| W8 | TOPIQ ×3 (baseline) | `topiq_*.onnx` | IQA-PyTorch [Repo] | theo `.sha256` [Repo] | **PolyForm Noncommercial** | **Không chạy lại**; dùng điểm đã lưu (mục 3) | Có |
+| W1 | Dò mặt YuNet 2023mar | `face_detection_yunet_2023mar.onnx` | opencv_zoo@48b10fa [Repo] | `8f2383e4…52fa4` [Repo] | MIT; dữ liệu WIDER FACE (chỉ cho nghiên cứu) | mọi cấu hình | có |
+| W2 | Nhận mặt SFace 2021dec | `face_recognition_sface_2021dec.onnx` | opencv_zoo@48b10fa [Repo] | `0ba9fbfa…79` [Repo] | Apache-2.0; dữ liệu không công bố | F-SF, F-SF+R | có |
+| W3 | Nhận mặt AuraFace v1 | file nhận mặt trong `fal/AuraFace-v1`: tên file, revision **[Thiếu]** | huggingface.co/fal/AuraFace-v1 | **[Thiếu]** | model card: Apache-2.0; dữ liệu "thương mại", không nêu tên | F-AU, F-AU+R | không |
+| W3x | Dò mặt / căn chỉnh / tuổi-giới đi kèm AuraFace | các file khác trong repo đó | như W3 | — | theo bản sao `imagent/auraface-onnx`: mô hình InsightFace, **phi thương mại** | **không tải, không nạp** | không |
+| W4 | Dáng người YoutuReID | `person_reid_youtu_2021nov.onnx` | opencv_zoo@48b10fa [Repo] | `05796833…580d` [Repo] | xem mục 1.2 | F-SF+R, F-AU+R (**đang chờ**) | có |
+| W5 | ArcFace w600k_r50 | `w600k_r50.onnx` | InsightFace v0.7 [Repo] | `4c06341c…9e43` [Repo] | **phi thương mại** | **không chạy lại** (BM-1) | có (Chụp cá nhân) |
+| W6 | CLIP ViT-L/14 ảnh | `clip_l14_image.onnx` (chuyển lúc build) | OpenAI ViT-L-14.pt [Repo] | theo `.sha256` [Repo] | MIT (mã); model card "ngoài phạm vi"; chủ dự án đã chấp nhận rủi ro (2026-10-28) | Q-CL | có |
+| W7 | Đầu LAION aesthetic | `laion_aesthetic.onnx` | improved-aesthetic-predictor [Repo] | theo `.sha256` [Repo] | Apache-2.0; điều khoản dữ liệu **chờ xác minh** | Q-CL (BM-3) | có |
+| W8 | TOPIQ ×3 | `topiq_*.onnx` | IQA-PyTorch [Repo] | theo `.sha256` [Repo] | **PolyForm Noncommercial** | **không chạy lại**; dùng điểm đã lưu | có |
 
 **Hai danh sách tách riêng:**
-- **"Nạp khi chạy"** do máy đo ghi lại: tên file và SHA-256 của từng file thực sự được mở, giống báo cáo A của Media.
-- **"Có trong bộ cài"** lấy từ `scripts/media_model_report.py` (báo cáo B) chạy trên thư mục `models\` của bản cài.
-- AuraFace **không** vào bộ cài ở giai đoạn đo.
+- **"Nạp khi đo":** máy đo ghi tên file và SHA-256 của từng file thực sự được mở.
+- **"Có trong bộ cài":** lấy từ `scripts/media_model_report.py` [Repo].
 
-### 1.2 Pipeline nhận mặt dùng chung (cho phép so cố định)
+### 1.2 Căn cứ dùng: đo nội bộ khác với đóng gói / phân phối
 
-Cố định ba thành phần sau cho **mọi** cấu hình nhận mặt:
-- **Dò mặt:** YuNet (W1), cùng ngưỡng.
-- **Căn chỉnh:** 5 điểm mốc của YuNet, đưa về mẫu 112×112 chuẩn ArcFace. Hàm `align_face` (`app/quality/measure.py`) là
-  mã của app [Repo]. Không dùng bộ căn chỉnh của InsightFace.
-- **Gom nhóm:** cùng logic `app/identity/cluster.py`. Ngưỡng **chỉnh riêng cho từng cấu hình trên tập chỉnh ngưỡng**,
-  với điều kiện độ chính xác = 1,000.
-
-Riêng **SFace** hiện dùng hàm căn chỉnh của OpenCV (`FaceRecognizerSF.alignCrop`). Trong phép so cố định, SFace được chạy
-**hai cách**: căn chỉnh của OpenCV (như app đang làm) và căn chỉnh dùng chung. Cả hai đều được báo.
-
-### 1.3 Dữ liệu
-
-| Mã | Bộ ảnh | Nhãn | Trạng thái |
-|---|---|---|---|
-| D1 | Buổi chụp cosplay "20261025 - Aki" (439 NEF) | `scripts/calibration/labels_aki_20261025.py`: 46 look, 431 ảnh [Repo]. Nhãn theo **look** (trang phục), không theo người | Ảnh **không có trong repo** (riêng tư). Chạy trên máy chủ dự án, hoặc chủ dự án gửi một gói chỉ có vector |
-| D2 | Ảnh **sự kiện** có nhãn người (cho kết luận riêng về Media) | **[Thiếu]** | Cần chủ dự án cung cấp |
-| D3 | Lịch sử P/X và sao của các buổi chụp cá nhân | nằm trong dữ liệu phiên trên máy chủ dự án | Ở máy chủ dự án; số liệu chỉ ra dạng số |
-
-**Tách tập trên D1:**
-- Chia theo **look**, không theo ảnh lẻ: khoảng 40 % số look làm **tập chỉnh ngưỡng**, khoảng 60 % làm **tập chấm**.
-- Look được chia theo thứ tự cố định: look thứ 1, 4, 7… vào tập chỉnh ngưỡng.
-- Danh sách chia được ghi trong file, để ai chạy lại cũng ra cùng kết quả.
-
-## 2. Phép so nhận mặt
-
-### 2.1 Phép so A: chỉ đổi mô hình nhận mặt
-
-Pipeline cố định như mục 1.2. Chỉ thay vector mặt.
-
-| Cấu hình | Nhận mặt | Dáng người | Ghi chú |
-|---|---|---|---|
-| **F-SF** | SFace (hai cách căn chỉnh) | không | Tương đương 0.2.x |
-| **F-AU** | AuraFace | không | Ứng viên |
-| **F-SF+R** | SFace | YoutuReID | Tổ hợp dùng thương mại được của mã và trọng số |
-| **F-AU+R** | AuraFace | YoutuReID | Ứng viên đầy đủ |
-
-### 2.2 Phép so B: pipeline hoàn chỉnh so với số đã ghi trước đây
-
-- Không chạy lại ArcFace. Baseline lấy từ số **đã ghi** trên D1 (`docs/IMPLEMENTATION_STATUS.md`, gói gỡ lỗi 3, vector do
-  app tính ở 1600 px) [Repo]:
-  - **ArcFace + ReID (0.3.0b3):** độ chính xác **1,000**, độ phủ **0,922**.
-  - **SFace + màu trang phục:** **1,000 / 0,808**. Bản 0.2.x ghi 1,000 / 0,817.
-- **Giới hạn:** số này đo trên **toàn bộ 431 ảnh**, ngưỡng đã chỉnh trên chính bộ đó. Vì vậy nó **lạc quan hơn** số của
-  tập chấm mới. Khi báo cáo, mình ghi cả hai.
-- **Muốn chạy lại ArcFace trên tập chấm mới** (để so công bằng) thì cần chủ dự án **xác nhận quyền dùng trọng số này cho
-  việc đo nội bộ** **[Chờ duyệt: BM-1]**. Mặc định là **không chạy lại**.
-
-### 2.3 Đo gì
-
-**Trên tập chấm của D1:**
-- **Độ chính xác** theo cặp ảnh.
-- **Độ phủ** theo cặp ảnh.
-- **Số gộp nhầm:** số nhóm chứa hơn một look thật.
-- **Số tách nhầm:** số look thật bị chia thành nhiều nhóm.
-- **Ảnh chưa gom được:** ảnh có người nhưng không vào nhóm nào.
-- **Tỉ lệ dò được mặt** (giống nhau giữa các cấu hình, vì cùng YuNet). Ghi để biết giới hạn.
-
-**Thời gian:**
-- **Thời gian đầu cuối** của bước nhận diện chủ thể, trên **Windows/CUDA** (máy chủ dự án). Báo hai mốc: lần chạy đầu
-  (chưa có cache) và lần chạy lại.
-- **Thời gian mỗi khuôn mặt** của riêng mô hình nhận mặt.
-
-**Media (D2):** báo **riêng**, cùng các số đo trên. Nếu chưa có D2 thì **không kết luận** cho Media.
-
-### 2.5 Phần cải thiện của YoutuReID (báo riêng từng cặp)
-
-**Hai cặp so:**
-- **SFace** (F-SF) → **SFace + YoutuReID** (F-SF+R);
-- **AuraFace** (F-AU) → **AuraFace + YoutuReID** (F-AU+R).
-
-Trong mỗi cặp, mọi thứ khác giữ nguyên. Cả hai cấu hình "chỉ mặt" **vẫn có** mô tả màu trang phục; đây là mã của app,
-không có trọng số. Ngưỡng của từng cấu hình chỉnh riêng trên tập chỉnh ngưỡng.
-
-**Nhóm ảnh khó** (trên tập chấm của D1), xác định từng ảnh theo người chính:
-
-| Nhóm | Cách xác định | Nguồn |
+| Trọng số | Căn cứ để **đo nội bộ** | Căn cứ để **đóng gói / phân phối** |
 |---|---|---|
-| **Quay lưng** | có người, YuNet **không** dò được mặt, và nhãn ghi "quay lưng" | nhãn bổ sung **[Thiếu]** |
-| **Che mặt** | mặt nạ, kigurumi, mũ giáp, tay hoặc đạo cụ che; YuNet không dò được mặt, hoặc dò được với độ tin cậy thấp | nhãn bổ sung **[Thiếu]** |
-| **Mặt quá nhỏ** | mặt dò được nhưng cao **< 40 px** trên ảnh 1600 px | tự động, từ số đo YuNet |
-| **Mặt thấy rõ** | các ảnh còn lại | tự động |
+| YuNet, SFace | Giấy phép MIT / Apache-2.0 của opencv_zoo cho phép dùng và đánh giá | Cùng giấy phép; dữ liệu huấn luyện ghi ở `docs/model-licenses.md` |
+| AuraFace (W3) | Model card ghi Apache-2.0, **chưa đọc được file thật** (huggingface.co bị chặn). **Có căn cứ khi tải xong**, đã ghim revision và SHA-256, đọc được giấy phép đi kèm (BM-4) | Chờ xác minh file thật; dữ liệu "thương mại" không nêu tên |
+| **YoutuReID (W4)** | **Chưa đủ căn cứ.** Xem phần xác minh dưới bảng. Vì vậy hai phép đo **F-SF+R** và **F-AU+R** đang **chờ** BM-6 | **Chưa rõ.** Không đề xuất đóng gói cho bản thương mại |
+| ArcFace (W5) | Giấy phép chỉ cho nghiên cứu phi thương mại. **Không chạy lại** (BM-1) | **Không**, trừ khi có giấy phép InsightFace cho đúng trọng số này |
 
-**Cách lấy nhãn "quay lưng / che mặt":**
-- Nhãn hiện tại (`labels_aki_20261025.py`) chỉ ghi look, chưa ghi các ý này.
-- Đề xuất: app tự liệt kê các ảnh "có người nhưng không thấy mặt". Chủ dự án chỉ cần đánh dấu **Q** (quay lưng) hoặc
-  **C** (che mặt) cho các ảnh đó, khoảng vài chục ảnh.
-- Nếu chưa có nhãn bổ sung, hai nhóm này được báo gộp là **"không thấy mặt"**.
+**Xác minh YoutuReID (2026-11-06):**
+- **opencv_zoo:** README ghi "All files in this directory are licensed under Apache 2.0 License". Nhưng file LICENSE là văn
+  bản mẫu, **không ghi người giữ bản quyền** và **không nhắc tới trọng số**.
+- **Nguồn gốc** (`ReID-Team/ReID_extra_testdata`, Tencent Youtu Lab): **không có giấy phép**.
+- **Dữ liệu huấn luyện:** Market-1501, DukeMTMC, CUHK03, MSMT17. Đều là bộ dữ liệu nghiên cứu; DukeMTMC đã bị **rút khỏi
+  phát hành** năm 2019.
+- **BM-6:** chủ dự án quyết có coi dòng Apache-2.0 của opencv_zoo là đủ căn cứ để **đo nội bộ** hay không.
+  - Nếu **không**, hai phép đo `+R` không chạy. Mình chỉ trình **phương án đo chỉ dùng mặt** (F-SF, F-AU), kèm danh sách
+    ca cần gom tay.
 
-**Báo cáo cho mỗi cặp, theo từng nhóm ảnh và tổng:**
+### 1.3 Pipeline dùng chung
 
-| Số đo | F-SF | F-SF+R | Chênh | F-AU | F-AU+R | Chênh |
-|---|---|---|---|---|---|---|
-| Độ phủ gom nhóm (theo cặp ảnh) | | | | | | |
-| Gộp nhầm (số nhóm chứa > 1 look) | | | | | | |
-| Tách nhầm (số look bị chia nhiều nhóm) | | | | | | |
-| Ảnh chưa gom được | | | | | | |
-| Thời gian bước nhận diện (Windows/CUDA, lần đầu / lần chạy lại) | | | | | | |
-| Thời gian thêm do YoutuReID (mỗi người) | — | | | — | | |
+Mọi cấu hình nhận mặt dùng chung ba thành phần:
+- **Dò mặt:** YuNet, cùng ngưỡng.
+- **Căn chỉnh:** 5 điểm mốc, đưa về mẫu 112×112, bằng hàm `align_face` của app [Repo].
+  - SFace báo thêm một kết quả với căn chỉnh `alignCrop` của OpenCV, như app đang làm.
+- **Gom nhóm:** `app/identity/cluster.py`, cộng mô tả màu trang phục (mã của app, không có trọng số).
+  - Ngưỡng chỉnh riêng cho từng cấu hình **trên tập chỉnh ngưỡng**, với điều kiện độ chính xác = 1,000.
 
-- Mỗi ô ghi kèm **số mẫu**. Nhóm có **dưới 15 ảnh** ghi "chưa đủ mẫu".
-- Số liệu được điền sau khi đo.
+## 2. Hai mục tiêu đánh giá tách riêng
 
-### 2.4 Tiêu chí đạt (đề xuất) [Chờ duyệt: BM-2]
+| | **D1: gom theo look (Chụp cá nhân)** | **D2: gom cùng người (Media sự kiện)** |
+|---|---|---|
+| Câu hỏi | Các ảnh cùng **look** (cùng người, cùng trang phục) có vào cùng một nhóm không? | Các ảnh cùng **một người**, kể cả khác hoạt động, có vào cùng một nhóm không? |
+| Bộ ảnh | "20261025 - Aki", 439 NEF; nhãn 46 look / 431 ảnh trong `scripts/calibration/labels_aki_20261025.py` [Repo] | **[Thiếu]**: ảnh sự kiện có nhãn người |
+| Nơi chạy | Máy chủ dự án (ảnh không rời máy), hoặc gói chỉ có vector | Như D1 |
+| Kết luận | Chỉ cho Chụp cá nhân | Chỉ cho Media; **không suy từ D1** |
 
-| Chế độ | Đạt khi |
-|---|---|
-| Chụp cá nhân | độ chính xác **1,000** (0 gộp nhầm) **và** độ phủ ≥ **0,90** trên tập chấm **và** thời gian bước nhận diện ≤ **1,2 ×** bản hiện tại |
-| Media sự kiện (D2) | 0 gộp nhầm giữa người đã đặt tên; độ phủ báo số, ngưỡng đặt sau khi có D2 |
+**Chia tập** (cho cả D1 và D2):
+- Chia theo **look** (D1) hoặc theo **người** (D2), không theo ảnh lẻ.
+- Khoảng 40 % làm **tập chỉnh ngưỡng**, khoảng 60 % làm **tập chấm**, theo thứ tự cố định ghi trong file.
+
+### 2.1 Nhãn ảnh khó: ghi theo nội dung, báo riêng kết quả dò mặt
+
+**Nhãn nội dung** do chủ dự án ghi theo **những gì nhìn thấy trong ảnh** (người chính), không theo kết quả của AI:
+- **Q:** quay lưng;
+- **C:** mặt bị che (mặt nạ, kigurumi, mũ giáp, tay, đạo cụ);
+- **N:** mặt nhỏ (nhìn thấy mặt nhưng rất nhỏ trong khung);
+- **R:** mặt rõ.
+
+**Ảnh cần ghi nhãn** (để không lệch theo kết quả dò mặt):
+- mọi ảnh trên tập chấm mà YuNet **không** dò được mặt, hoặc mặt cao dưới 60 px trên ảnh 1600 px;
+- cộng **một mẫu ngẫu nhiên 10 %** các ảnh còn lại, để kiểm tra xem nhãn R có đúng không.
+- Ước tính vài chục đến khoảng một trăm ảnh **[Thiếu]**.
+
+**Báo riêng kết quả dò mặt** cho từng nhóm nội dung: số ảnh YuNet dò được mặt, số ảnh không dò được, và chiều cao mặt
+trung vị. Kết quả này giống nhau ở mọi cấu hình, vì cùng YuNet.
+
+### 2.2 Số đo
+
+**Trên tập chấm, cho từng cấu hình, chia theo nhóm Q / C / N / R và tổng, mỗi số kèm số mẫu (dưới 15 thì ghi "chưa đủ
+mẫu"):**
+- độ chính xác và độ phủ theo cặp ảnh;
+- **gộp nhầm:** số nhóm chứa hơn một look (D1) hoặc hơn một người (D2);
+- **tách nhầm:** số look / người bị chia thành nhiều nhóm;
+- **ảnh chưa gom được**;
+- **thời gian:**
+  - bước nhận diện, đầu đến cuối, trên Windows/CUDA, lần đầu và lần chạy lại;
+  - thời gian mỗi khuôn mặt;
+  - thời gian YoutuReID mỗi người.
+
+### 2.3 Phần cải thiện của YoutuReID (chỉ khi BM-6 cho phép)
+
+| Cặp | So | Trên cùng |
+|---|---|---|
+| SFace | F-SF → F-SF+R | tập chấm, theo nhóm Q / C / N / R và tổng |
+| AuraFace | F-AU → F-AU+R | như trên |
+
+- **Báo chênh lệch:** độ phủ, gộp nhầm, tách nhầm, ảnh chưa gom được, thời gian.
+- **Nếu BM-6 = không:** bảng này ghi "chờ"; báo cáo chỉ có F-SF và F-AU, kèm **danh sách ca cần gom tay**, tức các ảnh
+  nhóm Q / C / N bị tách nhầm hoặc chưa gom được.
+
+### 2.4 Baseline lịch sử (chỉ để tham khảo)
+
+- Số **đã ghi** trên D1 (`docs/IMPLEMENTATION_STATUS.md`, gói gỡ lỗi 3) [Repo]:
+  - ArcFace + ReID (0.3.0b3): độ chính xác 1,000, **độ phủ 0,922**;
+  - SFace + màu trang phục: 1,000 / 0,808.
+- **Giới hạn khi so:**
+  - đo trên **toàn bộ** 431 ảnh, không phải tập chấm mới;
+  - ngưỡng chỉnh **trên chính bộ đó**, nên số lạc quan;
+  - phiên bản app và vector khác (bản 0.3.0b3, vector ở 1600 px);
+  - không có số tách nhầm và thời gian theo cách đo mới.
+- Vì vậy **92,2 % là số lịch sử có giới hạn so sánh**. Không dùng làm ngưỡng đạt; chỉ đặt cạnh kết quả mới để tham khảo.
+
+### 2.5 Tiêu chí (BM-2, chờ chủ dự án chốt)
+
+| Loại | Chụp cá nhân (D1) | Media (D2) |
+|---|---|---|
+| **Ngưỡng chấp nhận chất lượng** | 0 gộp nhầm; độ phủ ≥ **0,90** trên tập chấm | 0 gộp nhầm giữa người đã đặt tên; ngưỡng độ phủ đặt sau khi có D2 |
+| **Ngưỡng chấp nhận tốc độ** | thời gian bước nhận diện **≤ 1,2 ×** bản hiện tại (3.0.0), cùng máy, cùng bộ ảnh | như D1 |
+| **Mục tiêu tốc độ** (không phải điều kiện đạt) | **nhanh hơn** bản hiện tại; báo mức nhanh / chậm theo % | như D1 |
+
+- **Thời gian của bản hiện tại** lấy từ log `kirapick.log` của bản 3.0.0 chạy trên cùng buổi chụp trên máy chủ dự án.
+  Cách này không phải chạy lại ArcFace **[Thiếu]**: cần log đó.
 
 ## 3. Phép so bỏ TOPIQ
 
 | Cấu hình | Thành phần điểm |
 |---|---|
-| **Q-BASE** (hiện tại) | phép đo kỹ thuật + TOPIQ + LAION. Dùng **điểm đã lưu** trong dữ liệu phiên; **không chạy lại TOPIQ** |
-| **Q-TECH** | chỉ phép đo kỹ thuật của KiraPick: nét ở mắt, mắt nhắm / mở, mặt, sáng, bố cục |
-| **Q-CL** | phép đo kỹ thuật + CLIP + LAION (W6, W7). **Điều kiện:** W7 đủ điều kiện dùng **[Chờ duyệt: BM-3]**, vì điều khoản dữ liệu của LAION còn chờ xác minh |
+| **Q-BASE** (hiện tại) | đo kỹ thuật + TOPIQ + LAION, dùng **điểm đã lưu**; không chạy lại TOPIQ |
+| **Q-TECH** | chỉ phép đo kỹ thuật của KiraPick |
+| **Q-CL** | đo kỹ thuật + CLIP + LAION; chờ BM-3 |
 
-**Cách so:** tính lại điểm Q-TECH và Q-CL từ các phép đo đã lưu. Không cần chạy lại mô hình nào, trừ CLIP / LAION nếu ảnh
-chưa có điểm.
+- **Dữ liệu:** lịch sử P/X trên máy chủ dự án; chỉ ra số và tên file.
+- **Số đo:**
+  - tỉ lệ ảnh xếp đầu loạt (cùng chủ thể, cách nhau ≤ 3 giây) trùng ảnh đã **P**;
+  - tương quan thứ hạng với Q-BASE;
+  - danh sách ca sai đáng chú ý: ảnh **X** lên đầu, ảnh **P** xuống cuối;
+  - thời gian chấm, có cache và chưa có cache.
+- **Tiêu chí (BM-2):** tỉ lệ trùng **P** không thấp hơn Q-BASE quá 5 điểm phần trăm.
 
-**Đo gì** (trên D3, chỉ ra số):
-- **Khớp với P/X lịch sử:** trong mỗi loạt ảnh (cùng chủ thể, cách nhau ≤ 3 giây), ảnh xếp đầu có phải ảnh bạn đã **P**
-  không. Báo tỉ lệ cho Q-BASE, Q-TECH, Q-CL.
-- **Thay đổi thứ tự:** hệ số tương quan thứ hạng (Spearman) giữa từng cấu hình mới và Q-BASE, trong từng chủ thể.
-- **Ca sai đáng chú ý:** liệt kê **tên file**, không gửi ảnh. Gồm:
-  - ảnh bạn đã **X** mà cấu hình mới đưa lên đầu;
-  - ảnh bạn đã **P** mà cấu hình mới tụt xuống dưới cùng.
+## 4. Hai tài liệu kết quả tách riêng
 
-  Bạn tự mở ảnh xem trên máy.
-- **Thời gian** chấm mỗi ảnh: có cache (CLIP đã tính) và chưa có cache.
+1. **Báo cáo đo** (`docs/benchmark/ket-qua-*.md`):
+   - các bảng mục 2 và 3, kèm số mẫu;
+   - mã commit, log Windows/CUDA, file JSON chỉ có số, danh sách "nạp khi đo" có SHA-256;
+   - **không có đề xuất thay mô hình**.
+2. **Đề xuất thay mô hình mặc định và đóng gói** (tài liệu riêng, viết **sau** báo cáo đo):
+   - cho từng cấu hình: chất lượng (dẫn từ báo cáo đo), tốc độ, file phải có trong bộ cài, căn cứ dùng thương mại và
+     phân phối (mục 1.2), phần còn thiếu bằng chứng;
+   - **lựa chọn nếu không cấu hình nào đạt:** (a) SFace hoặc AuraFace chỉ dùng mặt, kèm danh sách ca gom tay; (b) như (a)
+     cộng gom thủ công ở ca khó; (c) giữ ArcFace kèm giấy phép InsightFace.
+   - Thay mặc định (BM-7) và đóng gói (BM-8) chờ chủ dự án duyệt.
 
-**Tiêu chí đạt (đề xuất) [BM-2]:** tỉ lệ ảnh đầu loạt khớp P của cấu hình mới **không thấp hơn Q-BASE quá 5 điểm phần
-trăm**.
+## 5. Điều kiện còn thiếu để chạy từng cấu hình
 
-## 4. Báo cáo sau khi đo: hai phần tách riêng
+| Cấu hình | Có thể chạy khi |
+|---|---|
+| **F-SF** (D1) | BM-0, BM-2; chủ dự án chạy trên máy mình (hoặc gửi gói vector); nhãn Q / C / N / R; log thời gian bản 3.0.0 |
+| **F-AU** (D1) | Như F-SF, **cộng** BM-4 (mở huggingface.co, tải, ghim SHA-256, đọc giấy phép file thật) |
+| **F-SF+R** (D1) | Như F-SF, **cộng** BM-6 |
+| **F-AU+R** (D1) | Như F-AU, **cộng** BM-6 |
+| Mọi cấu hình trên **D2** | Như trên, **cộng** bộ ảnh sự kiện có nhãn người |
+| **Q-TECH** | BM-0, BM-2; lịch sử P/X trên máy chủ dự án |
+| **Q-CL** | Như Q-TECH, **cộng** BM-3 |
 
-### 4.1 Kết luận đo (chỉ về chất lượng và tốc độ)
-
-- Bảng mục 2.3, mục 2.5 và mục 3 cho từng cấu hình, kèm số mẫu.
-- **Bằng chứng:** mã commit của máy đo, log Windows/CUDA, file JSON chỉ có số, danh sách "nạp khi chạy" có SHA-256.
-- Phần này **không** kèm đề xuất đóng gói.
-
-### 4.2 Đề xuất đóng gói (quyền dùng và phân phối từng file)
-
-**Kết quả xác minh YoutuReID (2026-11-06):**
-- **opencv_zoo**: README ghi "All files in this directory are licensed under Apache 2.0 License". File LICENSE là văn bản
-  Apache-2.0 nguyên mẫu, **không ghi tên người giữ bản quyền**, và **không nhắc tới trọng số hay dữ liệu**.
-- **Nguồn gốc** (`ReID-Team/ReID_extra_testdata`, "Youtu ReID Baseline" của Tencent Youtu Lab): **không có giấy phép**,
-  không nói gì về dùng thương mại.
-- **Dữ liệu huấn luyện** theo README nguồn gồm Market-1501, DukeMTMC, CUHK03, MSMT17. Đây là các bộ dữ liệu **dành cho
-  nghiên cứu**. DukeMTMC đã bị **rút khỏi phát hành** năm 2019 vì lý do quyền riêng tư.
-- **Kết luận:** quyền dùng thương mại và phân phối YoutuReID **chưa rõ**. Mình **không đề xuất** giữ YoutuReID trong bản
-  thương mại cho tới khi có căn cứ: Tencent Youtu xác nhận, hoặc chủ dự án chấp nhận rủi ro bằng văn bản.
-
-**Vì quyền dùng chưa rõ, báo cáo luôn có thêm phần sau:**
-- **Chất lượng của cấu hình chỉ dùng mặt** (F-SF, F-AU) trên **cùng tập ảnh**, đặt cạnh cấu hình có YoutuReID.
-- **Danh sách ca sẽ cần gom thủ công** nếu bỏ YoutuReID: các look mà cấu hình "chỉ mặt" tách nhầm hoặc để ảnh chưa gom
-  được, nhưng cấu hình có YoutuReID gom đúng. Danh sách ghi tên file và nhóm ảnh khó (quay lưng / che mặt / mặt nhỏ).
-  App đã có công cụ gộp / tách tay, có hoàn tác.
-
-**Bảng đề xuất đóng gói** (điền sau khi đo):
-
-| Cấu hình | File phải có trong bộ cài | Quyền dùng thương mại | Quyền phân phối | Đề xuất |
-|---|---|---|---|---|
-| F-SF | YuNet, SFace | MIT / Apache-2.0 (dữ liệu: xem `docs/model-licenses.md`) | có | |
-| F-AU | YuNet, file nhận mặt AuraFace | Apache-2.0 theo model card; **chờ xác minh file thật** | chờ xác minh | |
-| F-SF+R | + YoutuReID | **chưa rõ** | **chưa rõ** | không đề xuất cho tới khi rõ |
-| F-AU+R | + YoutuReID | **chưa rõ** | **chưa rõ** | không đề xuất cho tới khi rõ |
-| ArcFace (hiện tại) | w600k_r50 | **không** (cần giấy phép InsightFace) | không | không dùng cho bản thương mại |
-
-**Nếu không cấu hình nào đạt, các lựa chọn để chủ dự án quyết:**
-- **(a)** SFace hoặc AuraFace "chỉ mặt", kèm số đo và danh sách ca gom tay;
-- **(b)** như (a), cộng gom thủ công ở ca khó;
-- **(c)** giữ ArcFace kèm giấy phép InsightFace.
-
-Đổi cấu hình mặc định **chờ chủ dự án duyệt**.
-
-## 5. Cách chạy (đề xuất)
-
-- **Lệnh mới**, chỉ đọc, không dùng mạng, chỉ ghi số:
-  ```
-  KiraPick.exe --benchmark-models <thư mục buổi chụp> <report.json> --labels aki_20261025
-  ```
-  Lệnh này dùng lại cơ chế chụp dữ liệu an toàn của `--diagnose-grouping`, không mở file gốc ở chế độ ghi [Repo].
-- **AuraFace:** chỉ có trong một **bản đo nội bộ**, không phải bản phát hành. File được tải một lần lúc build (cần mở
-  mạng tới huggingface.co cho CI hoặc phiên làm việc **[Thiếu]**), rồi ghim SHA-256.
-
-## 6. Đầu vào còn thiếu
-
-1. **AuraFace:** tên file, revision và SHA-256 của file nhận mặt; xác nhận các file đi kèm là của InsightFace. Cần mở mạng
-   tới **huggingface.co**.
-2. **D1:** chủ dự án chạy bản đo trên máy mình (ảnh không rời máy), hoặc gửi gói chỉ có vector.
-3. **D2:** một bộ ảnh **sự kiện** có nhãn người. Không có bộ này thì không kết luận cho Media.
-3b. **Nhãn "quay lưng / che mặt"** cho các ảnh "có người không thấy mặt" của D1 (mục 2.5): chủ dự án đánh dấu, khoảng vài
-    chục ảnh.
-4. **D3:** chạy trên máy chủ dự án, nơi có lịch sử P/X.
-5. **Điều khoản dữ liệu của LAION (W7):** cần xác minh, hoặc chủ dự án chấp nhận rủi ro (BM-3).
-6. **Quyết định BM-1, BM-2, BM-3.**
-
-## 7. Quyết định cần duyệt
+## 6. Quyết định cần chủ dự án chốt
 
 | Mã | Câu hỏi | Đề xuất |
 |---|---|---|
-| **BM-0** | Duyệt kế hoạch đo này? | **Đã duyệt bốn cấu hình** (2026-11-06) |
-| **BM-5** | Có chấp nhận rủi ro dùng YoutuReID trong bản thương mại không? | **Chưa đề xuất.** Quyết sau khi có số đo mục 2.5 và căn cứ quyền dùng |
-| **BM-1** | Có chạy lại ArcFace trên tập chấm mới để so công bằng không (cần xác nhận quyền dùng cho việc đo nội bộ)? | Không. Dùng số đã ghi và ghi rõ giới hạn |
-| **BM-2** | Tiêu chí đạt ở mục 2.4 và mục 3 | Đồng ý |
-| **BM-3** | LAION (W7) có đủ điều kiện dùng cho Q-CL không? | Chấp nhận rủi ro như CLIP, hoặc chỉ đo Q-TECH |
-| **BM-4** | Có mở mạng tới huggingface.co để lấy AuraFace cho bản đo nội bộ không? | Có (chỉ để tải một lần, rồi ghim SHA-256) |
+| **BM-0** | Cho chạy phép đo các cấu hình **chỉ dùng mặt** (F-SF, F-AU) và Q-TECH? | Có |
+| **BM-1** | Chạy lại ArcFace? | Không; dùng số lịch sử, ghi rõ giới hạn |
+| **BM-2** | Tiêu chí ở mục 2.5 và mục 3, gồm **ngưỡng chấp nhận tốc độ 1,2×** và **mục tiêu "nhanh hơn"** tách riêng | Đồng ý |
+| **BM-3** | Dùng LAION trong Q-CL? | Chấp nhận rủi ro như CLIP, hoặc chỉ đo Q-TECH |
+| **BM-4** | Mở huggingface.co, tải file nhận mặt AuraFace cho máy đo nội bộ? | Có |
+| **BM-6** | Coi dòng Apache-2.0 của opencv_zoo là đủ căn cứ để **đo nội bộ** YoutuReID (không phải đóng gói)? | Chủ dự án quyết; nếu không, chỉ đo chỉ dùng mặt |
+| **BM-7** | Thay cấu hình mặc định | Trình sau khi có báo cáo đo |
+| **BM-8** | Đóng gói để phân phối | Trình sau khi có báo cáo đo và căn cứ phân phối |
