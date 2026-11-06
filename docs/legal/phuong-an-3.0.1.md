@@ -101,7 +101,7 @@ Bằng chứng chi tiết (người công bố, commit, SHA-256, model card) ở
 | H2 | `MediaRegistry`: Media chỉ nạp trọng số trong `configs/media-models.json` có trạng thái `verified` / `approved_with_risk`; ghi báo cáo A | `703ad8d` | 17 test (gồm cấm Media import luồng cá nhân) |
 | H3 | `scripts/media_model_report.py`: báo cáo B, cổng build (mã thoát 1 = file ngoài manifest, 2 = bị chặn) | `703ad8d` | test |
 | H4 | Job CI `inspect-release`: digest asset, file đã cài + SHA-256, mô hình trong `portable.zip`, DLL, cờ toàn văn giấy phép, so bộ cài lẻ với bộ cài trong zip | `a36bba9` … `3956697` | đã chạy trên 19 release |
-| H5 | Test chạy không mạng (`tests/unit/test_offline.py`) | có từ trước | chạy trong bộ test |
+| H5 | Test liên quan tới mạng: ONNX Runtime tắt telemetry trước khi nạp (`tests/unit/test_offline.py`); chỉ `app/updates/` được import mã mạng (`tests/unit/test_app_update.py`). **Chưa có** ca chạy app khi mạng bị chặn thật | có từ trước | chạy trong bộ test |
 | H6 | Kiểm kê quyền và bản trình này | `docs/legal/` | — |
 
 ### 3.2 Cần bổ sung để nghiệm thu (chờ duyệt phạm vi sửa mã, LIC-1)
@@ -170,7 +170,7 @@ Bằng chứng chi tiết (người công bố, commit, SHA-256, model card) ở
 | U4 | Phiên kiểu 3.0.0 (schema v7) có `face_arc` / `body` / `clip`, điểm TOPIQ, P/X, sao, ❤, nhóm gộp / tách / "khác nhau" / tên, lịch sử xuất. Mở và phân tích lại:<br>• không đọc vector và điểm cũ;<br>• nhóm theo DATA-1;<br>• dữ liệu người dùng giữ nguyên;<br>• dòng cũ **còn trong DB** | Cá nhân |
 | U5 | `learning.db` cũ có cột `face_arc` / `body`: không đọc / ghi, không xoá | Cá nhân |
 | U6 | Đổi chế độ Cá nhân ↔ Media nhiều lần trong một lần chạy: không mở file ngoài danh sách | cả hai |
-| U7 | Không mạng (H5) | cả hai |
+| U7 | **Mới:** chạy phân tích khi mạng bị chặn (chặn socket trong tiến trình) và, trên CI Windows, chặn bằng tường lửa hệ điều hành để bắt cả kết nối từ DLL (DirectML, ORT) | cả hai |
 | U8 | Ảnh gốc: SHA-256 trước và sau mọi ca trên bằng nhau | cả hai |
 
 ### 5.2 Nghiệm thu bộ cài thực tế
