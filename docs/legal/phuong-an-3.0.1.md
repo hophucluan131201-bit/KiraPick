@@ -1,4 +1,6 @@
-# Kế hoạch sửa phần nền trên `beta` và tiêu chí nghiệm thu (bản trình 4, 2026-11-06)
+# Kế hoạch sửa phần nền trên `beta` và tiêu chí nghiệm thu (bản trình 5, 2026-11-06)
+
+> **Bản trình 5:** thêm mục 11 (thứ tự commit C0–C12, ca kiểm thử, đường chạy khi thiếu dò người / nhận mặt, giới hạn gom thủ công, ghi nguồn kết quả, PROV-1, GRP-2, BUILD-1, ca GRP-1). Danh sách file được bật, cấu hình bộ cài và file dọn khi nâng cấp trình riêng ở `docs/legal/danh-sach-file-ban-tiep-theo.md`. Mục 0–10 giữ như bản trình 4.
 
 **Trạng thái:** kế hoạch, trình duyệt **LIC-1** (phạm vi sửa phần nền).
 - **Chưa sửa mã ứng dụng, chưa build bộ cài, chưa đổi mặc định, chưa đụng tới release nào.**
@@ -264,6 +266,87 @@ Mình không có quyền sửa release (GitHub trả 403).
 | **BM-0b** | Chạy Q-TECH và Q-TECH-noMP (mục 7.2) | Đồng ý |
 | **LIC-3** | Hỏi xác nhận: tác giả SFace, fal, Tencent, OpenAI, NVIDIA | Đồng ý, song song |
 | GRP-1, VER-1, CFG-1, LIC-7, REL, asset | **Quyết định phát hành**: xét sau nghiệm thu (mục 6, 9) | — |
+
+---
+
+## 11. Thứ tự commit và ca kiểm thử (bản trình 5)
+
+Theo kết luận review "TRÌNH DUYỆT TRIỂN KHAI PHẦN NỀN TRÊN `beta`":
+- Làm sau khi chủ dự án duyệt **LIC-1** (và CI-1 cho commit C0).
+- Mỗi commit kèm test của chính nó; bộ test đầy đủ trên Linux phải xanh trước commit kế tiếp.
+- **CI Windows** chạy sau các nhóm C1–C3, C4–C8 và C9–C12, với `editions=none`: chỉ chạy test, **không build**.
+
+### 11.1 Thứ tự
+
+| Commit | Nội dung | Ca kiểm thử (mới hoặc đổi) |
+|---|---|---|
+| **C0** (riêng, CI-1) | Job `plan`: có `inspect_release` thì `editions` trống = `none`; có cả hai thì báo lỗi | Chạy `inspect_release=["v0.2.0b1"]`, `editions` trống. **Bằng chứng:** `gh run view --json jobs`, cả 3 job `build (…)` là `skipped`, run không có artifact ngoài `inventory-*` |
+| **C1** S1: cơ chế chặn | • `configs/model-policy.json` (mục 1 của `danh-sach-file-ban-tiep-theo.md`), trạng thái `verified` / `pending` / `never`, **mã băm ghim**.<br>• Cửa kiểm chung `ModelPolicy`: `ModelRegistry.require` / `ready` và `MediaRegistry` đều đi qua đây.<br>• Bỏ tin file `.sha256` đi kèm.<br>• **Chưa** đổi đường nạp: các đường ArcFace / TOPIQ / CLIP gặp `ready() == False` và tự bỏ qua như khi thiếu file. | U2, U3; U1-a: thư mục có đủ 15 file của 3.0.0, `ready()` chỉ đúng với nhóm có toàn file `verified`; sửa file `.sha256` không hợp thức hoá được file; Media: `available("clip_l14_image") == False`, báo cáo nêu dự phòng `manual content, time-gap moments` (U13) |
+| **C2** S7: ghi log | Mỗi file mở / bị bỏ qua ghi một dòng log: id, SHA-256 **tính trên file thật**, provider thực tế (`session.get_providers()[0]`), lý do bỏ qua. `--self-test` in báo cáo A cho hai chế độ | U14: log có đúng các dòng; mã băm tính từ file, không lấy từ danh sách |
+| **C3** S7: ghi nguồn kết quả | **Schema v8:**<br>• bảng `analysis_runs` (id, thời điểm, phiên bản app, chế độ);<br>• bảng `analysis_run_models` (run, id mô hình, SHA-256, provider);<br>• cột `run_id` (cho phép NULL) ở `occurrences`, `occurrence_vectors`, `measurements`, `asset_vectors`.<br>Dữ liệu cũ `run_id IS NULL` = **"không rõ nguồn"**. Sao lưu DB trước khi nâng cấp (cơ chế sẵn có `.v7.bak`). Bảng `model_registry` cũ (không được ghi) để nguyên | U11: nâng cấp v7 → v8 có bản sao `.v7.bak`, dữ liệu cũ đủ, `run_id` NULL; phân tích mới gắn `run_id` và đủ dòng mô hình; bản 3.0.0 mở DB v8 thì báo "phiên bản mới hơn", không sửa gì (cơ chế sẵn có) |
+| **C4** S2: gỡ đường nạp | Gỡ ArcFace + YoutuReID (`embed_job.py:53`), TOPIQ (`quality_job.py:195`, `load_extras`), CLIP / LAION / `clip_prompts` (gồm `main_window.py:1052`), các mục tương ứng trong `selftest.py` | U1 đầy đủ (mọi đường, 15 file có mặt): chỉ file `verified` được mở |
+| **C5** S5: cache cũ | Không đọc:<br>• vector `face_arc` / `body` / `clip`;<br>• điểm `aesthetic_mos` / `tech_iqa` / `face_iqa`;<br>• `tech_iqa` trong học độ nét (`learning/focus.py` FEATURES);<br>• `session_profile` không chọn hồ sơ ArcFace;<br>• `Teacher` không ghi / đọc `face_arc` / `body` trong `learning.db`;<br>• gu (CLIP) không học / không chấm.<br>Kết quả "không rõ nguồn" xử lý theo **PROV-1** | U4, U5; U15: học độ nét bỏ `tech_iqa` mà không lỗi; `learning.db` cũ mở được, cột cũ còn nguyên |
+| **C6** S6: bảo toàn chỉnh sửa | • Gán tay (`assignment = 'manual'`), tên khoá (`user_locked`), "khác nhau" (`subject_pairs`), P/X, sao, ❤, lịch sử xuất: không bị phân tích lại thay đổi.<br>• Nhóm tự động cũ: hiển thị theo DATA-1, dữ liệu giữ nguyên | U4 (so từng dòng trước / sau), U8 |
+| **C7** S4: dự phòng | GPU → CPU, YOLOX-M → S, thiếu từng file, `--self-test`: mọi nhánh qua cửa kiểm, ghi log C2 | U1 các nhánh dự phòng |
+| **C8** S3: tách dò khỏi nhận mặt + gom thủ công | • Phân tích chạy khi thiếu nhận mặt.<br>• **Ảnh chưa có `occurrences`**: mục gom người trong menu bị **khoá** kèm lời giải thích. [Mã] hiện "➕ Tạo chủ thể mới" vẫn tạo chủ thể **rỗng** và báo "với N ảnh".<br>• Sửa lời báo sai.<br>• Mỗi thao tác gom người ghi một dòng log cục bộ (loại, số ảnh; không tên / đường dẫn) cho ca GRP-1.<br>Mục 11.2 ghi giới hạn | U9, U12 (mục 11.2); U16: log thao tác gom không chứa tên hay đường dẫn |
+| **C9** S12: đổi chế độ | Test đổi qua lại nhiều lần | U6 |
+| **C10** S9: MediaPipe | Job CI chạy lại chuyển đổi, so mã băm. Không trùng → `face_mesh`, `face_blendshapes` chuyển `pending` (một dòng trong danh sách) | U10 |
+| **C11** S11: mạng bị chặn | Test chặn socket; bước CI Windows bật tường lửa chặn kết nối ra ngoài rồi chạy phân tích mẫu | U7 |
+| **C12** S8 + S10: bộ cài, giấy tờ | Script build, `kirapick.spec`, `[InstallDelete]` (mục 2–3 của `danh-sach-file-ban-tiep-theo.md`); cổng build; `docs\licenses\`; `inspect-release` chạy được trên artifact | Kiểm tĩnh trên Linux (cổng build với thư mục giả); P1–P8 **cần build** |
+| — | **Build thử nội bộ** để chạy P1–P12 | **Cần chủ dự án duyệt build riêng** (quy tắc: không build khi chưa duyệt) |
+
+### 11.2 Đường chạy khi thiếu dò người / nhận mặt, và giới hạn gom thủ công
+
+| Trường hợp | Nhập, xem, P/X, sao, ❤, so sánh, xuất | Dò người / mặt | Gom tự động | Gom thủ công | Ca |
+|---|---|---|---|---|---|
+| **A.** Không có dò người **và** không có nhận mặt (thiếu YOLOX / YuNet, hoặc gói tối thiểu) | chạy | không | không | **không**: không có `occurrences`, menu gom bị khoá, ghi rõ lý do | U12-a |
+| **B.** Có dò người, không có nhận mặt (cấu hình đề xuất) | chạy | chạy | không | **chạy** trên ảnh đã có `occurrences`: "➕ Tạo chủ thể mới", "Gán cho chủ thể…", "Đúng là …", "Không phải … — bỏ khỏi chủ thể này" | U9 |
+| **C.** Như B, nhưng **ảnh mới thêm sau lần phân tích** (chưa có `occurrences`) | chạy | sau khi phân tích lại | không | **không** cho các ảnh đó tới khi phân tích; menu khoá, ghi rõ | U12-b |
+| **D.** Ảnh có người nhưng YOLOX / YuNet không dò được (quay lưng xa, quá nhỏ, che khuất) | chạy | không có khung | không | **không** cho ảnh đó | U12-c (ảnh tổng hợp không có người) |
+
+**Giới hạn ghi vào checklist chủ dự án:**
+1. Chỉ gom tay được ảnh mà app đã dò ra người. Ảnh không dò được người (trường hợp D) không gom vào ai được. Phương án làm
+   được: thêm "người không có khung" do gán tay. Việc này đổi hành vi dữ liệu, nên trình riêng là **GRP-2**, chưa làm.
+2. Khi gán tay một ảnh có nhiều người, app chọn người **nổi bật nhất** chưa được gán tay
+   (`assign_photos_to_subject`). Muốn gán đúng người phụ thì phải dùng bảng người của ảnh đó.
+3. Gợi ý gộp nhóm và hàng "cần xem lại" không có, vì cả hai cần vector nhận mặt.
+4. Lọc theo người, chọn ảnh, xuất theo người chạy được **sau khi** đã gom tay.
+
+### 11.3 Quyết định mới phát sinh
+
+| Mã | Câu hỏi | Đề xuất |
+|---|---|---|
+| **PROV-1** | Kết quả cũ **không rõ nguồn** (`run_id` NULL) trong một phiên:<br>(a) vẫn dùng số đo kỹ thuật cũ, nhưng ghi phiên là "không rõ nguồn";<br>(b) không dùng cho tới khi phân tích lại; phiên hiện "cần phân tích lại để có nguồn" | **(b)**. Mọi số liệu dùng cho job có bằng chứng nguồn. Dữ liệu cũ giữ nguyên, phân tích lại thì đè bằng kết quả có nguồn. Chỉnh sửa của người dùng (C6) không phụ thuộc lựa chọn này |
+| **GRP-2** | Cho gán tay ảnh **không có khung người** vào một người? | Chờ kết quả ca GRP-1 (11.5) rồi quyết |
+| **BUILD-1** | Duyệt build thử nội bộ sau C12 để chạy P1–P12 | Chủ dự án quyết khi tới bước đó |
+
+### 11.4 CI và benchmark, tách riêng
+
+| Việc | Khi nào | Báo cáo |
+|---|---|---|
+| C0 (CI-1) | Commit riêng, trước C1 | Bằng chứng job build `skipped` (11.1) |
+| **F-SF** | **Chờ căn cứ cho phép đo** (LIC-3, hoặc chủ dự án quyết BM-0a). Không chạy trong chuỗi C1–C12 | — |
+| **Q-TECH** | Sau C5, làm được độc lập với build. Chạy trên máy chủ dự án | Báo riêng: **theo loạt chụp liên tiếp** (tách loạt theo khoảng thời gian giữa hai ảnh), không theo nhóm người |
+
+**Giới hạn của dữ liệu cache cũ khi chạy Q-TECH** (ghi trong báo cáo):
+- Số đo cũ **không rõ nguồn** (`run_id` NULL). Nguồn chỉ được suy ra từ [Bộ cài]: cùng SHA-256 ở mọi bản.
+- Phiên cũ từ trước v0.2.0b4 không có giá trị mắt (MediaPipe có từ bản đó).
+- `extractor_version` có thể khác nhau giữa các phiên. Q-TECH chỉ so trong cùng một phiên, và báo các phiên bản gặp phải.
+- Lịch sử P/X chỉ có ở phiên chủ dự án đã lọc. Ảnh chưa đánh dấu không được tính là "không chọn".
+- Không đọc cột TOPIQ; không dùng nhóm người (do ArcFace gom).
+- Q-TECH-noMP chạy kèm.
+
+### 11.5 Ca quyết định GRP-1: thử gom tay trên buổi chụp thật
+
+| Mục | Nội dung |
+|---|---|
+| Mục đích | Cho chủ dự án số liệu để quyết có chấp nhận phát hành khi chỉ gom thủ công không |
+| Khi nào | Sau C8, trên bản build thử nội bộ (BUILD-1) hoặc chạy từ mã nguồn trên máy chủ dự án |
+| Dữ liệu | Một buổi chụp thật của chủ dự án do chủ dự án chọn. Ảnh không rời máy |
+| Cách làm | 1. Mở **bản sao** thư mục ảnh (không dùng thư mục gốc), phân tích.<br>2. Chủ dự án gom tay mọi người / bộ trang phục cần giao khách.<br>3. Dừng khi xong |
+| Ghi lại | • Số ảnh; số người / bộ trang phục; số ảnh có người được dò; số ảnh không dò được người (trường hợp D).<br>• **Thời gian** từ lúc bắt đầu gom tới khi xong (chủ dự án bấm giờ).<br>• **Số thao tác**: **không** đếm được từ lịch sử hoàn tác. Nhật ký chỉ giữ 50 mục gần nhất (`MAX_PERSISTED`); số thứ tự `seq` tăng cả khi đánh dấu P/X; hoàn tác thì xoá mục. Vì vậy C8 thêm một dòng log cục bộ cho mỗi thao tác gom người (loại thao tác, số ảnh; **không** tên, không đường dẫn). Đếm số dòng đó trong file log trên máy. Không gửi gì đi.<br>• Số ảnh không gom được và lý do |
+| So sánh | Nếu có, thời gian chủ dự án quen dùng với 3.0.0 cho cùng loại buổi chụp (chủ dự án ước lượng; ghi rõ là ước lượng) |
+| Kết quả | Một trang `docs/owner-trial-grp1.md` chỉ có số liệu, không có tên khách hay ảnh. Chủ dự án quyết GRP-1 (và GRP-2) |
 
 ---
 
