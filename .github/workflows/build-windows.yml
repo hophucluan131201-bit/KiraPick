@@ -42,11 +42,19 @@ jobs:
           MESSAGE: ${{ github.event.head_commit.message }}
           EVENT: ${{ github.event_name }}
           WANTED: ${{ github.event.inputs.editions }}
+          INSPECT: ${{ github.event.inputs.inspect_release }}
         run: |
           python3 - <<'EOF'
-          import json, os
+          import json, os, sys
           msg, event = os.environ.get("MESSAGE", ""), os.environ["EVENT"]
-          if event != "push":
+          wanted = (os.environ.get("WANTED") or "").strip()
+          if event != "push" and (os.environ.get("INSPECT") or "").strip():
+              # Release inspection never builds: an empty editions box means "none" (CI-1); asking for both is an error
+              if wanted not in ("", "none"):
+                  print(f"::error::inspect_release is set: editions must be empty or 'none', got '{wanted}' (no build)")
+                  sys.exit(1)
+              editions = []
+          elif event != "push":
               editions = [e.strip() for e in (os.environ.get("WANTED") or "directml,cuda,openvino").split(",")
                           if e.strip() in ("directml", "cuda", "openvino")]  # "none": no build
           elif "[release-all]" in msg:
