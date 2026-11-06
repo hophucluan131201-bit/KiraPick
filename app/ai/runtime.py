@@ -44,6 +44,8 @@ _openvino_dll_dir()
 
 import onnxruntime as ort  # noqa: E402 - after the DLL directory is set up
 
+from app.ai.policy import LOAD_LOG  # noqa: E402
+
 log = logging.getLogger(__name__)
 
 ALLOWED_PROVIDERS = ("CUDAExecutionProvider", "DmlExecutionProvider", "OpenVINOExecutionProvider",
@@ -58,6 +60,14 @@ DEFAULT_GPU_MEM_LIMIT_MB = 6144  # leave room for Windows/other apps on an 8 GB 
 
 _configured = False
 _preload_error: str | None = None
+
+
+def _open_session(model: Path | str, **kwargs) -> ort.InferenceSession:
+    """Every ONNX Runtime session is created here: the file must have been handed out by the allow-list check
+    (app/ai/policy.py), and the provider ONNX Runtime really uses is recorded for report A."""
+    session = ort.InferenceSession(str(model), **kwargs)
+    LOAD_LOG.provider(Path(model), session.get_providers()[0])
+    return session
 
 
 @dataclass(slots=True)
@@ -119,7 +129,7 @@ class Session:
             self.last_error = f"{type(exc).__name__}: {str(exc)[:300]}"
             log.warning("GPU (%s) failed on %s: %s; switching this model to the CPU",
                         self.device, name, type(exc).__name__)
-            self.session = ort.InferenceSession(str(self.model), sess_options=_options(False, self.cpu_threads),
+            self.session = _open_session(self.model, sess_options=_options(False, self.cpu_threads),
                                                 providers=["CPUExecutionProvider"])
             self.fallback_reason = f"Card đồ hoạ lỗi khi chạy {name} ({type(exc).__name__}); mô hình này chuyển sang CPU"
             self.device = "cpu"
@@ -238,7 +248,7 @@ def create_gpu_session(model: Path, *, gpu_mem_limit_mb: int = DEFAULT_GPU_MEM_L
         if basic_optimizations:
             opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
         try:
-            session = ort.InferenceSession(str(model), sess_options=opts, providers=providers)
+            session = _open_session(model, sess_options=opts, providers=providers)
         except Exception as exc:  # noqa: BLE001 - a broken GPU setup must not stop the app
             errors.append(f"{label}: {type(exc).__name__}: {str(exc)[:400]}")
             continue
@@ -259,7 +269,7 @@ def create_session(model: Path, *, prefer_gpu: bool = True, gpu_mem_limit_mb: in
                                  allow_directml=allow_directml, fixed_dims=fixed_dims, errors=errors)
         if gpu is not None:
             return gpu
-    session = ort.InferenceSession(str(model), sess_options=_options(False, cpu_threads, fixed_dims),
+    session = _open_session(model, sess_options=_options(False, cpu_threads, fixed_dims),
                                    providers=["CPUExecutionProvider"])
     reason = None
     if prefer_gpu:
@@ -321,7 +331,7 @@ def gpu_speed_check(model: Path, runs: int = 3) -> tuple[bool, str]:
             gpus = [g for g in list_gpus() if not g["software"]] or [{"index": i, "name": f"card {i}"} for i in (0, 1)]
             for gpu in gpus:
                 try:
-                    sess = ort.InferenceSession(str(model), sess_options=_options(True),
+                    sess = _open_session(model, sess_options=_options(True),
                                                 providers=[("DmlExecutionProvider", {"device_id": gpu["index"]}),
                                                            "CPUExecutionProvider"])
                 except Exception:  # noqa: BLE001 - that adapter cannot run it

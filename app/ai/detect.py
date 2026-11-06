@@ -7,12 +7,14 @@ Images are numpy uint8 BGR arrays (OpenCV convention); use ``pil_to_bgr``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import cv2
 import numpy as np
 from PIL import Image
 
 from app.ai.models import ModelRegistry, ModelState
+from app.ai.policy import LOAD_LOG
 from app.ai.runtime import Session, create_session
 
 Box = tuple[float, float, float, float]
@@ -127,6 +129,7 @@ class FaceDetector:
         det = self._detectors.get(size)
         if det is None:
             det = cv2.FaceDetectorYN.create(self._model, "", size, FACE_SCORE, FACE_NMS_IOU, 5000)
+            LOAD_LOG.provider(Path(self._model), "opencv")
             self._detectors[size] = det
         return det
 
@@ -158,7 +161,9 @@ class FaceDetector:
 
 class FaceEmbedder:
     def __init__(self, registry: ModelRegistry) -> None:
-        self._rec = cv2.FaceRecognizerSF.create(str(registry.require("face_embedder")), "")
+        path = registry.require("face_embedder")
+        self._rec = cv2.FaceRecognizerSF.create(str(path), "")
+        LOAD_LOG.provider(path, "opencv")
 
     def embed(self, bgr: np.ndarray, face: Face) -> np.ndarray:
         aligned = self._rec.alignCrop(bgr, face.raw)

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 
 from app.ai.models import ModelRegistry
+from app.ai.policy import LOAD_LOG
 from app.quality.measure import FaceGeometry, align_face
 
 REFINE_LONG_SIDE = 480  # the face crop is analysed at about this size
@@ -34,6 +37,7 @@ class FaceRefiner:
         det = self._detectors.get(size)
         if det is None:
             det = self._detectors[size] = cv2.FaceDetectorYN.create(self._model, "", size, 0.5, 0.3, 50)
+            LOAD_LOG.provider(Path(self._model), "opencv")
         _, faces = det.detect(small)
         if faces is not None:  # YuNet can return NaN / huge rows on odd crops: keep faces inside the crop
             faces = faces.astype(np.float64)
@@ -54,7 +58,9 @@ class FaceQuality:
     """eDifFIQA(T): higher = better face image (sharp, frontal, unoccluded). Roughly 0..1."""
 
     def __init__(self, registry: ModelRegistry) -> None:
-        self._net = cv2.dnn.readNetFromONNX(str(registry.require("face_quality")))
+        path = registry.require("face_quality")
+        self._net = cv2.dnn.readNetFromONNX(str(path))
+        LOAD_LOG.provider(path, "opencv")
 
     def score(self, full: np.ndarray, face: FaceGeometry) -> float | None:
         aligned = align_face(full, face)

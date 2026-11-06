@@ -94,15 +94,20 @@ def run(report_path: Path, photos: Path | None = None) -> int:
         if os.environ.get("ORT_DISABLE_TELEMETRY") != "1":
             raise RuntimeError("ONNX Runtime telemetry is not disabled")
         step("ONNX Runtime telemetry disabled (ORT_DISABLE_TELEMETRY=1)")
+        from app.ai.policy import LOAD_LOG
+
+        LOAD_LOG.clear()
         registry = ModelRegistry()
         report["models_dir"] = str(registry.models_dir)
         report["models"] = {s.spec.id: s.state.value for s in registry.all_status()}
+        report["policy"] = {i: e.status for i, e in sorted(registry.policy.entries.items())}
+        # Only weights the allow-list verifies are required; pending / never ones must not be opened at all
         missing = [i for i, st in report["models"].items()
-                   if st != ModelState.READY.value
-                   and registry.specs[i].purpose in ("identity", "identity_plus", "quality")]
+                   if st != ModelState.READY.value and registry.policy.verified(i)
+                   and registry.specs[i].purpose in ("identity", "quality")]
         if missing:
             raise RuntimeError(f"models not ready: {missing}")
-        step("models verified (SHA-256)")
+        step("models verified (SHA-256 pinned in the allow-list)")
         report["aesthetic_model"] = report["models"].get("aesthetic", "not in manifest")
         report["identity_plus"] = registry.ready("identity_plus")  # ArcFace + YoutuReID
         info = configure()
@@ -176,6 +181,18 @@ def run(report_path: Path, photos: Path | None = None) -> int:
 
             child = run_in_child(Path(tmp) / "session", "people", None, False, lambda *_a: None, lambda: False)
             step(f"child process: ok ({child['analysed']} new photos)")
+        # Report A: what was really opened (id, SHA-256 of the file, provider) and what was refused, per mode
+        from app.media.models import MediaRegistry
+
+        media = MediaRegistry(registry)
+        report["report_a"] = {"personal": LOAD_LOG.report(),
+                              "media": {"loaded": media.report_loaded(), "unavailable": media.report_unavailable()}}
+        opened_not_verified = [i for i in report["report_a"]["personal"]["opened"]
+                               if not registry.policy.verified(i)]
+        if opened_not_verified:
+            raise RuntimeError(f"weights opened outside the allow-list: {opened_not_verified}")
+        step(f"report A: {len(report['report_a']['personal']['opened'])} opened, "
+             f"{len(report['report_a']['personal']['skipped'])} skipped")
         if report["network_attempts"]:
             raise RuntimeError("the app tried to use the network")
         report["ok"] = True
