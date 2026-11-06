@@ -476,7 +476,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          $tests = "tests/unit/test_model_policy.py tests/unit/test_load_log.py tests/unit/test_provenance.py tests/unit/test_old_cache.py tests/unit/test_user_edits.py tests/unit/test_fallback_paths.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_network_blocked.py tests/unit/test_selftest.py tests/unit/test_media_models.py tests/gui/test_manual_grouping.py tests/gui/test_mode_picker.py".Split(" ")
+          $tests = "tests/unit/test_model_policy.py tests/unit/test_load_log.py tests/unit/test_provenance.py tests/unit/test_old_cache.py tests/unit/test_user_edits.py tests/unit/test_fallback_paths.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_network_blocked.py tests/unit/test_selftest.py tests/unit/test_media_models.py tests/gui/test_manual_grouping.py tests/gui/test_mode_picker.py tests/unit/test_packaging.py tests/unit/test_grp1_counts.py".Split(" ")
           python -m pytest -q -p no:cacheprovider -rs @tests *>&1 | Tee-Object -FilePath lic1.log
           Write-Host "::notice title=LIC-1 tests (network open)::$((Get-Content lic1.log -Tail 3) -join ' | ')"
           if ($LASTEXITCODE -ne 0) { exit 1 }
