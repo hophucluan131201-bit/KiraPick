@@ -41,6 +41,8 @@ a = Analysis(
     datas=[
         (str(ROOT / "configs" / "model-manifest.json"), "configs"),
         (str(ROOT / "packaging" / "kirapick.png"), "assets"),
+        (str(ROOT / "packaging" / "modes" / "personal.png"), "assets/modes"),
+        (str(ROOT / "packaging" / "modes" / "event.png"), "assets/modes"),
     ],
     hiddenimports=["app.selftest"] + (["openvino", "onnxruntime.tools.add_openvino_win_libs"]
                                       if EDITION == "openvino" else []),

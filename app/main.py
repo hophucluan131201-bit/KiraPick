@@ -87,12 +87,12 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger(__name__).info("starting %s (logs in %s)", __version__, log_dir)
     _install_excepthook()
 
-    from app.ui.main_window import MainWindow
+    from app.ui.app_shell import AppShell
     from app.ui.theme import apply_dark_theme
 
     apply_dark_theme(app)
-    window = MainWindow()
-    window.show()
+    shell = AppShell()  # every normal start: the mode picker (Chụp cá nhân / Media sự kiện)
+    shell.start()
     return app.exec()
 
 

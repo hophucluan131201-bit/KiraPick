@@ -41,6 +41,18 @@ def icon_path() -> Path | None:
     return None
 
 
+def mode_image_path(name: str) -> Path | None:
+    """The mode picker's illustration ``name`` ("personal" / "event"), from the source tree or a packaged build."""
+    import sys
+
+    here = Path(__file__).resolve().parents[1]
+    for candidate in (Path(getattr(sys, "_MEIPASS", here)) / "assets" / "modes" / f"{name}.png",
+                      here / "packaging" / "modes" / f"{name}.png"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def data_dir() -> Path:
     """Folder with sessions/, learning/ and logs/ of this app."""
     return _local_base() / APP_NAME
