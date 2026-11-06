@@ -33,7 +33,7 @@ SIDE_BY_SIDE_MIN_W = 760  # narrower: the cards stack
 IMAGES_MIN_H = 420  # lower window: the cards keep only their name and description
 STACKED_IMAGES_MIN_H = 760  # stacked cards need twice the height for their pictures
 FOCUS_BORDER = 3
-FOCUS_Y = {"personal": 0.3, "event": 0.45}  # keep the cosplayer's face / the stage in view
+FOCUS_Y = {"personal": 0.15, "event": 0.45}  # keep the cosplayer's face / the stage in view
 PICTURE_RATIO = 0.48  # height / width of the illustrations (as in the mockup)
 
 
