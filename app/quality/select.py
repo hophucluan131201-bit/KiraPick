@@ -98,7 +98,8 @@ def _candidates(conn: sqlite3.Connection, subject_id: int | None, asset_ids: set
     occ_ids = [occ for occ, _ in scored.values()]
     marks = ",".join("?" * len(occ_ids))
     layouts = {r[0]: np.frombuffer(r[1], "<f4") for r in conn.execute(
-        f"SELECT occurrence_id, vector FROM occurrence_vectors WHERE kind = 'layout' AND occurrence_id IN ({marks})",
+        f"""SELECT occurrence_id, vector FROM occurrence_vectors WHERE kind = 'layout' AND run_id IS NOT NULL
+            AND occurrence_id IN ({marks})""",
         occ_ids)}
     times = {r[0]: r[1] for r in conn.execute(
         f"SELECT id, capture_time FROM assets WHERE id IN ({','.join('?' * len(scored))})", list(scored))}

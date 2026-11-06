@@ -60,12 +60,12 @@ def _session(tmp: Path) -> tuple[Project, dict[str, int]]:
                             VALUES (?, 1, ?, '.jpg', 'raster', 'verified', 1, 1, ?, 'ok', ?, 'n', 'n')""",
                          (asset, f"SECRET_{asset:04d}.JPG", str(asset), f"2026-10-25T10:00:{asset:02d}"))
         o = int(conn.execute("""INSERT INTO occurrences (asset_id, person_box, face_box, prominence, is_main,
-                                analysis_version, created_at) VALUES (?, ?, ?, 1.0, 1, 1, 'n')""",
+                                analysis_version, created_at, run_id) VALUES (?, ?, ?, 1.0, 1, 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""",
                              (asset, json.dumps(person) if person else None, json.dumps(face_box) if face_box else None)
                              ).lastrowid)
         if face is not None:
-            conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'face', 't', ?)", (o, face.astype("<f4").tobytes()))
-        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'outfit', 't', ?)", (o, look.astype("<f4").tobytes()))
+            conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id) VALUES (?, 'face', 't', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (o, face.astype("<f4").tobytes()))
+        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id) VALUES (?, 'outfit', 't', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (o, look.astype("<f4").tobytes()))
         occ[key] = o
 
     add("p1_body", 1, [0.1, 0.1, 0.4, 0.8], [0.25, 0.15, 0.1, 0.1], k1)

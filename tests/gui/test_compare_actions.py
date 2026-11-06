@@ -191,7 +191,7 @@ def test_e_z_plus_act_on_active_tile(qtbot, env: dict) -> None:  # noqa: F811
     w, ids = _setup(qtbot, env)
     with w.project.transaction() as conn:
         conn.execute("""INSERT INTO occurrences (asset_id, person_box, face_box, prominence, is_main, analysis_version,
-                        created_at) VALUES (?, '[0.05,0.05,0.3,0.8]', '[0.1,0.1,0.1,0.15]', 1, 1, 1, 'n')""", (ids[1],))
+                        created_at, run_id) VALUES (?, '[0.05,0.05,0.3,0.8]', '[0.1,0.1,0.1,0.15]', 1, 1, 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""", (ids[1],))
     _hover(w, ids[1])
     for key in (Qt.Key.Key_Z, Qt.Key.Key_Plus, Qt.Key.Key_E):
         _key(qtbot, w, key)

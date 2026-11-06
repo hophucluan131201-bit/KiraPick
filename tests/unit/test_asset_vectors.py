@@ -24,12 +24,12 @@ def test_round_trip_in_float16(tmp_path: Path) -> None:
         aid = _asset(project)
         v = np.random.default_rng(0).normal(size=768).astype(np.float32)
         v /= np.linalg.norm(v)
-        save_vector(project.conn, aid, "clip", "v1", v)
+        save_vector(project.conn, aid, "clip", "v1", v, 1)
         got = load_vectors(project.conn, "clip", "v1")
         assert set(got) == {aid} and got[aid].dtype == np.float32
         assert float(got[aid] @ v) / float(np.linalg.norm(got[aid])) >= 0.999
         assert load_vectors(project.conn, "clip", "v2") == {}  # another model version is not returned
-        save_vector(project.conn, aid, "clip", "v2", v)  # replaced, not duplicated
+        save_vector(project.conn, aid, "clip", "v2", v, 1)  # replaced, not duplicated
         assert set(load_vectors(project.conn, "clip", "v2")) == {aid}
 
 

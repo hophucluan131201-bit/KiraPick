@@ -60,7 +60,7 @@ def test_eye_zoom_follows_rotation(qtbot, env: dict) -> None:  # noqa: F811
     rec = w.current_record()
     with w.project.transaction() as conn:
         conn.execute("""INSERT INTO occurrences (asset_id, person_box, face_box, prominence, is_main, analysis_version,
-                        created_at) VALUES (?, '[0.05,0.05,0.3,0.8]', '[0.1,0.1,0.1,0.15]', 1, 1, 1, 'n')""", (rec.id,))
+                        created_at, run_id) VALUES (?, '[0.05,0.05,0.3,0.8]', '[0.1,0.1,0.1,0.15]', 1, 1, 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""", (rec.id,))
     w.rotate_view()  # face at the top-left of the file -> top-right on screen
     _key(qtbot, w, Qt.Key.Key_E)
     w.viewer.wait_idle()
@@ -108,7 +108,7 @@ def test_eye_zoom_from_the_grid_keeps_the_eyes_when_the_real_image_arrives(qtbot
     rec = w.current_record()
     with w.project.transaction() as conn:
         conn.execute("""INSERT INTO occurrences (asset_id, person_box, face_box, prominence, is_main, analysis_version,
-                        created_at) VALUES (?, '[0.05,0.05,0.3,0.8]', '[0.1,0.1,0.1,0.15]', 1, 1, 1, 'n')""", (rec.id,))
+                        created_at, run_id) VALUES (?, '[0.05,0.05,0.3,0.8]', '[0.1,0.1,0.1,0.15]', 1, 1, 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""", (rec.id,))
     _key(qtbot, w, Qt.Key.Key_E)
     w.viewer.wait_idle()
     qtbot.wait(50)

@@ -14,8 +14,8 @@ def test_answering_a_pair_teaches_taste(qtbot, env: dict) -> None:  # noqa: F811
     ids = [r[0] for r in conn.execute("SELECT id FROM assets WHERE status = 'ok' ORDER BY id")][:2]
     sid = conn.execute("INSERT INTO subjects (created_at) VALUES ('t')").lastrowid
     for a in ids:
-        conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at, subject_id)"
-                     " VALUES (?, 1, 1, 1, 't', ?)", (a, sid))
+        conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at, subject_id, run_id)"
+                     " VALUES (?, 1, 1, 1, 't', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (a, sid))
     v = np.zeros(768, np.float32)
     v[0] = 1.0
     w.taste.clips = {ids[0]: v, ids[1]: v}

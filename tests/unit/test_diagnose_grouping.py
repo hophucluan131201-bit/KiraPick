@@ -39,11 +39,11 @@ def _add(p: Project, asset: int, face: np.ndarray | None, outfit: np.ndarray | N
                VALUES (?, 1, ?, '.jpg', 'raster', 'verified', 1, 1, ?, 'ok', ?, 'n', 'n')""",
             (asset, f"DSC_{asset:04d}.JPG", str(asset), (T0 + timedelta(seconds=seconds)).isoformat()))
     occ = int(conn.execute(
-        """INSERT INTO occurrences (asset_id, person_box, prominence, is_main, analysis_version, created_at)
-           VALUES (?, '[0.1,0.1,0.5,0.8]', 1.0, ?, 1, 'n')""", (asset, main)).lastrowid)
+        """INSERT INTO occurrences (asset_id, person_box, prominence, is_main, analysis_version, created_at, run_id)
+           VALUES (?, '[0.1,0.1,0.5,0.8]', 1.0, ?, 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""", (asset, main)).lastrowid)
     for kind, vec in (("face", face), ("outfit", outfit)):
         if vec is not None:
-            conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, ?, 't', ?)", (occ, kind, vec.astype("<f4").tobytes()))
+            conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id) VALUES (?, ?, 't', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (occ, kind, vec.astype("<f4").tobytes()))
     return occ
 
 

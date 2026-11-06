@@ -31,7 +31,7 @@ def _subject(conn: sqlite3.Connection, name: str | None, merged_into: int | None
 
 def _occ(conn: sqlite3.Connection, asset_id: int, subject_id: int | None, assignment: str = "manual") -> None:
     conn.execute("""INSERT INTO occurrences (asset_id, prominence, is_main, subject_id, assignment, analysis_version,
-                                             created_at) VALUES (?, 1.0, 1, ?, ?, 1, ?)""",
+                                             created_at, run_id) VALUES (?, 1.0, 1, ?, ?, 1, ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))""",
                  (asset_id, subject_id, assignment, utc_now()))
 
 

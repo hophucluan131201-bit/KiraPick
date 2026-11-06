@@ -84,7 +84,7 @@ def evidence(a: list[Occ], b: list[Occ], limit: int = MAX_PAIRS_PER_ANSWER) -> l
             if sface is None and x.face_sface is None and x.face_arc is None:
                 sface = _sim(x.face, y.face)  # Occ built by hand (tests): the face it has
             outfit = _sim(x.outfit, y.outfit)
-            arc, body = _sim(x.face_arc, y.face_arc), _sim(x.body, y.body)
+            arc = body = None  # ArcFace / ReID evidence is never written to learning.db any more (LIC-1 S5)
             if sface is None and outfit is None and arc is None and body is None:
                 continue
             pairs.append(PairEvidence(sface, outfit, dt, arc, body))

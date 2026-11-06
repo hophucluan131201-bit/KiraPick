@@ -12,10 +12,10 @@ from tests.gui.test_main_window import _import, _key, _window, env  # noqa: F401
 
 
 def _measure(conn, asset_id: int, eye: float) -> None:  # noqa: ANN001
-    occ = conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at)"
-                       " VALUES (?, 1, 1, 1, 't')", (asset_id,)).lastrowid
+    occ = conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at, run_id)"
+                       " VALUES (?, 1, 1, 1, 't', (SELECT id FROM analysis_runs WHERE stage = 'test'))", (asset_id,)).lastrowid
     conn.execute("INSERT INTO measurements (asset_id, occurrence_id, extractor, extractor_version, input_source,"
-                 " values_json, computed_at) VALUES (?, ?, 'quality', '5', 'full', ?, 't')",
+                 " values_json, computed_at, run_id) VALUES (?, ?, 'quality', '5', 'full', ?, 't', (SELECT id FROM analysis_runs WHERE stage = 'test'))",
                  (asset_id, occ, json.dumps({"eye_sharp": eye, "tech_iqa": 0.6})))
 
 

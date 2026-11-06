@@ -75,8 +75,8 @@ def _photo(conn: sqlite3.Connection, seconds: float | None, subject: int | None 
     if subject is not None:
         if not conn.execute("SELECT 1 FROM subjects WHERE id = ?", (subject,)).fetchone():
             conn.execute("INSERT INTO subjects (id, created_at) VALUES (?, 't')", (subject,))
-        conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at, subject_id)"
-                     " VALUES (?, 1, ?, 1, 't', ?)", (aid, int(main), subject))
+        conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at, subject_id, run_id)"
+                     " VALUES (?, 1, ?, 1, 't', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (aid, int(main), subject))
     return aid
 
 

@@ -18,10 +18,11 @@ def save_vector(conn: sqlite3.Connection, asset_id: int, kind: str, version: str
 
 def load_vectors(conn: sqlite3.Connection, kind: str, version: str) -> dict[int, np.ndarray]:
     return {int(r[0]): np.frombuffer(r[1], "<f2").astype(np.float32) for r in conn.execute(
-        "SELECT asset_id, vector FROM asset_vectors WHERE kind = ? AND model_version = ?", (kind, version))}
+        "SELECT asset_id, vector FROM asset_vectors WHERE kind = ? AND model_version = ? AND run_id IS NOT NULL",
+        (kind, version))}  # vectors of unknown source (before schema v8) are not used (PROV-1 b)
 
 
 def load_vector(conn: sqlite3.Connection, asset_id: int, kind: str, version: str) -> np.ndarray | None:
-    row = conn.execute("SELECT vector FROM asset_vectors WHERE asset_id = ? AND kind = ? AND model_version = ?",
-                       (asset_id, kind, version)).fetchone()
+    row = conn.execute("""SELECT vector FROM asset_vectors WHERE asset_id = ? AND kind = ? AND model_version = ?
+                          AND run_id IS NOT NULL""", (asset_id, kind, version)).fetchone()
     return None if row is None else np.frombuffer(row[0], "<f2").astype(np.float32)

@@ -63,12 +63,12 @@ def build_session(sessions: Path, root: Path, photos: int, seed: int = 7) -> Pro
     conn.executemany("INSERT INTO decisions (asset_id, flag, rating, favorite, updated_at) VALUES (?, ?, ?, 0, 't')",
                      decisions)
     for i in range(0, photos, 2):  # half: a main person with a quality measurement
-        occ = conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at) "
-                           "VALUES (?, 1, 1, 1, 't')", (i + 1,)).lastrowid
+        occ = conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at, run_id) "
+                           "VALUES (?, 1, 1, 1, 't', (SELECT id FROM analysis_runs WHERE stage = 'test'))", (i + 1,)).lastrowid
         values = {"eye_sharp": rng.uniform(0.2, 1.0), "tech_iqa": rng.uniform(0.3, 0.9),
                   "aesthetic_mos": rng.uniform(3.5, 6.5)}
         conn.execute("INSERT INTO measurements (asset_id, occurrence_id, extractor, extractor_version, input_source, "
-                     "values_json, computed_at) VALUES (?, ?, 'quality', '5', 'full', ?, 't')",
+                     "values_json, computed_at, run_id) VALUES (?, ?, 'quality', '5', 'full', ?, 't', (SELECT id FROM analysis_runs WHERE stage = 'test'))",
                      (i + 1, occ, json.dumps(values)))
     conn.execute("COMMIT")
     return project

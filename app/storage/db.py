@@ -294,6 +294,9 @@ ALTER TABLE occurrences ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id);
 ALTER TABLE occurrence_vectors ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id);
 ALTER TABLE measurements ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id);
 ALTER TABLE asset_vectors ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id);
+-- PROV-1 (b): results of unknown source are not used, so the analysis must run again to have a source.
+-- Nothing is deleted: P/X, groups, names and the old rows stay; re-detection keeps occurrence ids (box match).
+UPDATE stage_status SET state = 'pending', attempts = 0 WHERE stage IN ('detect', 'quality');
 """),
 ]
 

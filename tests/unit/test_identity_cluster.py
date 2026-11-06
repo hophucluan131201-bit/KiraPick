@@ -149,12 +149,12 @@ def _add(p: Project, asset: int, face: np.ndarray | None, *, minute: int = 0, ma
             (asset, f"DSC_{asset:04d}.NEF", str(asset), f"2026-10-25T10:{minute:02d}:00"),
         )
     occ = int(conn.execute(
-        """INSERT INTO occurrences (asset_id, person_box, prominence, is_main, analysis_version, created_at)
-           VALUES (?, ?, 1.0, ?, 1, 'n')""", (asset, json.dumps([0.1, 0.1, 0.5, 0.8]), main)).lastrowid)
+        """INSERT INTO occurrences (asset_id, person_box, prominence, is_main, analysis_version, created_at, run_id)
+           VALUES (?, ?, 1.0, ?, 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""", (asset, json.dumps([0.1, 0.1, 0.5, 0.8]), main)).lastrowid)
     if face is not None:
-        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'face', 't', ?)", (occ, face.astype("<f4").tobytes()))
+        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id) VALUES (?, 'face', 't', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (occ, face.astype("<f4").tobytes()))
     if outfit is not None:
-        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'outfit', 't', ?)", (occ, outfit.astype("<f4").tobytes()))
+        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id) VALUES (?, 'outfit', 't', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (occ, outfit.astype("<f4").tobytes()))
     return occ
 
 

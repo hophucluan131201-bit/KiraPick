@@ -195,8 +195,9 @@ class LearningStore:
         for (answer, day, kind, same, face, outfit, dt, arc, body, fv, ov, av, bv) in rows:
             if answer is None:
                 answer = old_answers.setdefault((day, kind, same), -1 - len(old_answers))
-            out.append(IdentityExample(answer, bool(same), PairEvidence(face, outfit, dt, arc, body),
-                                       CueVersions(fv, ov, av or "", bv or "")))
+            # The ArcFace / ReID numbers older builds stored are kept in the file but never read (LIC-1 S5)
+            out.append(IdentityExample(answer, bool(same), PairEvidence(face, outfit, dt, None, None),
+                                       CueVersions(fv, ov, "", "")))
         return out
 
     # ---- undoable operations (app.undo): ids reserved below OP_BASE, one reservation row each (no cues) ----

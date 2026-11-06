@@ -34,8 +34,8 @@ def _add(p: Project, asset: int, face: np.ndarray, minute: int, main: int = 1) -
                VALUES (?, 1, ?, '.jpg', 'raster', 'verified', 1, 1, ?, 'ok', ?, 'n', 'n')""",
             (asset, f"P_{asset:04d}.JPG", str(asset), f"2026-10-25T10:{minute:02d}:00"))
     occ = int(conn.execute("""INSERT INTO occurrences (asset_id, person_box, prominence, is_main, analysis_version,
-                               created_at) VALUES (?, '[0.1,0.1,0.5,0.8]', 1.0, ?, 1, 'n')""", (asset, main)).lastrowid)
-    conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'face', 't', ?)", (occ, face.astype("<f4").tobytes()))
+                               created_at, run_id) VALUES (?, '[0.1,0.1,0.5,0.8]', 1.0, ?, 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""", (asset, main)).lastrowid)
+    conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id) VALUES (?, 'face', 't', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (occ, face.astype("<f4").tobytes()))
     return occ
 
 

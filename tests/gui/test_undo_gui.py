@@ -141,7 +141,7 @@ def _three_people(w) -> list[int]:  # noqa: ANN001
             conn.execute("INSERT INTO subjects (id, created_at) VALUES (?, 'n')", (sid,))
             for a in owned:
                 conn.execute("""INSERT INTO occurrences (asset_id, person_box, prominence, is_main, subject_id,
-                                assignment, analysis_version, created_at) VALUES (?, '[0,0,1,1]', ?, 1, ?, 'auto', 1, 'n')""",
+                                assignment, analysis_version, created_at, run_id) VALUES (?, '[0,0,1,1]', ?, 1, ?, 'auto', 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""",
                              (a, 0.5 if sid == 2 and a == assets[0] else 1.0, sid))
         actions.rename_subject(conn, 3, "Aki")
     w._fill_people()

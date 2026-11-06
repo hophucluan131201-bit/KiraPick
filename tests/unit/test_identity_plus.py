@@ -38,24 +38,24 @@ def project(tmp_path: Path) -> Project:
 
 
 def _vec(project: Project, occ: int, kind: str, v: np.ndarray) -> None:
-    project.conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, ?, 'v', ?)", (occ, kind, v.astype("<f4").tobytes()))
+    project.conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id) VALUES (?, ?, 'v', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (occ, kind, v.astype("<f4").tobytes()))
 
 
 # ------------------------------------------------------------------ profile
 
 
-def test_session_uses_arcface_only_when_it_has_arcface_vectors(project: Project) -> None:
+def test_session_never_uses_stored_arcface_vectors(project: Project) -> None:
+    """LIC-1 S5: a 3.0.0 session with ArcFace vectors is grouped with SFace only; the ArcFace rows stay unused."""
     a, b = _person(), _person()
     occs = [_add(project, i, _shot(a), outfit=RED) for i in (1, 2)] + [_add(project, 3, _shot(b), outfit=RED)]
-    assert session_profile(project.conn) is SFACE_HSV
-    # ArcFace says 1 and 3 are the same person, SFace says 1 and 2: the ArcFace vectors must win.
-    arc_x, arc_y = _person(), _person()
+    arc_x, arc_y = _person(), _person()  # ArcFace would say 1 and 3 are the same person
     for occ, arc in zip(occs, (_shot(arc_x, 0.1), _shot(arc_y, 0.1), _shot(arc_x, 0.1))):
         _vec(project, occ, "face_arc", arc)
-    assert session_profile(project.conn) is ARCFACE_REID
+    assert session_profile(project.conn) is SFACE_HSV
     report = recluster(project)
-    assert report.profile == "arcface+reid"
-    assert sorted(_subjects(project).values()) == [[1, 3], [2]]
+    assert report.profile != "arcface+reid"
+    assert sorted(_subjects(project).values()) == [[1, 2], [3]]
+    assert project.conn.execute("SELECT COUNT(*) FROM occurrence_vectors WHERE kind = 'face_arc'").fetchone()[0] == 3
 
 
 def test_look_mixes_colours_and_body_only_in_the_arcface_profile() -> None:
@@ -269,13 +269,15 @@ def test_store_v5_keeps_all_cues_and_upgrades_v4(tmp_path: Path) -> None:
                        "f", "o", ARCFACE_VERSION, BODY_VERSION)
     ex = store.identity_examples()
     assert len(ex) == 3 and ex[0].answer == ex[1].answer and ex[2].answer < 0  # pre-v5 row: its own answer
-    newest = [e for e in ex if e.pair.face_arc is not None][0]
-    assert newest.pair.body == 0.6 and newest.versions.arc == ARCFACE_VERSION
-    assert [e for e in ex if e.pair.dt_s == 40][0].versions.arc == ""  # no ArcFace number: no version either
+    # stored as given (the file keeps every cue), but the ArcFace / ReID numbers are never read back (LIC-1 S5)
+    assert all(e.pair.face_arc is None and e.pair.body is None and e.versions.arc == "" for e in ex)
+    raw = store.conn.execute("SELECT face_arc, body, arc_version FROM identity_feedback WHERE dt_s = 30").fetchone()
+    assert tuple(raw) == (0.4, 0.6, ARCFACE_VERSION)
     store.close()
 
 
-def test_teacher_records_arcface_and_body_numbers(project: Project, tmp_path: Path) -> None:
+def test_teacher_never_records_arcface_or_body_numbers(project: Project, tmp_path: Path) -> None:
+    """LIC-1 S5: learning.db gets SFace and outfit numbers only, even when the session still has ArcFace / ReID rows."""
     from app.identity import actions
 
     a, b = _person(), _person()
@@ -290,22 +292,18 @@ def test_teacher_records_arcface_and_body_numbers(project: Project, tmp_path: Pa
         Teacher(store).merged(conn, s1, s2)
         actions.merge_subjects(conn, s1, s2)
     [ex] = store.identity_examples()
-    assert ex.same and None not in (ex.pair.face, ex.pair.face_arc, ex.pair.body, ex.pair.outfit)
-    assert ex.versions == V_ARC
+    assert ex.same and ex.pair.face is not None and ex.pair.outfit is not None
+    assert ex.pair.face_arc is None and ex.pair.body is None
     store.close()
-    assert not tune_from_store(tmp_path / "learning", ARCFACE_REID).applied  # one answer is not enough
-    assert not tune_from_store(tmp_path / "nothing-here", ARCFACE_REID).applied
 
 
 def test_learnt_shift_reaches_the_grouping(project: Project, tmp_path: Path) -> None:
-    """analyze_job passes the tuning to recluster: a stricter face threshold splits a borderline pair."""
+    """analyze_job passes the tuning to recluster: a stricter face threshold splits a borderline pair (SFace)."""
     face = _person()
-    other = _unit_mix(face, ARCFACE_REID.face_strong + 0.02)
-    o1 = _add(project, 1, _shot(face, 0.05), outfit=RED)
-    o2 = _add(project, 2, _shot(face, 0.05), minute=50, outfit=_person())  # far apart in time, other outfit
-    _vec(project, o1, "face_arc", face)
-    _vec(project, o2, "face_arc", other)
-    level = ARCFACE_REID.face_strong + 0.02
+    level = SFACE_HSV.face_strong + 0.02
+    other = _unit_mix(face, level)
+    _add(project, 1, face, outfit=RED)
+    _add(project, 2, other, minute=50, outfit=_person())  # far apart in time, other outfit
     recluster(project, lambda base: replace(base, face_strong=level - 0.05, face_certain=level - 0.01))
     assert len(_subjects(project)) == 1
     recluster(project, lambda base: replace(base, face_strong=level + 0.05, face_certain=level + 0.1))

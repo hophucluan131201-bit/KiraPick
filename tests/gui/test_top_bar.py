@@ -114,7 +114,7 @@ def test_people_filter_and_merge_button(qtbot, env: dict) -> None:  # noqa: F811
         for i, a in enumerate(ids[:3]):
             sid = conn.execute("INSERT INTO subjects (created_at) VALUES ('t')").lastrowid
             conn.execute("INSERT INTO occurrences (asset_id, prominence, is_main, analysis_version, created_at,"
-                         " subject_id, assignment) VALUES (?, 1, 1, 1, 't', ?, 'auto')", (a, sid))
+                         " subject_id, assignment, run_id) VALUES (?, 1, 1, 1, 't', ?, 'auto', (SELECT id FROM analysis_runs WHERE stage = 'test'))", (a, sid))
     w._fill_people()
     names = [w.people.item(i).text() for i in range(w.people.count())]
     w.people_filter.setText("2")

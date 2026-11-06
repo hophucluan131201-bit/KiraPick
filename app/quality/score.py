@@ -22,6 +22,8 @@ same camera in the project.
 
 from __future__ import annotations
 
+import functools
+
 import json
 import sqlite3
 from dataclasses import dataclass, field
@@ -72,6 +74,25 @@ class FocusOverride:
 def _ramp(x: float, lo: float, hi: float) -> float:
     """0 at lo, 100 at hi, clamped (lo > hi for 'lower is better')."""
     return max(0.0, min(100.0, (x - lo) / (hi - lo) * 100.0))
+
+
+# Measurement keys produced by a weight: dropped unless the allow-list verifies that weight (LIC-1 S5)
+VALUE_SOURCES = {"aesthetic_mos": "aesthetic", "tech_iqa": "tech_iqa", "face_iqa": "face_iqa",
+                 "laion_mos": "laion_aesthetic", "style_tags": "clip_l14_image"}
+
+
+@functools.cache
+def _blocked_keys() -> frozenset[str]:
+    from app.ai.policy import load_model_policy
+
+    policy = load_model_policy()
+    return frozenset(k for k, model_id in VALUE_SOURCES.items() if not policy.verified(model_id))
+
+
+def usable_values(v: dict) -> dict:
+    """The measurement with the values of weights the allow-list does not verify set to None ("not judged")."""
+    blocked = _blocked_keys()
+    return {k: (None if k in blocked else val) for k, val in v.items()}
 
 
 def score(v: dict, focus: FocusOverride | None = None) -> Score:
@@ -276,8 +297,9 @@ def occurrence_scores(conn: sqlite3.Connection) -> dict[int, Score]:
 
     rows = conn.execute(
         """SELECT m.occurrence_id, m.values_json, a.make, a.model, a.lens FROM measurements m
-           JOIN assets a ON a.id = m.asset_id WHERE m.extractor = 'quality' AND m.occurrence_id IS NOT NULL""").fetchall()
-    values = {r[0]: json.loads(r[1]) for r in rows}
+           JOIN assets a ON a.id = m.asset_id WHERE m.extractor = 'quality' AND m.occurrence_id IS NOT NULL
+             AND m.run_id IS NOT NULL""").fetchall()  # measurements of unknown source are not used (PROV-1 b)
+    values = {r[0]: usable_values(json.loads(r[1])) for r in rows}
     overrides = focus_overrides({r[0]: (r[2], r[3], r[4]) for r in rows}, values)
     return {occ: score(v, overrides.get(occ)) for occ, v in values.items()}
 

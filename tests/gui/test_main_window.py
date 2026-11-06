@@ -191,7 +191,7 @@ def test_zoom_closer_than_100_percent_and_jump_to_eyes(qtbot, env: dict) -> None
     rec = w.current_record()
     with w.project.transaction() as conn:
         conn.execute("""INSERT INTO occurrences (asset_id, person_box, face_box, prominence, is_main, analysis_version,
-                        created_at) VALUES (?, '[0.1,0.1,0.5,0.8]', '[0.6,0.2,0.1,0.15]', 1, 1, 1, 'n')""", (rec.id,))
+                        created_at, run_id) VALUES (?, '[0.1,0.1,0.5,0.8]', '[0.6,0.2,0.1,0.15]', 1, 1, 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""", (rec.id,))
     _key(qtbot, w, Qt.Key.Key_E)
     assert w.viewer.zoom == 2.0  # small face: 200%
     centre = w.viewer.mapToScene(w.viewer.viewport().rect().center())
@@ -437,7 +437,7 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
             conn.execute("INSERT INTO subjects (id, created_at) VALUES (?, 'n')", (sid,))
             for a in owned:
                 conn.execute("""INSERT INTO occurrences (asset_id, person_box, prominence, is_main, subject_id,
-                                assignment, analysis_version, created_at) VALUES (?, '[0,0,1,1]', 1, 1, ?, 'auto', 1, 'n')""",
+                                assignment, analysis_version, created_at, run_id) VALUES (?, '[0,0,1,1]', 1, 1, ?, 'auto', 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""",
                              (a, sid))
         actions.rename_subject(conn, 3, "Aki")
     w._fill_people()

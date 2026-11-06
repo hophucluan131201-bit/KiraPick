@@ -114,12 +114,12 @@ def add_scored(p: Project, asset: int, subject: int | None, sharp: float, layout
         conn.execute("INSERT INTO subjects (id, created_at) VALUES (?, 'n')", (subject,))
     occ = int(conn.execute(
         """INSERT INTO occurrences (asset_id, person_box, prominence, is_main, subject_id, assignment, analysis_version,
-           created_at) VALUES (?, '[0.2,0.1,0.5,0.8]', 1.0, 1, ?, 'auto', 1, 'n')""", (asset, subject)).lastrowid)
+           created_at, run_id) VALUES (?, '[0.2,0.1,0.5,0.8]', 1.0, 1, ?, 'auto', 1, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""", (asset, subject)).lastrowid)
     conn.execute("""INSERT INTO measurements (asset_id, occurrence_id, extractor, extractor_version, input_source,
-                    values_json, computed_at) VALUES (?, ?, 'quality', 'q1', 'embedded_jpeg', ?, 'n')""",
+                    values_json, computed_at, run_id) VALUES (?, ?, 'quality', 'q1', 'embedded_jpeg', ?, 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))""",
                  (asset, occ, json.dumps({"body_sharp": sharp, "body_clip": 0.0, "body_luma": 50, "area": 0.4,
                                           "offcentre": 0.1})))
-    conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'layout', 'v', ?)", (occ, layout.astype("<f4").tobytes()))
+    conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id) VALUES (?, 'layout', 'v', ?, (SELECT id FROM analysis_runs WHERE stage = 'test'))", (occ, layout.astype("<f4").tobytes()))
 
 
 def test_per_person_selection_and_saved_run(project: Project) -> None:

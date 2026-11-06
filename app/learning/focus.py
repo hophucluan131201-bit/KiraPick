@@ -19,7 +19,7 @@ from app.learning.taste import _fit
 LABELS = {"sharp": 0, "soft": 1, "missed": 2}
 NAMES = {0: "nét căng", 1: "hơi soft", 2: "lệch nét / rung"}
 KEYS = {"sharp": "Q", "soft": "W", "missed": "R"}
-FEATURES = ("eye_sharp", "face_sharp", "body_sharp", "tech_iqa", "sharp_scale")
+FEATURES = ("eye_sharp", "face_sharp", "body_sharp", "sharp_scale")  # tech_iqa (TOPIQ) removed: LIC-1 S5
 MIN_EACH = 8  # labelled photos needed for "sharp" and for "not sharp"
 MIN_ACCURACY = 0.75
 
@@ -137,7 +137,7 @@ def photo_focus(conn: sqlite3.Connection, asset_id: int) -> tuple[str, dict[str,
     row = conn.execute(
         """SELECT a.make, a.model, a.lens, m.values_json FROM measurements m
            JOIN occurrences o ON o.id = m.occurrence_id JOIN assets a ON a.id = m.asset_id
-           WHERE m.asset_id = ? AND m.extractor = 'quality' AND o.is_main = 1
+           WHERE m.asset_id = ? AND m.extractor = 'quality' AND o.is_main = 1 AND m.run_id IS NOT NULL
            ORDER BY o.prominence DESC LIMIT 1""", (asset_id,)).fetchone()
     if row is None:
         return None

@@ -36,6 +36,13 @@ def _stage_versions() -> dict[str, int]:
     return {analyze_job.STAGE: analyze_job.STAGE_VERSION, quality_job.STAGE: quality_job.STAGE_VERSION}
 
 
+UNKNOWN_SOURCE = "cần chạy lại"  # results from before schema v8: kept, not used (PROV-1 b)
+
+
+def _unknown_source(conn: sqlite3.Connection, table: str, where: str = "1") -> bool:
+    return conn.execute(f"SELECT 1 FROM {table} WHERE run_id IS NULL AND {where} LIMIT 1").fetchone() is not None
+
+
 def _processed(conn: sqlite3.Connection, stage: str, version: int, of: str) -> tuple[int, int]:
     """(photos of the set ``of`` with ``stage`` done or failed at the current version, photos in the set)."""
     total = conn.execute(f"SELECT COUNT(*) FROM ({of})").fetchone()[0]
@@ -76,6 +83,8 @@ def steps(conn: sqlite3.Connection, *, importing: tuple[int, int] | None) -> dic
     ever_detected = conn.execute("SELECT 1 FROM stage_status WHERE stage = 'detect' LIMIT 1").fetchone()
     # Never run: plain (not "◐ 0/N"); results from an older version still show ◐ to invite a re-run.
     out["people"] = _progress(people_done, ok) if ever_detected else _NOT_STARTED
+    if _unknown_source(conn, "occurrences", "assignment != 'manual'"):  # a session analysed before schema v8
+        out["people"] = StepState(False, UNKNOWN_SOURCE)
 
     # Over every readable photo, so the step cannot finish while detection is still running: a photo is
     # processed once measured (done or failed), or when detection failed on it (nothing to measure).
@@ -84,6 +93,8 @@ def steps(conn: sqlite3.Connection, *, importing: tuple[int, int] | None) -> dic
         WHERE stage = 'detect' AND state = 'failed' AND asset_id IN ({readable})""")
     ever_measured = conn.execute("SELECT 1 FROM stage_status WHERE stage = 'quality' LIMIT 1").fetchone()
     out["quality"] = _progress(q_done + det_failed, ok) if ever_measured or det_failed else _NOT_STARTED
+    if _unknown_source(conn, "measurements"):
+        out["quality"] = StepState(False, UNKNOWN_SOURCE)
 
     kept = conn.execute("SELECT 1 FROM decisions WHERE flag = 'keep' AND subject_id IS NULL LIMIT 1").fetchone()
     has_run = conn.execute("SELECT 1 FROM pick_runs LIMIT 1").fetchone()

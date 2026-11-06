@@ -41,3 +41,24 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     if seconds:
         print("\n[exit watchdog armed]", file=sys.stderr, flush=True)
         faulthandler.dump_traceback_later(int(seconds), exit=True)
+
+
+TEST_RUN = "(SELECT id FROM analysis_runs WHERE stage = 'test')"  # run_id of rows written by tests (known source)
+
+
+@pytest.fixture(autouse=True)
+def _test_analysis_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every schema-v8 database a test opens has one 'test' analysis run, so rows the tests write by hand can carry a
+    known source (TEST_RUN). Rows from before v8 keep run_id NULL (tests/unit/test_provenance.py builds those)."""
+    from app.storage import db
+
+    real_connect = db.connect
+
+    def connect(path):  # noqa: ANN001, ANN202
+        conn = real_connect(path)
+        if db.current_version(conn) >= 8:
+            conn.execute("""INSERT OR IGNORE INTO analysis_runs (id, started_at, app_version, mode, stage)
+                            VALUES (1, 't', 'test', 'personal', 'test')""")
+        return conn
+
+    monkeypatch.setattr(db, "connect", connect)

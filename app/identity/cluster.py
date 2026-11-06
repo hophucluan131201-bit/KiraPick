@@ -150,34 +150,31 @@ def _ts(value: str | None) -> float | None:
     return datetime.fromisoformat(value).timestamp() if value else None
 
 
-def session_profile(conn: sqlite3.Connection) -> Thresholds:
-    """ArcFace thresholds when this session has ArcFace vectors, else SFace."""
-    has_arc = conn.execute("SELECT 1 FROM occurrence_vectors WHERE kind = 'face_arc' LIMIT 1").fetchone()
-    return ARCFACE_REID if has_arc else SFACE_HSV
+def session_profile(conn: sqlite3.Connection) -> Thresholds:  # noqa: ARG001 - kept for its callers
+    """SFace thresholds, always. Stored ArcFace / ReID vectors of an older session are never used (LIC-1 S5)."""
+    return SFACE_HSV
 
 
 def load_occurrences(conn: sqlite3.Connection, profile: Thresholds | None = None) -> list[Occ]:
     profile = profile or session_profile(conn)
     rows = conn.execute(
         """SELECT o.id, o.asset_id, o.assignment, o.subject_id, o.excluded_subject_id, a.capture_time, o.prominence,
-                  fv.vector AS face, av.vector AS face_arc, ov.vector AS outfit, bv.vector AS body
+                  fv.vector AS face, ov.vector AS outfit
            FROM occurrences o JOIN assets a ON a.id = o.asset_id
-           LEFT JOIN occurrence_vectors fv ON fv.occurrence_id = o.id AND fv.kind = 'face'
-           LEFT JOIN occurrence_vectors av ON av.occurrence_id = o.id AND av.kind = 'face_arc'
-           LEFT JOIN occurrence_vectors ov ON ov.occurrence_id = o.id AND ov.kind = 'outfit'
-           LEFT JOIN occurrence_vectors bv ON bv.occurrence_id = o.id AND bv.kind = 'body'
+           -- only vectors with a known source (schema v8 run): older ones are kept but not used (PROV-1 b);
+           -- ArcFace ('face_arc') and ReID ('body') vectors are never read
+           LEFT JOIN occurrence_vectors fv ON fv.occurrence_id = o.id AND fv.kind = 'face' AND fv.run_id IS NOT NULL
+           LEFT JOIN occurrence_vectors ov ON ov.occurrence_id = o.id AND ov.kind = 'outfit' AND ov.run_id IS NOT NULL
            WHERE a.status = 'ok' AND (o.is_main = 1 OR o.assignment = 'manual')
            ORDER BY o.id"""
     ).fetchall()
     vec = lambda b: np.frombuffer(b, dtype="<f4") if b is not None else None  # noqa: E731
-    arc = profile.body_weight > 0  # the ArcFace profile; never mix two face models in one grouping
     out = []
     for r in rows:
-        sface, face_arc = vec(r["face"]), vec(r["face_arc"])
-        out.append(Occ(r["id"], r["asset_id"], _ts(r["capture_time"]), face_arc if arc else sface, vec(r["outfit"]),
+        sface = vec(r["face"])
+        out.append(Occ(r["id"], r["asset_id"], _ts(r["capture_time"]), sface, vec(r["outfit"]),
                        r["assignment"], r["subject_id"], r["excluded_subject_id"],
-                       body=vec(r["body"]) if arc else None, face_sface=sface, face_arc=face_arc,
-                       prominence=r["prominence"]))
+                       body=None, face_sface=sface, face_arc=None, prominence=r["prominence"]))
     return out
 
 

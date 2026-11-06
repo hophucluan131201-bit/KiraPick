@@ -76,7 +76,8 @@ def _values(project: Project) -> list[dict]:
 def test_one_photo_gets_every_new_value(tmp_path: Path) -> None:
     project, aid = _project(tmp_path, with_person=True)
     img = np.full((600, 900, 3), 120, np.uint8)
-    quality_job._store(project, aid, img, "raster", None, None, None, None, Extras(FakeClip(), FakeTech(), FakeFace()))
+    quality_job._store(project, aid, img, "raster", None, None, None, None, Extras(FakeClip(), FakeTech(), FakeFace()),
+                       run_id=1)  # the writer with fake models (the allow-list keeps the real ones from loading)
     (v,) = _values(project)
     assert v["laion_mos"] == 6.1 and v["tech_iqa"] == 0.71 and v["face_iqa"] == 0.66
     assert v["style_tags"] == [["low_key", 0.05]]
@@ -98,7 +99,7 @@ def test_a_failing_model_leaves_its_value_empty(tmp_path: Path) -> None:
 def test_photo_without_people_still_gets_its_clip_vector(tmp_path: Path) -> None:
     project, aid = _project(tmp_path, with_person=False)
     quality_job._store(project, aid, np.full((400, 400, 3), 90, np.uint8), "raster", None, None, None, None,
-                       Extras(FakeClip(), FakeTech(), FakeFace()))
+                       Extras(FakeClip(), FakeTech(), FakeFace()), run_id=1)
     assert set(load_vectors(project.conn, "clip", CLIP_VERSION)) == {aid}
     assert _values(project) == []
     project.close()

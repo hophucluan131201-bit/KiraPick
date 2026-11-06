@@ -87,7 +87,7 @@ def test_decision_validation(project: Project) -> None:
 
 def test_measurements_unique_per_frame_and_occurrence(project: Project) -> None:
     sql = """INSERT INTO measurements (asset_id, occurrence_id, extractor, extractor_version, input_source,
-             values_json, computed_at) VALUES (1, ?, 'sharpness', '1', 'embedded_jpeg', '{}', 'n')"""
+             values_json, computed_at, run_id) VALUES (1, ?, 'sharpness', '1', 'embedded_jpeg', '{}', 'n', (SELECT id FROM analysis_runs WHERE stage = 'test'))"""
     project.conn.execute(sql, (None,))
     with pytest.raises(sqlite3.IntegrityError):
         project.conn.execute(sql, (None,))
