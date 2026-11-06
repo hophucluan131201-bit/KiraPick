@@ -1,242 +1,269 @@
-# Kế hoạch bản cập nhật tiếp theo trên `beta` và tiêu chí nghiệm thu (bản trình 3, 2026-11-06)
+# Kế hoạch sửa phần nền trên `beta` và tiêu chí nghiệm thu (bản trình 4, 2026-11-06)
 
-**Trạng thái:** kế hoạch. **Chưa sửa mã ứng dụng, chưa build bộ cài, chưa đổi mặc định, chưa đụng tới release nào trên GitHub.**
-
-- Các việc sau cần chủ dự án duyệt riêng: merge vào `main`, tạo tag, phát hành, thay hoặc gỡ asset.
+**Trạng thái:** kế hoạch, trình duyệt **LIC-1** (phạm vi sửa phần nền).
+- **Chưa sửa mã ứng dụng, chưa build bộ cài, chưa đổi mặc định, chưa đụng tới release nào.**
+- **Phát hành xét riêng.** Merge vào `main`, tạo tag, phát hành, thay hoặc gỡ asset đều cần chủ dự án duyệt riêng.
 - Xác nhận của chủ dự án chỉ duyệt việc triển khai. **Quyền sử dụng** dựa trên điều khoản hoặc bên cấp quyền.
 
-**Thay đổi so với bản trình 2:**
-- **REL-1 sửa lại:** phát triển từ HEAD hiện tại của `beta`, không làm hotfix riêng từ tag `v3.0.0`.
-- Giữ màn chọn chế độ và Media sự kiện.
-- **Số phiên bản: chờ chốt** (VER-1). Tên "3.0.1" trong các bản trình trước chỉ là tên tạm.
-- Kết quả rà giấy phép trở thành **tiêu chí nghiệm thu** cho cả **Chụp cá nhân** và **Media sự kiện** (mục 2, 5).
-- Việc xử lý asset đã phát hành tách thành **hồ sơ theo dõi riêng** (mục 6, Phụ lục A).
+**Thay đổi so với bản trình 3:**
+- Đối chiếu HEAD với mốc (mục 0).
+- **Bảng phạm vi LIC-1** chia ba nhóm: có thể triển khai / chờ căn cứ / chờ quyết định sản phẩm, mỗi việc kèm ca nghiệm thu
+  (mục 3).
+- MED-CLIP ghi rõ thay đổi trạng thái CLIP (mục 4).
+- BM-0 tách thành F-SF (kèm căn cứ chạy nội bộ) và Q-TECH (trình riêng theo đúng thành phần) (mục 7).
+- **Tách nghiệm thu kỹ thuật khỏi quyết định phát hành.** Ghi chức năng thiếu khi không có gom nhóm tự động, ở từng chế độ
+  (mục 5, 6).
+- CI-1 thành mục sửa riêng (mục 8).
 
 ---
 
-## 0. Mốc nền
+## 0. Mốc nền và đối chiếu HEAD
 
 | Mục | Giá trị |
 |---|---|
-| Nhánh | `beta` |
-| **SHA mốc** | **`38054b939b8c514e7bbcbed50f8f788263caf233`** (HEAD lúc lập kế hoạch) |
-| Thay đổi mã đã có trên `beta`, so với `v3.0.0` (`e2fec9d`) | Màn chọn chế độ (`e05f464` … `ec744f0`); Media Mốc 0 (`703ad8d`); job CI `inspect-release` (`a36bba9` … `3956697`) |
-| Luồng Chụp cá nhân trên `beta` | **Giống 3.0.0**: vẫn tự nạp ArcFace + YoutuReID, TOPIQ ×3, CLIP + LAION khi có file. Bộ cài vẫn kèm 15 file mô hình và DLL FFmpeg |
+| Mốc kế hoạch | `38054b939b8c514e7bbcbed50f8f788263caf233` |
+| HEAD `beta` lúc soạn bản này | `9f6082bd9f7d297841cf42dc9af358a49ce8689f` |
+| Khác biệt `38054b9..9f6082b` | 2 commit, **chỉ** `docs/legal/phuong-an-3.0.1.md`. **Mã giống hệt mốc** |
+| Thay đổi mã đã có so với `v3.0.0` (`e2fec9d`) | Màn chọn chế độ (`e05f464` … `ec744f0`); Media Mốc 0 (`703ad8d`); job CI `inspect-release` (`a36bba9` … `3956697`) |
+| Luồng Chụp cá nhân | Giống 3.0.0: vẫn tự nạp ArcFace + YoutuReID, TOPIQ ×3, CLIP + LAION khi có file |
 | Số phiên bản | **Chờ chốt** (VER-1) |
 
-**Kết luận về `beta` hiện tại:** nếu đóng gói ngay thì **không đạt** tiêu chí ở mục 5. Phần cần bổ sung ở mục 3.
+**Quy trình trước khi sửa:** khi bắt đầu, chạy lại `git diff --stat 38054b9 HEAD -- app configs packaging scripts`. Nếu có
+thay đổi mã ngoài kế hoạch thì dừng lại và báo.
 
 ---
 
-## 1. Căn cứ theo từng file
+## 1. Căn cứ theo từng file (tóm tắt; chi tiết ở Phụ lục B)
 
-Cách xét như bản trình 2:
-- **Đủ căn cứ** khi **chủ sở hữu** công bố giấy phép cho mô hình, hoặc cho nơi chính họ đăng file, và không có điều khoản
-  mâu thuẫn.
-- **Chờ xác minh** khi chỉ có bên phân phối lại công bố.
-- **Dữ liệu huấn luyện** ghi riêng, là thông tin còn thiếu.
-
-Bằng chứng chi tiết (người công bố, commit, SHA-256, model card) ở **Phụ lục B** (mục 1.2–1.3 của bản trình 2, giữ nguyên).
-
----
-
-## 2. Bảng thành phần theo chế độ
-
-**Ký hiệu:**
-- **Dùng:** đủ căn cứ dùng cho job có thu tiền.
-- **Phân phối:** đủ căn cứ đưa vào bộ cài.
-- **Chụp cá nhân / Media:** việc phải làm ở chế độ đó trong bản tiếp theo.
-
-### 2.1 Trọng số mô hình
-
-| Thành phần | Dùng | Phân phối | Chụp cá nhân | Media sự kiện | Trạng thái hiện tại trên `beta` |
-|---|---|---|---|---|---|
-| YOLOX-S `c5c2d13e…8063` | đủ | đủ | **giữ** (dò người) | **giữ** (cỡ cảnh, chủ thể; Mốc 1) | Cá nhân: dùng. Media: `pending` → đổi `verified` (B8) |
-| YOLOX-M `be329495…6aaf` (float16) | đủ | đủ | **giữ** (GPU) | **giữ**, dự phòng về S | như trên |
-| YuNet `8f2383e4…52fa4` | đủ | đủ | **giữ** (dò mặt, mắt) | **giữ** (cỡ cảnh, người; Mốc 1) | như trên |
-| eDifFIQA `9426c899…fc6a` | đủ | đủ, kèm ghi công | **giữ** (chất lượng mặt) | không dùng (chưa có trong danh sách Media) | Cá nhân: dùng |
-| MediaPipe mesh + blendshapes `a044fec2…` / `ce56bc10…` | đủ, **kèm điều kiện** B7 | như cột trước | **giữ** (mắt nhắm / mở) nếu B7 đạt; nếu không thì **tắt** ("chưa đánh giá") | không dùng (UX-2 để sau) | Cá nhân: dùng. Media: `pending` |
-| **SFace** `f55a362e…45c5` | **chờ** | **chờ** | **tắt** gom nhóm tự động; cần **thay thế** (LIC-3) | **tắt**: chỉ gom người thủ công (đúng dự phòng đã duyệt) | Cá nhân: **đang dùng** (cần sửa). Media: `pending` |
-| **CLIP** + `clip_prompts` | **chờ** | **chờ** | **tắt** | **tắt**: dùng dự phòng đã duyệt (nhãn thủ công, tách khoảnh khắc theo khoảng thời gian) | Cá nhân: **đang dùng**. Media: **`approved_with_risk`** → phải đổi `pending` (MED-CLIP) |
-| LAION | đủ (riêng file) | đủ | **tắt** (cần CLIP) | không dùng | Cá nhân: đang dùng |
-| **ArcFace** | không | không | **gỡ** | không bao giờ | Cá nhân: **đang tự nạp** |
-| **YoutuReID** | chờ | chờ | **gỡ** | không bao giờ | Cá nhân: **đang tự nạp** |
-| **TOPIQ** ×3 | không | không | **gỡ** | không bao giờ | Cá nhân: **đang nạp** |
-| AuraFace `glintr100` | chờ | chờ | ứng viên thay SFace, chờ LIC-3 | ứng viên | chưa có |
-
-### 2.2 Thư viện chạy kèm
-
-| Thành phần | Phân phối | Gói | Việc phải làm |
-|---|---|---|---|
-| ONNX Runtime, OpenCV, Qt / PySide6, rawpy / LibRaw, Python và các gói | đủ, kèm nghĩa vụ | mọi gói | **Thêm toàn văn giấy phép** (B6) |
-| `DirectML.dll` 1.15.4 | đủ (điều khoản Microsoft) | DirectML, portable | Kèm điều khoản. Ghi nhận: điều khoản nói "có thể thu thập thông tin" → giữ test chạy không mạng |
-| DLL CUDA (cudart, cuBLAS / Lt, cuFFT / w, cuRAND, NVRTC) | đủ (EULA Attachment A) | CUDA | Bỏ bản sao trùng |
-| **DLL cuDNN 9** | **chờ** | CUDA | Theo LIC-7 |
-| `onnxruntime_providers_tensorrt.dll` | đủ nhưng không dùng | CUDA | **Bỏ** |
-| **FFmpeg** (`opencv_videoio_ffmpeg`) | thiếu thông báo | mọi gói | **Bỏ** (app không dùng video) |
-
-### 2.3 Chức năng sau khi áp dụng
-
-| Chức năng | Chụp cá nhân | Media sự kiện |
+| File | Dùng cho job có thu tiền | Phân phối |
 |---|---|---|
-| Màn chọn chế độ, đổi chế độ | chạy | chạy |
-| Nhập, xem, P/X, sao, ❤, so sánh, xuất bản sao | chạy | (Media Mốc 1+, theo đặc tả v5) |
-| Dò người, dò mặt | chạy | Mốc 1 |
-| Chấm kỹ thuật (nét ở mắt, sáng, bố cục, eDifFIQA) | chạy | — |
-| Mắt nhắm / mở | chạy nếu B7 đạt | — |
-| **Gom nhóm người tự động** | **tắt**, tới khi có mô hình nhận mặt đủ căn cứ | **tắt**: gom thủ công |
-| Điểm thẩm mỹ, "Hợp gu" | **tắt** | — |
-| Nhãn nội dung / gợi ý booth bằng CLIP | — | **tắt**: nhãn thủ công |
-| Chọn ảnh tự động | **theo ảnh** (chưa theo người) | — |
+| YOLOX-S, YOLOX-M, YuNet, eDifFIQA | đủ | đủ |
+| MediaPipe mesh + blendshapes | đủ, **kèm điều kiện** chuyển đổi tái lập (S9) | như cột trước |
+| LAION | đủ (riêng file), nhưng cần CLIP | đủ |
+| **SFace**, **CLIP** + `clip_prompts`, **YoutuReID**, **AuraFace** | **chờ** | **chờ** |
+| ArcFace, TOPIQ ×3 | không | không |
+| DLL cuDNN 9 (gói CUDA) | — | **chờ** |
+| Các thư viện khác | — | đủ, kèm nghĩa vụ thông báo |
 
 ---
 
-## 3. Đã có, cần bổ sung, chờ quyết định
+## 2. Thành phần theo chế độ
 
-### 3.1 Đã có trên `beta` (`38054b9`)
-
-| # | Phần | Commit | Đã kiểm |
-|---|---|---|---|
-| H1 | Màn chọn chế độ, Media home, đổi chế độ | `e05f464` … `ec744f0` | 27 test GUI; build thử nội bộ 3.0.1b1.dev1 (run 42153256534); chủ dự án chưa nghiệm thu |
-| H2 | `MediaRegistry`: Media chỉ nạp trọng số trong `configs/media-models.json` có trạng thái `verified` / `approved_with_risk`; ghi báo cáo A | `703ad8d` | 17 test (gồm cấm Media import luồng cá nhân) |
-| H3 | `scripts/media_model_report.py`: báo cáo B, cổng build (mã thoát 1 = file ngoài manifest, 2 = bị chặn) | `703ad8d` | test |
-| H4 | Job CI `inspect-release`: digest asset, file đã cài + SHA-256, mô hình trong `portable.zip`, DLL, cờ toàn văn giấy phép, so bộ cài lẻ với bộ cài trong zip | `a36bba9` … `3956697` | đã chạy trên 19 release |
-| H5 | Test liên quan tới mạng: ONNX Runtime tắt telemetry trước khi nạp (`tests/unit/test_offline.py`); chỉ `app/updates/` được import mã mạng (`tests/unit/test_app_update.py`). **Chưa có** ca chạy app khi mạng bị chặn thật | có từ trước | chạy trong bộ test |
-| H6 | Kiểm kê quyền và bản trình này | `docs/legal/` | — |
-
-### 3.2 Cần bổ sung để nghiệm thu (chờ duyệt phạm vi sửa mã, LIC-1)
-
-| # | Việc | Áp dụng | Ghi chú |
-|---|---|---|---|
-| B1 | **Một danh sách cho phép theo SHA-256** dùng chung cho hai chế độ (mở rộng `media-models.json` thành `configs/model-policy.json`). Mọi chỗ mở mô hình đi qua một cửa kiểm. Đổi tên file hoặc trỏ `KIRAPICK_MODELS_DIR` đi chỗ khác vẫn bị chặn | cả hai | Media đã có một phần (H2) |
-| B2 | Tách "dò" (YOLOX, YuNet) khỏi "nhận mặt". App phân tích được khi không có mô hình nhận mặt; gom nhóm báo "chưa có trong bản này" | Cá nhân | [Mã] hiện `ready("identity")` cần cả SFace |
-| B3 | Gỡ đường nạp ArcFace / YoutuReID (`embed_job.py:53`), TOPIQ (`quality_job.py:195`), CLIP / LAION, và chỗ đọc `clip_prompts` không qua kiểm (`main_window.py:1052`) | Cá nhân | |
-| B4 | **Cache cũ:**<br>• không đọc vector `face_arc` / `body` / `clip`;<br>• không đọc điểm TOPIQ;<br>• `session_profile` không chọn hồ sơ ArcFace;<br>• `learning.db` không đọc / ghi các cột đó;<br>• nhóm tự động cũ theo DATA-1;<br>• **không xoá** dữ liệu | Cá nhân (Media chưa có dữ liệu cũ) | |
-| B5 | `--self-test`: chỉ nạp file được phép; báo cáo A (id, SHA-256, provider) và danh sách **bỏ qua**, cho từng chế độ | cả hai | |
-| B6 | Giấy tờ: thư mục `docs\licenses\` có toàn văn Apache-2.0, MIT, BSD-3, CC BY 4.0, LGPL-3.0 + GPL-3.0, LGPL-2.1, PSF, điều khoản DirectML, EULA NVIDIA; viết lại `THIRD_PARTY_NOTICES` và `model-licenses.md` theo mục 2 | mọi gói | |
-| B7 | Chạy lại chuyển đổi MediaPipe từ `face_landmarker.task` `64184e22…c9ff`, so SHA-256 với file trong repo | Cá nhân | Không trùng thì tắt MediaPipe |
-| B8 | `media-models.json` / `model-policy.json`:<br>• YOLOX, YuNet → `verified`;<br>• CLIP, `clip_prompts` → `pending` (MED-CLIP);<br>• SFace giữ `pending` | Media | |
-| B9 | Đóng gói:<br>• script build chỉ tải file trong danh sách;<br>• `kirapick.spec` bỏ FFmpeg, TensorRT provider, DLL NVIDIA trùng;<br>• cuDNN theo LIC-7;<br>• `[InstallDelete]` các file mô hình không còn trong danh sách | mọi gói | |
-| B10 | `inspect-release` chạy trên **artifact build** trước khi đăng: lỗi nếu file mô hình lệch danh sách, có DLL bị bỏ, hoặc thiếu toàn văn giấy phép | mọi gói | Dùng lại H4 |
-| B11 | Test (mục 5.1) | cả hai | |
-
-### 3.3 Chờ quyết định
-
-| Mã | Câu hỏi | Đề xuất |
+| Thành phần | Chụp cá nhân | Media sự kiện |
 |---|---|---|
-| **VER-1** | Số phiên bản bản tiếp theo | Chờ chủ dự án chốt |
-| **REL-1** | Nền: `beta` HEAD `38054b9`, giữ màn chọn chế độ và Media | **Đã chốt** theo kết luận lượt này |
-| **LIC-1** | Phạm vi sửa mã B1–B11 | Đồng ý |
-| **CFG-1** | Phát hành gói nào: có AI (DirectML, portable, CUDA theo LIC-7); thêm gói tối thiểu không AI? | Gói có AI; gói tối thiểu làm dự phòng |
-| **MED-CLIP** | Media: CLIP từ `approved_with_risk` sang `pending` (MOD-1 đã chấp nhận rủi ro, nhưng đó không phải căn cứ quyền) | Đổi sang `pending`; Media dùng dự phòng đã duyệt |
-| **DATA-1** | Nhóm tự động cũ (gom bằng ArcFace) trong phiên 3.0.0 | Ẩn; giữ nhóm người dùng đã chỉnh |
-| **LIC-3** | Hỏi xác nhận: tác giả SFace, fal (AuraFace), Tencent, OpenAI, NVIDIA (cuDNN 9) | Đồng ý, làm song song |
-| **LIC-5** | Bỏ FFmpeg, TensorRT, DLL NVIDIA trùng | Đồng ý |
-| **LIC-7** | Gói CUDA khi cuDNN 9 chưa rõ: (a) chưa đăng; (b) không kèm cuDNN, người dùng tự cài; (c) chờ NVIDIA | (a); máy NVIDIA dùng gói DirectML |
-| **BM-0** | Đo F-SF (nội bộ) và Q-TECH trên máy chủ dự án | Đồng ý |
-| Asset đã phát hành | Hồ sơ riêng, mục 6 | Chủ dự án quyết định riêng |
+| YOLOX-S / -M, YuNet | giữ | giữ (`pending` → `verified`) |
+| eDifFIQA | giữ | không dùng |
+| MediaPipe ×2 | giữ nếu S9 đạt, nếu không thì tắt | không dùng |
+| SFace | **tắt** gom nhóm tự động | **tắt**: chỉ gom người thủ công |
+| CLIP, `clip_prompts`, LAION | **tắt** | **tắt** (mục 4) |
+| ArcFace, YoutuReID, TOPIQ ×3 | **gỡ** | không bao giờ |
 
 ---
 
-## 4. Chặn: các đường phải kiểm
+## 3. Bảng phạm vi LIC-1
 
-| Đường | Chụp cá nhân | Media sự kiện |
+### 3.1 Có thể triển khai ngay khi LIC-1 được duyệt
+
+Các việc này **không phụ thuộc** quyền của file nào còn "chờ". Với file "chờ", mặc định là **tắt**. Sau này có căn cứ thì chỉ
+cần đổi trạng thái trong danh sách, không sửa lại mã.
+
+| # | Việc | Chế độ | Ca nghiệm thu |
+|---|---|---|---|
+| **S1** | **Lớp chặn dùng chung.**<br>• Một danh sách cho phép theo SHA-256 (`configs/model-policy.json`), thay `media-models.json`.<br>• Trạng thái mỗi file: `verified` / `pending` / `never`. Chỉ `verified` được mở.<br>• Mọi chỗ mở mô hình đi qua một cửa kiểm. `MediaRegistry` đang có dùng lại cửa này | cả hai | U1, U2, U3 |
+| **S2** | **Gỡ đường nạp** ArcFace + YoutuReID (`embed_job.py:53`), TOPIQ ×3 (`quality_job.py:195`, `load_extras`); CLIP / LAION / `clip_prompts` đi qua S1 (gồm `main_window.py:1052`). Các file này được ghi là `never` / `pending` trong danh sách | Cá nhân | U1, U4 |
+| **S3** | **Tách "dò" khỏi "nhận mặt"**:<br>• phân tích chạy được chỉ với YOLOX + YuNet (+ eDifFIQA, MediaPipe);<br>• khi không có mô hình nhận mặt: không gom nhóm tự động, giao diện ghi "Gom người tự động chưa có trong bản này";<br>• gom thủ công vẫn dùng được: "Đây là người khác" (`actions.create_subject`) và đưa ảnh vào một người (`assign_photos_to_subject`), dựa trên khung người đã dò | Cá nhân | U9 |
+| **S4** | **Dự phòng:** GPU → CPU, YOLOX-M → S, thiếu file, `--self-test`. Mọi nhánh đi qua S1 | cả hai | U1 (mọi đường) |
+| **S5** | **Cache cũ:**<br>• không đọc vector `face_arc`, `body`, `clip`;<br>• không đọc điểm `aesthetic_mos`, `tech_iqa`, `face_iqa`;<br>• `session_profile` (`cluster.py:153`) không chọn hồ sơ ArcFace;<br>• `learning.db` không đọc / ghi các cột đó.<br>**Không xoá** dữ liệu | Cá nhân | U4, U5 |
+| **S6** | **Bảo toàn chỉnh sửa của người dùng:**<br>• P/X, sao, ❤, lịch sử xuất;<br>• nhóm có gán tay (`occurrences.assignment = 'manual'`), tên đã khoá (`subjects.user_locked`), cặp "khác nhau" (`subject_pairs`).<br>Mở / phân tích lại bằng bản mới không thay đổi các dòng này. Nhóm **tự động** cũ: mặc định **giữ nguyên trong DB**, cách hiển thị theo DATA-1 | Cá nhân | U4, U8, P8 |
+| **S7** | **Báo cáo A** cho cả hai chế độ: mỗi file đã mở (id, SHA-256, provider) và mỗi file **bị bỏ qua** kèm lý do. Ghi ở `--self-test` và trong log phân tích | cả hai | P5, P6, P7 |
+| **S8** | **Kiểm kê bộ cài:**<br>• script build chỉ tải file `verified`;<br>• `kirapick.spec` bỏ FFmpeg, TensorRT provider, DLL NVIDIA trùng;<br>• `[InstallDelete]` file mô hình không còn trong danh sách;<br>• `inspect-release` chạy trên artifact build, lỗi nếu lệch danh sách / còn DLL bị bỏ / thiếu toàn văn | mọi gói | P1–P4, P8 |
+| **S9** | **Chuyển đổi MediaPipe tái lập:** chạy lại `scripts/convert_mediapipe.py` từ `.task` `64184e22…c9ff`, so SHA-256 với file trong repo. Không trùng thì MediaPipe chuyển `pending` | Cá nhân | U10 |
+| **S10** | **Giấy tờ:** `docs\licenses\` có đủ toàn văn và thông báo theo Phụ lục B.3; viết lại `THIRD_PARTY_NOTICES`, `model-licenses.md` | mọi gói | P4 |
+| **S11** | **Chạy khi mạng bị chặn:** chặn socket trong tiến trình (Linux + Windows), và chặn bằng tường lửa hệ điều hành trên CI Windows | cả hai | U7 |
+| **S12** | Đổi chế độ Cá nhân ↔ Media nhiều lần trong một lần chạy: không mở file ngoài danh sách | cả hai | U6 |
+
+### 3.2 Chờ căn cứ (mã của S1 đã sẵn; chỉ đổi trạng thái khi có căn cứ)
+
+| # | Thành phần | Thiếu gì | Chức năng bị tắt tới khi có | Ca nghiệm thu khi được bật |
+|---|---|---|---|---|
+| R1 | **SFace** (hoặc mô hình nhận mặt thay thế: AuraFace, dlib) | Xác nhận của tác giả (SFace) / nguồn gốc `glintr100` (AuraFace) / kiểm file (dlib) — LIC-3 | Gom nhóm tự động ở cả hai chế độ; học nhận diện trong `learning.db` | U1 với file mới; F-* đạt; P1 |
+| R2 | **CLIP** + `clip_prompts` (+ LAION đi kèm) | Xác nhận của OpenAI (model card: triển khai "ngoài phạm vi") | Cá nhân: điểm thẩm mỹ CLIP, "Hợp gu". Media: nhãn nội dung, tách khoảnh khắc theo cảnh, gợi ý booth, ảnh gần trùng | U1; Q-CL đạt |
+| R3 | **cuDNN 9** | Văn bản NVIDIA cho phép phân phối các DLL bản 9 | Gói CUDA (LIC-7) | P1–P4 cho gói CUDA |
+| R4 | **YoutuReID** | Công bố của Tencent | Gom người quay lưng / che mặt | — (không đề xuất) |
+| R5 | **MediaPipe** (chỉ khi S9 không đạt) | File chuyển đổi tái lập được | Kiểm mắt nhắm / mở | U10 |
+
+### 3.3 Chờ quyết định sản phẩm
+
+| # | Câu hỏi | Ảnh hưởng tới mã | Đề xuất |
+|---|---|---|---|
+| D1 **DATA-1** | Nhóm **tự động** cũ (gom bằng ArcFace, `assignment != 'manual'`, chưa khoá tên) trong phiên 3.0.0: ẩn hay hiện? | S6: chỉ khác phần hiển thị; dữ liệu giữ nguyên | Ẩn nhóm tự động; hiện nhóm có gán tay / tên khoá |
+| D2 **GRP-1** | Chấp nhận bản **chỉ gom thủ công** (mục 6)? | Không đổi S1–S12; đổi chữ trên giao diện | Trình chủ dự án |
+| D3 **CFG-1** | Gói nào: có AI (DirectML, portable, CUDA theo LIC-7), có cần gói tối thiểu không AI? | S8 | Trình cùng quyết định phát hành |
+| D4 **VER-1** | Số phiên bản | build | Chờ chốt |
+| D5 **MED-CLIP** | Xác nhận đổi trạng thái CLIP (mục 4) | S1, S2 | Đồng ý |
+
+---
+
+## 4. MED-CLIP: thay đổi trạng thái CLIP
+
+| | Trước (đang trên `beta`) | Sau |
 |---|---|---|
-| Chạy thường | chỉ file trong danh sách | chỉ file `verified` |
-| Dự phòng GPU → CPU | cùng cửa kiểm | cùng cửa kiểm |
-| YOLOX-M → S | cùng cửa kiểm | cùng cửa kiểm |
-| Thiếu file | báo "chưa có", không thay bằng file khác | dự phòng đã duyệt |
-| `--self-test` | báo cáo A + danh sách bỏ qua | báo cáo A + danh sách bỏ qua |
-| Đổi chế độ giữa phiên | không mở file ngoài danh sách khi chuyển qua lại | như cột trước |
-| Cache phiên cũ | B4 | (chưa có dữ liệu cũ) |
-| `learning.db` | B4 | Media không đọc `learning.db` của cá nhân (đặc tả v5: không nhớ mặt giữa các sự kiện) |
-| File cũ còn trong `{app}\models` | bị xoá khi nâng cấp; chép lại vẫn bị chặn | như cột trước |
+| `configs/media-models.json` → `model-policy.json`, `clip_l14_image`, `clip_prompts` | `approved_with_risk`: Media **được nạp** | **`pending`**: không nạp ở cả hai chế độ |
+| Chụp cá nhân | nạp CLIP + LAION khi có file | không nạp |
+| Cấu hình dùng cho **job có thu tiền** | — | Đây là cấu hình duy nhất được đóng gói. CLIP **không có trong danh sách cho phép** và **không có trong bộ cài** |
+| Quyết định MOD-1 (2026-11-06, chủ dự án chấp nhận rủi ro CLIP cho Media) | căn cứ cho `approved_with_risk` | Giữ làm **hồ sơ** về ý kiến của chủ dự án. **Không** dùng làm căn cứ quyền. Mở lại khi có R2 |
+| Dự phòng Media (đặc tả v5) | — | nhãn nội dung thủ công; tách khoảnh khắc theo khoảng thời gian; không gợi ý booth; không tìm ảnh gần trùng bằng CLIP |
+| Ca nghiệm thu | — | U1 (CLIP có trong thư mục nhưng không mở), P1 (CLIP không có trong bộ cài), P7 (Media báo cáo A không có CLIP) |
 
 ---
 
-## 5. Tiêu chí nghiệm thu trên `beta`
+## 5. Nghiệm thu kỹ thuật
+
+Đạt / không đạt theo các ca dưới đây. **Không** kèm quyết định phát hành (mục 6).
 
 **Ai chạy:**
-- **CI:** Windows Server 2022, không GPU. Dùng ảnh tổng hợp / ảnh mẫu công khai, **không** dùng ảnh của chủ dự án.
-- **Chủ dự án:** máy i7-10750H, RTX 2080 Super Max-Q. Kết quả ghi riêng; chưa chạy thì ghi "chưa chạy".
+- **CI:** Windows Server 2022, không GPU. Ảnh tổng hợp / ảnh mẫu công khai, **không** dùng ảnh của chủ dự án.
+- **Chủ dự án:** máy của chủ dự án. Kết quả ghi riêng; chưa chạy thì ghi "chưa chạy".
 
 ### 5.1 Test tự động (Linux + Windows CI)
 
-| # | Ca | Chế độ |
+| # | Ca | Việc |
 |---|---|---|
-| U1 | Bọc mọi hàm mở mô hình (`InferenceSession`, `cv2.dnn.readNet*`, `FaceRecognizerSF.create`, `FaceDetectorYN.create`). Thư mục `models\` có **đủ 15 file của 3.0.0**. Chỉ file trong danh sách được mở, ở mọi đường của mục 4 | cả hai |
-| U2 | Đổi tên `w600k_r50.onnx` thành tên file được phép → bị từ chối (sai SHA-256), app báo "chưa có" | cả hai |
-| U3 | `KIRAPICK_MODELS_DIR` trỏ sang thư mục khác có file lạ → bị chặn | cả hai |
-| U4 | Phiên kiểu 3.0.0 (schema v7) có `face_arc` / `body` / `clip`, điểm TOPIQ, P/X, sao, ❤, nhóm gộp / tách / "khác nhau" / tên, lịch sử xuất. Mở và phân tích lại:<br>• không đọc vector và điểm cũ;<br>• nhóm theo DATA-1;<br>• dữ liệu người dùng giữ nguyên;<br>• dòng cũ **còn trong DB** | Cá nhân |
-| U5 | `learning.db` cũ có cột `face_arc` / `body`: không đọc / ghi, không xoá | Cá nhân |
-| U6 | Đổi chế độ Cá nhân ↔ Media nhiều lần trong một lần chạy: không mở file ngoài danh sách | cả hai |
-| U7 | **Mới:** chạy phân tích khi mạng bị chặn (chặn socket trong tiến trình) và, trên CI Windows, chặn bằng tường lửa hệ điều hành để bắt cả kết nối từ DLL (DirectML, ORT) | cả hai |
-| U8 | Ảnh gốc: SHA-256 trước và sau mọi ca trên bằng nhau | cả hai |
+| U1 | Bọc mọi hàm mở mô hình (`InferenceSession`, `cv2.dnn.readNet*`, `FaceRecognizerSF.create`, `FaceDetectorYN.create`). Thư mục `models\` có **đủ 15 file của 3.0.0**. Chỉ file `verified` được mở, ở mọi đường:<br>• chạy thường;<br>• GPU → CPU;<br>• YOLOX-M → S;<br>• thiếu từng file;<br>• `--self-test`;<br>• mở phiên cũ, phân tích lại, tính lại điểm;<br>• Media Mốc 0 | S1, S2, S4 |
+| U2 | `w600k_r50.onnx` đổi tên thành tên file được phép → bị từ chối (sai SHA-256), báo "chưa có" | S1 |
+| U3 | `KIRAPICK_MODELS_DIR` trỏ sang thư mục có file lạ → bị chặn | S1 |
+| U4 | Phiên kiểu 3.0.0 (schema v7) có `face_arc` / `body` / `clip`, điểm TOPIQ, P/X, sao, ❤, nhóm tự động, nhóm gán tay, tên khoá, cặp "khác nhau", lịch sử xuất. Mở và phân tích lại:<br>• không đọc vector và điểm cũ;<br>• mọi dòng của người dùng **giống từng byte** trước và sau;<br>• dòng tự động cũ **còn trong DB**;<br>• hiển thị theo DATA-1 | S2, S5, S6 |
+| U5 | `learning.db` cũ có cột `face_arc` / `body`: không đọc / ghi, không xoá | S5 |
+| U6 | Đổi chế độ nhiều lần: không mở file ngoài danh sách | S12 |
+| U7 | Phân tích khi mạng bị chặn (socket + tường lửa trên CI Windows) | S11 |
+| U8 | SHA-256 ảnh gốc trước và sau mọi ca bằng nhau | S6 |
+| U9 | Không có mô hình nhận mặt:<br>• phân tích vẫn ra khung người / mặt, điểm kỹ thuật, mắt;<br>• "Đây là người khác" và đưa ảnh vào người hoạt động;<br>• gom tự động không chạy và giao diện nói rõ | S3 |
+| U10 | Chuyển đổi MediaPipe tái lập, SHA-256 trùng | S9 |
 
-### 5.2 Nghiệm thu bộ cài thực tế
+### 5.2 Kiểm bộ cài thực tế
 
 | # | Kiểm | DirectML | CUDA | portable | Ai | Đạt khi |
 |---|---|---|---|---|---|---|
-| P1 | File mô hình đã cài | ✔ | ✔ | ✔ | CI (B10) | Đúng danh sách (tên + SHA-256), không thừa không thiếu |
-| P2 | Không có file trọng số nào khác | ✔ | ✔ | ✔ | CI | Không `.onnx` / `.pth` / `.pt` / `.npz` / `.task` ngoài P1 |
+| P1 | File mô hình | ✔ | ✔ | ✔ | CI | Đúng danh sách `verified` (tên + SHA-256) |
+| P2 | Không file trọng số nào khác | ✔ | ✔ | ✔ | CI | Không `.onnx` / `.pth` / `.pt` / `.npz` / `.task` ngoài P1 |
 | P3 | DLL | ✔ | ✔ | ✔ | CI | Không FFmpeg; CUDA: không TensorRT, không bản trùng, cuDNN theo LIC-7 |
-| P4 | Giấy tờ | ✔ | ✔ | ✔ | CI | Đủ B6 theo từng gói (DirectML: điều khoản Microsoft; CUDA: EULA NVIDIA) |
-| P5 | `--self-test`, cả hai chế độ | ✔ CPU | ✔ CPU | ✔ CPU | CI | Báo cáo A chỉ có file trong danh sách |
-| P6 | Phân tích thư mục mẫu ở Chụp cá nhân: log nạp mô hình | ✔ CPU | ✔ CPU | ✔ CPU | CI | Log chỉ có file trong danh sách; có khung người / mặt, điểm kỹ thuật, mắt; gom nhóm báo "chưa có" |
-| P7 | Mở Media trên cùng bộ cài | ✔ | ✔ | ✔ | CI | Báo cáo A Media chỉ có file `verified` (Mốc 0: không file nào) |
-| P8 | **Nâng cấp từ 3.0.0 / 3.0.0a thật**, có phiên đã phân tích, `learning.db` và đủ 15 file cũ | ✔ (từ v3.0.0) | ✔ (từ v3.0.0a) | giải nén đè lên v3.0.0 portable | CI | File bị loại không còn; chép lại → log "bỏ qua"; U4–U5 đạt trên bộ cài thật; ảnh gốc không đổi |
-| P9 | Như P6, P7 trên GPU thật | ✔ DirectML | ✔ CUDA | ✔ | **Chủ dự án** | Provider đúng; chỉ file trong danh sách; thời gian mỗi ảnh |
-| P10 | Nâng cấp trên phiên ảnh thật | ✔ | ✔ | — | **Chủ dự án** | P/X, nhóm chỉnh tay, ảnh gốc giữ nguyên (kiểm bằng mắt) |
-| P11 | Tắt mạng | ✔ | ✔ | ✔ | CI (U7) + chủ dự án (rút mạng) | Chạy như P6 |
+| P4 | Giấy tờ | ✔ | ✔ | ✔ | CI | Đủ S10 theo gói |
+| P5 | `--self-test`, hai chế độ | ✔ CPU | ✔ CPU | ✔ CPU | CI | Báo cáo A chỉ có file `verified` |
+| P6 | Phân tích thư mục mẫu, Chụp cá nhân | ✔ CPU | ✔ CPU | ✔ CPU | CI | Log chỉ có file `verified`; U9 trên bộ cài thật |
+| P7 | Mở Media | ✔ | ✔ | ✔ | CI | Báo cáo A Media không có file nào ngoài `verified` (Mốc 0: không file nào) |
+| P8 | Nâng cấp từ v3.0.0 / v3.0.0a thật, có phiên, `learning.db` và 15 file cũ | ✔ | ✔ | giải nén đè | CI | File bị loại không còn; chép lại → "bỏ qua"; U4–U5 trên bộ cài thật; ảnh gốc không đổi |
+| P9 | P6, P7 trên GPU thật | ✔ DirectML | ✔ CUDA | ✔ | **Chủ dự án** | Provider đúng; chỉ file `verified`; thời gian mỗi ảnh |
+| P10 | Nâng cấp trên phiên ảnh thật | ✔ | ✔ | — | **Chủ dự án** | P/X, nhóm chỉnh tay, ảnh gốc giữ nguyên |
+| P11 | Tắt mạng | ✔ | ✔ | ✔ | CI (U7) + chủ dự án (rút mạng) | Như P6 |
 | P12 | Trình cập nhật | ✔ | ✔ | — | CI (danh sách release giả) | 3.0.0 → bản mới; tag beta không bị mời |
 
 **Kết quả nộp:**
-- Báo cáo CI gồm U1–U8, P1–P8, P11 (phần CI), P12. Kèm danh sách file từng gói, báo cáo A, log nạp mô hình.
-- Ca của chủ dự án (P9, P10, P11 rút mạng) ghi **riêng**.
+- Báo cáo CI gồm U1–U10, P1–P8, P11 (phần CI), P12. Kèm danh sách file từng gói, báo cáo A, log nạp mô hình.
+- Ca của chủ dự án ghi riêng.
 
 ---
 
-## 6. Hồ sơ riêng: asset đã phát hành (chủ dự án quyết định riêng)
+## 6. Quyết định phát hành (tách khỏi nghiệm thu kỹ thuật)
 
-Không gắn với kế hoạch sửa mã trên `beta`. Giữ kết quả kiểm kê:
+Bản đạt mục 5 **chưa** có nghĩa là được phát hành. Chủ dự án quyết các điểm sau, sau khi xem kết quả mục 5:
 
-| Mục | Kết quả [Bộ cài] |
+### 6.1 Chức năng thiếu khi chưa có gom nhóm tự động (GRP-1)
+
+| Chế độ | Có | **Thiếu** so với 3.0.0 | Cách người dùng làm thay |
+|---|---|---|---|
+| **Chụp cá nhân** | Dò người, dò mặt; chấm kỹ thuật (nét ở mắt, sáng, bố cục, chất lượng mặt); mắt nhắm / mở (nếu S9 đạt); chọn ảnh theo điểm kỹ thuật; P/X, xuất | • **Gom ảnh theo người / bộ trang phục tự động** (3.0.0: ArcFace + dáng người).<br>• **Gợi ý gộp nhóm**, hàng "cần xem lại".<br>• **Học nhận diện** theo người dùng.<br>• **Chọn N ảnh đẹp nhất cho từng người**: chỉ còn chọn theo ảnh.<br>• **Điểm thẩm mỹ** (TOPIQ, CLIP) và "Hợp gu" | Chọn ảnh rồi "Đây là người khác" hoặc đưa vào một người có sẵn; lọc theo người sau khi đã gom tay |
+| **Media sự kiện** | Màn hình Media (Mốc 0). Mốc 1 (cỡ cảnh, dò người / mặt) chưa làm | • **Gom người tự động** (Mốc 2: đặc tả dự phòng là "chỉ gom thủ công").<br>• **Nhãn nội dung, gợi ý booth, tách khoảnh khắc theo cảnh** bằng CLIP | Nhãn và người gán thủ công; khoảnh khắc tách theo khoảng thời gian |
+
+**Câu hỏi cho chủ dự án:**
+- Có chấp nhận phát hành bản chỉ gom thủ công không?
+- Hay giữ bản này ở dạng build thử nội bộ, chờ R1?
+
+### 6.2 Các quyết định phát hành khác
+
+| Mã | Câu hỏi |
 |---|---|
-| Release trên GitHub | 19, đã kiểm cả 19 (run 42199575662, 42208112442; so bộ cài lẻ: 42245312724, 42245711312) |
-| Digest | mọi asset khớp digest GitHub |
-| `portable.zip` | cùng file mô hình, cùng SHA-256 với bản cài của cùng tag |
-| Bộ cài lẻ `Setup-*.exe` | trùng SHA-256 với bộ cài trong `BoCai.zip` |
-| Chứa ArcFace / YoutuReID / TOPIQ / CLIP | **15 tag, 43 asset** (v0.3.0b1 tới v3.0.0a) |
-| Chỉ chứa SFace (chờ xác minh) | **4 tag, 12 asset** (v0.2.0b1–b4) |
-| Mọi bản | DLL FFmpeg không ghi thông báo; thiếu toàn văn giấy phép. Bản CUDA có cuDNN 9 (chờ) |
+| VER-1 | Số phiên bản |
+| CFG-1 | Gói phát hành (có AI / tối thiểu) |
+| LIC-7 | Gói CUDA khi cuDNN 9 chưa rõ: (a) chưa đăng; (b) không kèm cuDNN; (c) chờ NVIDIA |
+| REL | Lệnh phát hành, merge `main`, tag |
+| Asset cũ | Hồ sơ riêng, mục 9 |
 
-**Danh sách đầy đủ:** Phụ lục A (tag, asset, byte, SHA-256, run xác minh).
+---
 
-**Phương án trình chủ dự án** (không làm gì khi chưa có quyết định):
+## 7. BM-0: F-SF và Q-TECH
+
+### 7.1 F-SF (gom nhóm bằng SFace, đo nội bộ)
+
+| Mục | Nội dung |
+|---|---|
+| Mục đích | Biết SFace (hoặc mô hình thay thế sau này) gom tốt tới đâu, để quyết định có đáng xin xác nhận (LIC-3) không. **Không** dẫn tới việc đưa SFace vào bộ cài |
+| Thành phần | YOLOX-S / -M (đủ), YuNet (đủ), **SFace (chờ)**, màu trang phục (mã của app) |
+| **Căn cứ chạy nội bộ** | • Chỉ chạy trên máy chủ dự án, không phân phối file, không đưa kết quả cho khách, không dùng cho job.<br>• Căn cứ duy nhất cho SFace là câu Apache-2.0 của **bên phân phối lại** (opencv_zoo, thư mục SFace). Repo của tác giả không có giấy phép.<br>• Như vậy căn cứ **chưa đầy đủ** ngay cả với việc đo nội bộ. Chủ dự án quyết chạy với căn cứ này, hoặc chờ trả lời LIC-3 |
+| Dữ liệu | D1: 431 ảnh có nhãn của một buổi chụp của chủ dự án. Ảnh không rời máy |
+| Chờ | Quyết định BM-0a |
+
+### 7.2 Q-TECH (chấm kỹ thuật, trình riêng)
+
+| Mục | Nội dung |
+|---|---|
+| Mục đích | So thứ hạng theo điểm kỹ thuật (không có TOPIQ, CLIP) với lịch sử P/X của chủ dự án |
+| Nạp mô hình | **Không**: chỉ đọc số đo đã lưu |
+| Thành phần (nguồn của số đo đã lưu) | • Nét ở mắt, sáng, bố cục: mã của app, dùng vị trí mặt / mắt từ **YuNet** (đủ) và khung người từ **YOLOX** (đủ).<br>• Chất lượng mặt: **eDifFIQA** (đủ).<br>• Mắt nhắm / mở: **MediaPipe** (đủ, kèm S9) |
+| Không đọc | `aesthetic_mos`, `tech_iqa`, `face_iqa` (TOPIQ); vector `clip`; điểm "Hợp gu" |
+| **Không dựa vào nhóm người cũ** | Nhóm người trong phiên cũ do ArcFace gom. Q-TECH so **theo ảnh và theo loạt chụp liên tiếp (theo thời gian)**, không theo nhóm người |
+| Kiểm tra nguồn số đo | DB của phiên **không** ghi mã băm file mô hình. Bảng `measurements` chỉ có `extractor` + `extractor_version`; bảng `model_registry` có trong schema nhưng app không ghi. Bằng chứng thay thế [Bộ cài], trên mọi bản từ v0.2.0b1 tới v3.0.0a:<br>• YuNet, YOLOX-S, eDifFIQA: **cùng một** SHA-256 ở mọi bản;<br>• YOLOX-M: bản cũ là file gốc `21ff6cfd…b3f`, bản mới là float16 `be329495…6aaf` của chính file đó;<br>• MediaPipe: có từ v0.2.0b4, cùng SHA-256 ở mọi bản.<br> Q-TECH chỉ dùng số đo có `extractor` thuộc các bộ đo đó |
+| Biến thể | Q-TECH-noMP: bỏ giá trị mắt (dùng nếu S9 không đạt) |
+| Chỉ số | Tỉ lệ ảnh đầu loạt trùng **P**; tương quan thứ hạng; ca sai đáng chú ý |
+| Chờ | Quyết định BM-0b |
+
+---
+
+## 8. CI-1 (mục sửa riêng)
+
+| Mục | Nội dung |
+|---|---|
+| Vấn đề | Run 42245312724: ô `editions` để trống khi kiểm release → job `plan` hiểu là `directml,cuda,openvino` → 3 job build chạy, đã huỷ, không có artifact build, không có release |
+| Sửa | Trong job `plan`: khi `inspect_release` có giá trị, coi `editions` trống là `none`. Khi cả hai cùng có giá trị thì báo lỗi rõ ràng, không build |
+| Nghiệm thu | Chạy `workflow_dispatch` với `inspect_release=["v0.2.0b1"]` và `editions` **trống**:<br>• cả 3 job `build (…)` có `conclusion = skipped`;<br>• có job `inspect-release (v0.2.0b1)`;<br>• run không có artifact nào ngoài `inventory-*`.<br>Bằng chứng: kết quả `gh run view --json jobs` dán vào báo cáo |
+| Phụ thuộc | Không phụ thuộc LIC-1; làm được ngay khi duyệt |
+
+---
+
+## 9. Hồ sơ riêng: asset đã phát hành (chủ dự án quyết riêng)
+
+Không thay đổi so với bản trình 3:
+- 19 release đều đã kiểm.
+- 15 tag / 43 asset chứa ArcFace / YoutuReID / TOPIQ / CLIP; 4 tag / 12 asset chỉ có SFace.
+- Hai mốc D (dừng cung cấp) và U (mở đường cập nhật).
+
+Danh sách đầy đủ ở Phụ lục A. Chưa thao tác gì.
 
 | Mốc | Việc | Phụ thuộc |
 |---|---|---|
-| **D: dừng cung cấp** | Xoá asset bị ảnh hưởng; giữ trang release, tag, ghi chú, thêm một dòng giải thích | Không phụ thuộc bản mới |
-| **U: mở đường cập nhật** | Đăng bản mới (số phiên bản theo VER-1) | Sau nghiệm thu mục 5 và lệnh phát hành |
+| D | Xoá asset bị ảnh hưởng; giữ trang release, tag, ghi chú | Không phụ thuộc bản mới |
+| U | Đăng bản mới | Nghiệm thu mục 5 + quyết định mục 6 + lệnh phát hành |
 
 | Thứ tự | Trong khoảng giữa |
 |---|---|
-| D trước, U sau | Không có bộ cài để tải. Trình cập nhật báo "không có bản mới". Máy đã cài vẫn chạy, nhưng vẫn còn các file cũ |
+| D trước, U sau | Không có bộ cài để tải; trình cập nhật báo "không có bản mới"; máy đã cài vẫn chạy và vẫn còn file cũ |
 | U trước, D ngay sau | Bộ cài cũ vẫn tải được tới khi bản mới xong |
 
-**Lưu ý:**
-- Bản đã tải hoặc đã cài không thu hồi được.
-- Mình không có quyền sửa release (GitHub trả 403). Các thao tác do chủ dự án bấm, hoặc cấp quyền riêng.
+Mình không có quyền sửa release (GitHub trả 403).
 
 ---
 
-## 7. F-SF và Q-TECH
+## 10. Quyết định cần duyệt ở lượt này
 
-| Phép đo | Thành phần | Ghi chú |
+| Mã | Nội dung | Đề xuất |
 |---|---|---|
-| F-SF | YOLOX, YuNet, SFace + màu trang phục | Chỉ đo nội bộ. SFace chờ xác minh, nên kết quả **không** đưa SFace vào bộ cài |
-| Q-TECH | Không nạp mô hình; đọc số đo đã lưu (app, eDifFIQA, MediaPipe); không đọc cột TOPIQ | Đo được |
-| Q-TECH bỏ MediaPipe | như trên, bỏ giá trị mắt | Dùng nếu B7 không đạt |
+| **LIC-1** | Duyệt **S1–S12** (mục 3.1) | Đồng ý |
+| **CI-1** | Sửa job `plan` (mục 8) | Đồng ý |
+| **MED-CLIP** | CLIP → `pending` ở cả hai chế độ (mục 4) | Đồng ý |
+| **DATA-1** | Hiển thị nhóm tự động cũ | Ẩn; giữ nhóm gán tay / tên khoá |
+| **BM-0a** | Chạy F-SF nội bộ với căn cứ chưa đầy đủ (mục 7.1), hay chờ LIC-3 | Chủ dự án quyết |
+| **BM-0b** | Chạy Q-TECH và Q-TECH-noMP (mục 7.2) | Đồng ý |
+| **LIC-3** | Hỏi xác nhận: tác giả SFace, fal, Tencent, OpenAI, NVIDIA | Đồng ý, song song |
+| GRP-1, VER-1, CFG-1, LIC-7, REL, asset | **Quyết định phát hành**: xét sau nghiệm thu (mục 6, 9) | — |
 
 ---
 
