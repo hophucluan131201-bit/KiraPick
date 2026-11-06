@@ -1,4 +1,4 @@
-# Media sự kiện — Đặc tả bản 5 (chờ chủ dự án duyệt)
+# Media sự kiện — Đặc tả bản 5 (đã duyệt, 2026-11-06)
 
 - **Phạm vi:** nhánh `beta`. Chỉ là tài liệu; **chưa có mã Media nào**.
 - **Thời điểm sửa mã:** chỉ sau khi chủ dự án duyệt bản này.
@@ -470,18 +470,19 @@ ghi trong báo cáo A.
 **Chế độ Chụp cá nhân không đổi.** Chế độ này vẫn dùng CLIP như bản 3.0 (đã được chấp nhận ngày 2026-10-28). Quy tắc
 ở đây chỉ áp dụng cho Media.
 
-## 13. Quyết định chờ chủ dự án duyệt
+## 13. Quyết định của chủ dự án (đã chốt 2026-11-06)
 
-| Mã | Câu hỏi | Các phương án | Đề xuất |
-|---|---|---|---|
-| **UX-1** (chờ duyệt) | Phân tích chạy thế nào? | (a) **một nút "Phân tích sự kiện" chạy chung** (phương án bản 3); (b) nút riêng cho từng nhóm (cỡ cảnh + nét / nội dung / người) | (a): ít thao tác; vẫn tạm dừng được, và kết quả hiện dần |
-| **UX-2** | Chọn ảnh tự động có vào Beta không? | (a) có, **chỉ gợi ý**: không đổi P/X, có nút "Áp dụng gợi ý" (hoàn tác được), ảnh đã P/X không bao giờ bị đổi; (b) để sang bản sau, Beta chỉ có báo "đủ cỡ cảnh" | (b): giữ Beta gọn |
-| **UX-3** | Có đọc số serial thân máy không? | (a) đọc, chỉ để phân biệt nguồn, lưu dạng băm, không hiển thị (đổi chính sách quyền riêng tư); (b) không đọc, dùng thư mục + gán tay | (b) |
-| **UX-4** | Rung máy và nhòe chuyển động xếp vào đâu? | (a) gộp vào **Out nét**; (b) thêm cảnh báo riêng **"Nhòe chuyển động"**; (c) không cảnh báo | (a) |
-| **MOD-1** | Có dùng CLIP trong Media (việc có thu tiền) không? | **có**: gợi ý nội dung, chia theo đổi cảnh, gợi ý booth theo hình ảnh; **không**: chạy phương án dự phòng ở mục 12a cho **cả** gợi ý nội dung **và** chia khoảnh khắc | Chủ dự án quyết |
-| **MOD-2** | Bộ cài vẫn chứa ArcFace / TOPIQ cho Chụp cá nhân | (a) giữ; (b) tách bộ cài; (c) cho phép bỏ khi cài | Chủ dự án quyết (liên quan việc chụp cá nhân có thu tiền không) |
-| **NAME** | Tên hiển thị các nhãn | giữ tên làm việc / đổi | Giữ cho Beta |
-| **THR** | Ngưỡng đạt ở mục 11 | đồng ý / sửa | Đồng ý |
+| Mã | Quyết định |
+|---|---|
+| **Bản 5** | **Duyệt**; bắt đầu viết mã Media trên nhánh `beta` |
+| **UX-1** | Một nút **"Phân tích sự kiện"** chạy chung, tạm dừng / chạy tiếp được, kết quả hiện dần |
+| **UX-2** | **Chưa làm** Chọn ảnh tự động; để bản sau. Bản Beta chỉ báo "đủ cỡ cảnh" theo khoảnh khắc |
+| **UX-3** | **Không đọc** số serial; nguồn máy theo thư mục + hãng / dòng máy, và gán tay |
+| **UX-4** | Rung máy và nhòe chuyển động tính là **Out nét** |
+| **MOD-1** | **Dùng CLIP** trong Media; chủ dự án **chấp nhận rủi ro** của model card. Trạng thái CLIP trong `configs/media-models.json`: "đã duyệt có rủi ro". Phương án dự phòng ở mục 12a vẫn được làm, dùng khi CLIP thiếu hoặc lỗi |
+| **MOD-2** | Chủ dự án **có thu tiền** khi chụp cá nhân → ArcFace và TOPIQ trong chế độ Chụp cá nhân là **vấn đề giấy phép cần xử lý**. Đây là việc riêng, ngoài phạm vi Media; mình sẽ trình đề xuất thay thế riêng |
+| **NAME** | Giữ tên làm việc |
+| **THR** | Đồng ý các ngưỡng ở mục 11 |
 
 ## 14. Phạm vi Beta và mốc làm việc
 
