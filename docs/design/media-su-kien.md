@@ -1,11 +1,14 @@
-# Media sự kiện — Đặc tả bản 4 (chờ chủ dự án duyệt)
+# Media sự kiện — Đặc tả bản 5 (chờ chủ dự án duyệt)
 
 - **Phạm vi:** nhánh `beta`. Chỉ là tài liệu; **chưa có mã Media nào**.
 - **Thời điểm sửa mã:** chỉ sau khi chủ dự án duyệt bản này.
 - **Phát hành:** merge vào `main`, gắn tag và phát hành đều cần duyệt riêng.
 - **Màn hình chọn chế độ:** giữ nguyên, đã có trên `beta`.
 
-**Thay đổi so với bản 3:** theo 6 mục trong kết luận rà soát bản 3. Bảng đối chiếu ở **phụ lục A**.
+**Thay đổi:**
+- Bản 4 so với bản 3: theo 6 mục rà soát; bảng đối chiếu ở **phụ lục A**.
+- Bản 5 so với bản 4: (1) quy tắc cảnh báo lệch giờ trong MED-03; (2) các chức năng phụ thuộc CLIP và phương án dự
+  phòng, cùng quy tắc chặn build theo trọng số. Bảng đối chiếu ở **phụ lục B**.
 
 **Quy ước trong tài liệu:**
 - **[Repo]**: đã xác minh trong mã nguồn hiện tại.
@@ -202,8 +205,8 @@ cảnh báo nét (mục 6).
   - Khoảnh khắc 📌 **giữ nguyên** danh sách ảnh; không ảnh nào tự chuyển đi.
   - Thứ tự ảnh **bên trong** khoảnh khắc sắp lại theo giờ đã chỉnh.
   - Khoảnh khắc 📌 được đặt trên dòng thời gian theo giờ của ảnh **sớm nhất** trong nó.
-  - Ảnh nào sau khi chỉnh giờ nằm **ngoài khoảng giờ** của khoảnh khắc 📌 chứa nó (rơi vào khoảng của khoảnh khắc khác)
-    thì được đánh dấu **⚠ "lệch giờ"**. Người dùng chọn: **Chuyển** sang khoảnh khắc phù hợp, hoặc **Giữ**.
+  - Ảnh có thể bị đánh dấu **⚠ "lệch giờ"** theo **quy tắc lệch giờ** dưới đây. Người dùng chọn **Chuyển** sang
+    khoảnh khắc được gợi ý, hoặc **Giữ**.
   - Phần ảnh AI chia (không 📌) được chia lại.
 - **Hoàn tác (Ctrl+Z):**
   - Hoàn tác **chỉnh giờ** trả lại độ lệch cũ, thứ tự cũ và phần AI chia cũ. Danh sách ảnh của khoảnh khắc 📌 vốn
@@ -224,18 +227,62 @@ cảnh báo nét (mục 6).
   1. **AI tự chia:** ranh giới đúng / thừa / thiếu.
   2. **Sửa tay:** số thao tác cần để đạt đúng.
 
+**Quy tắc lệch giờ (áp dụng cho khoảnh khắc 📌):**
+- **Khi nào kiểm tra:** chỉ khi người dùng **chỉnh giờ một nguồn máy S** (độ lệch của S thay đổi).
+  - **Ảnh được kiểm tra:** các ảnh **của S** nằm trong khoảnh khắc 📌.
+  - Giờ dùng để so là **giờ đã chỉnh** (giờ gốc + độ lệch).
+- **Khoảng đối chiếu, độc lập với ảnh được kiểm tra:** với mỗi khoảnh khắc K (📌 hoặc do AI chia), tính
+  R(K) = [giờ sớm nhất, giờ muộn nhất] của **các ảnh trong K không thuộc nguồn S**, tức là các ảnh mà lần chỉnh giờ
+  này không làm đổi giờ.
+  - Mở rộng mỗi đầu một **dung sai τ = 30 giây**, chỉnh trên ảnh mẫu.
+  - Ảnh của S không bao giờ góp vào R(K). Vì vậy một ảnh như B-7 **không thể kéo dài khoảng** của khoảnh khắc chứa nó,
+    và một ảnh đang nằm sai chỗ cũng không làm lệch khoảng dùng để kiểm tra ảnh khác.
+  - K có **dưới 2 ảnh** không thuộc S thì **không có khoảng đối chiếu**.
+- **Ảnh p (của S) trong khoảnh khắc 📌 M bị ⚠ khi và chỉ khi:**
+  1. M có khoảng đối chiếu, **và** giờ của p nằm **ngoài** R(M) ± τ;
+  2. giờ của p nằm **trong** R(N) ± τ của ít nhất một khoảnh khắc khác N.
+- **Khoảng chồng nhau:**
+  - p nằm trong **cả** R(M) ± τ và R(N) ± τ: **không cảnh báo** (điều 1 không thoả).
+  - p nằm ngoài M nhưng trong khoảng của **nhiều** khoảnh khắc khác: gợi ý khoảnh khắc có **tâm khoảng gần p nhất**.
+  - p nằm ngoài M và **không** thuộc khoảng nào khác (rơi vào khoảng trống): **không cảnh báo**.
+- **Ảnh không có giờ:** không bao giờ bị cảnh báo.
+- **Cảnh báo là kết quả của lần chỉnh giờ và được lưu cùng bước đó:**
+  - **Chuyển:** đưa p sang khoảnh khắc được gợi ý và **xoá cảnh báo của p**. Hoàn tác Chuyển thì p về chỗ cũ và cảnh
+    báo hiện lại.
+  - **Giữ:** xoá cảnh báo của p. Hoàn tác thì cảnh báo hiện lại.
+  - **Hoàn tác lần chỉnh giờ:** trả độ lệch cũ và xoá mọi cảnh báo do lần đó tạo ra.
+  - **Phân tích lại hoặc chạy tiếp:** không tạo, không xoá cảnh báo.
+  - **Chỉnh giờ S lần nữa:** thay toàn bộ cảnh báo của ảnh thuộc S bằng kết quả kiểm tra mới.
+
 **Ca MED-03: hai máy lệch giờ và ranh giới đã tách** [Repo bằng ảnh tổng hợp; Ảnh mẫu nếu có]:
-- **Tình huống:**
-  1. Máy B chạy chậm 3 phút so với máy A.
-  2. Trước khi chỉnh giờ, người dùng "Tách tại đây" giữa phát biểu và trao giải. Lúc đó ảnh B-7 (thật ra chụp lúc trao
-     giải) vẫn nằm trong khoảnh khắc "Phát biểu", vì giờ sai.
-  3. Người dùng chỉnh giờ máy B (+3 phút).
-- **Mong đợi:**
-  - Hai khoảnh khắc 📌 giữ nguyên danh sách ảnh.
-  - B-7 vẫn ở "Phát biểu", nhưng bị đánh **⚠ lệch giờ**. Bấm **Chuyển** đưa nó sang "Trao giải".
-  - P/X, nhãn và người của B-7 không đổi.
-  - **Ctrl+Z** lần 1 hoàn tác "Chuyển"; lần 2 hoàn tác chỉnh giờ: B-7 về chỗ cũ, hết ⚠.
-  - Phân tích lại sau đó không đổi gì ở hai khoảnh khắc 📌.
+**Dữ liệu** (ảnh tổng hợp; máy A đúng giờ, máy B chậm 180 giây):
+
+| Ảnh | Giờ thật | Giờ gốc trong EXIF | Phần |
+|---|---|---|---|
+| A-1 … A-5 | 10:00:00 → 10:04:00 (mỗi phút một ảnh) | như giờ thật | Phát biểu |
+| B-1 … B-6 | 10:00:30, 10:01:30, 10:02:30, 10:03:30, 10:04:00, 10:04:30 | giờ thật − 3 phút (09:57:30 … 10:01:30) | Phát biểu |
+| A-6 … A-10 | 10:05:00 → 10:09:00 | như giờ thật | Trao giải |
+| **B-7** | **10:05:20** | **10:02:20** | Trao giải |
+| B-8 … B-10 | 10:08:30, 10:09:00, 10:09:30 | 10:05:30, 10:06:00, 10:06:30 | Trao giải |
+
+**Diễn biến và trạng thái mong đợi:**
+
+| Bước | Thao tác | "Phát biểu" (📌) | "Trao giải" (📌) | Cảnh báo | Giải thích |
+|---|---|---|---|---|---|
+| S0 | Trước khi chỉnh giờ: "Tách tại đây" ngay trước A-6 | A-1…A-5, B-1…B-7 | A-6…A-10, B-8…B-10 | không | Theo giờ gốc, B-7 (10:02:20) nằm trong khoảng của "Phát biểu" |
+| S1 | Chỉnh giờ máy B **+180 s** | không đổi | không đổi | **chỉ ⚠ B-7**, gợi ý "Trao giải" | Kiểm tra các ảnh B. R(Phát biểu) = A-1…A-5 = [10:00:00, 10:04:00] ± 30 s = [09:59:30, 10:04:30]. R(Trao giải) = A-6…A-10 = [10:05:00, 10:09:00] ± 30 s = [10:04:30, 10:09:30]. **B-7** = 10:05:20: ngoài Phát biểu, trong Trao giải → ⚠. B-1…B-5 (10:00:30–10:04:00) nằm trong Phát biểu → không ⚠. **B-6** = 10:04:30 nằm ở điểm chồng của hai khoảng → không ⚠. B-8…B-10 (10:08:30–10:09:30) nằm trong Trao giải → không ⚠. Ảnh của máy A không được kiểm tra |
+| S2 | Bấm **Chuyển** | A-1…A-5, B-1…B-6 | A-6…A-10, **B-7**, B-8…B-10 | không | Chuyển xoá cảnh báo của B-7 |
+| S3 | **Ctrl+Z** | A-1…A-5, B-1…B-7 | A-6…A-10, B-8…B-10 | **⚠ B-7** | Hoàn tác Chuyển: trở về đúng S1 |
+| S4 | **Ctrl+Z** lần 2 | A-1…A-5, B-1…B-7 | A-6…A-10, B-8…B-10 | không | Hoàn tác chỉnh giờ: độ lệch của máy B về 0, cảnh báo của lần đó bị xoá; trở về đúng S0 |
+
+- **Ở mọi bước:** P/X, sao, ❤, nhãn và người của B-7 không đổi.
+- **Phân tích lại** ở S2: hai khoảnh khắc 📌 không đổi; không có ⚠.
+- **Ca phụ MED-03b (vùng chồng):** B-6 = 10:04:30 nằm trong cả R(Phát biểu) ± τ và R(Trao giải) ± τ. Mong đợi:
+  **không** ⚠ (đã có trong S1).
+- **Ca phụ MED-03c (không có khoảng đối chiếu):** một khoảnh khắc 📌 chỉ gồm ảnh máy B, cộng một ảnh máy A. Sau khi
+  chỉnh giờ máy B, khoảnh khắc này có dưới 2 ảnh không thuộc B. Mong đợi: **không** ⚠ cho ảnh nào trong nó.
+- **Ca phụ MED-03d (A-6 không bị kéo theo):** ở S1, A-6 (10:05:00) nằm sát B-7, nhưng **không** bị kiểm tra, vì A không
+  phải nguồn vừa chỉnh. Mong đợi: **không** ⚠ cho A-6.
 
 ## 9. Nhập nhiều máy và chỉnh giờ
 
@@ -372,15 +419,66 @@ nhãn mẫu ở Mốc 1**. Kiểm tra gồm năm phần:
    vào `docs/model-licenses.md` **trước bản dán nhãn mẫu**. Mục nào chưa xác minh được thì ghi rõ "chưa xác minh" trong
    báo cáo build.
 
+**Quy tắc chặn build theo trọng số:**
+- **Danh sách máy đọc được:** mỗi trọng số trong `MEDIA_MODELS` có một trạng thái, lưu trong file mới
+  `configs/media-models.json`:
+  - **đã xác minh**;
+  - **đã duyệt có rủi ro**, ví dụ CLIP nếu MOD-1 = có;
+  - **chờ xác minh**;
+  - **không dùng**.
+- **Media chỉ nạp** trọng số "đã xác minh" hoặc "đã duyệt có rủi ro". Trọng số "chờ xác minh" bị **loại khỏi danh sách
+  nạp** của bản build đó.
+- **Trọng số bị loại mà có phương án dự phòng** (CLIP, mục 12a): bản build chạy dự phòng. Báo cáo A ghi "CLIP: không nạp
+  — dự phòng".
+- **Trọng số bị loại mà không có phương án dự phòng:** **bản build bị chặn**, CI báo lỗi và ghi tên trọng số đang chặn.
+
+| Trọng số | Cần cho | Nếu "chờ xác minh" |
+|---|---|---|
+| YOLOX-S / -M | cỡ cảnh, chủ thể | **Chặn build** từ Mốc 1 |
+| YuNet | cỡ cảnh, gom người | **Chặn build** từ Mốc 1 |
+| SFace | gom người | Mốc 1 **không chặn** (chưa dùng); **chặn** từ Mốc 2; hoặc gom người chỉ gán tay (mục 7) nếu chủ dự án chọn |
+| MediaPipe (mắt) | điểm chọn ảnh (UX-2) | Chỉ chặn nếu UX-2 = có |
+| CLIP | mục 12a | **Không chặn**; dùng dự phòng |
+
+- **Báo cáo A** (mô hình thực sự nạp khi chạy) và **báo cáo B** (mô hình có trong bộ cài) vẫn **tách riêng**.
+  - Báo cáo B liệt kê cả trọng số của Chụp cá nhân (ArcFace, TOPIQ, CLIP…) **có trong bộ cài nhưng Media không nạp**,
+    ghi "ngoài Media — xem MOD-2".
+  - Một trọng số có trong bộ cài mà không có trong manifest làm **CI lỗi**.
+
+## 12a. Các chức năng phụ thuộc CLIP và phương án dự phòng
+
+CLIP ViT-L/14 chỉ được nạp trong Media khi **MOD-1 = có** (mục 13) và điều khoản của nó được ghi là **"đã duyệt cho
+Media"** (mục 12). Nếu không, Media chạy **phương án dự phòng** dưới đây. Lựa chọn này là cấu hình của bản build và được
+ghi trong báo cáo A.
+
+| Chức năng | Dùng CLIP để làm gì | Phương án dự phòng (không CLIP) | Ca nghiệm thu khi dự phòng |
+|---|---|---|---|
+| **Gợi ý nhãn nội dung ảnh** (mục 4) | So ảnh với mô tả chữ của từng nhãn | **Không có gợi ý AI.** Mọi ảnh để **Chưa xác định**; người dùng gán tay (phím số 1–5, gán nhiều ảnh một lúc, gán cho cả khoảnh khắc) | CT-F1: không ảnh nào có nhãn "AI gợi ý". CT-F2: gán tay 5 nhãn, nhiều nhãn trên một ảnh, hoàn tác. Không chấm tỉ lệ gắn đúng / tìm thấy (ghi "không áp dụng") |
+| **Gợi ý lại** nhãn nội dung từ ảnh đã xác nhận (mục 3) | Độ giống CLIP giữa ảnh | **Tắt** nút "Gợi ý lại" cho nhãn nội dung | CT-F3: nút ẩn hoặc mờ, kèm giải thích |
+| **Chia khoảnh khắc theo đổi cảnh** (mục 8) | Độ giống CLIP giữa các nhóm ảnh liên tiếp | Chỉ chia theo **khoảng nghỉ** của giờ đã chỉnh; người dùng tách tay ("Tách tại đây") | MT-F1: chia đúng khi có khoảng nghỉ ≥ ngưỡng. **MED-02 (không có khoảng nghỉ):** AI **được phép** không tách; báo số thao tác sửa tay (dự kiến 1 lần "Tách tại đây"). MED-03 không đổi, vì không dùng CLIP |
+| **Gợi ý tên booth** (mục 4) | Ảnh trông giống + chụp gần giờ | Chỉ theo **giờ**: ảnh trong cùng khoảnh khắc với ảnh đã gán tên, chưa có tên booth, được gợi ý cùng tên | BT-F1: gợi ý chỉ trong cùng khoảnh khắc; không gợi ý sang khoảnh khắc khác |
+| **Tránh chọn ảnh gần trùng** (chỉ khi UX-2 = có) | Độ giống CLIP | Dùng **burst theo giờ** (ảnh cách nhau ≤ 3 giây), như `app/quality/burst.py` [Repo] | PK-F1: không chọn hai ảnh cùng burst |
+
+**Ảnh hưởng tới bản dán nhãn mẫu (Mốc 1):**
+- **Có CLIP:** bản dán nhãn hiện gợi ý nội dung, để chấm sau ở Mốc 2.
+- **Không CLIP:** bản dán nhãn vẫn **thu nhãn nội dung bằng tay**, giống hệt. Các nhãn này dùng làm dữ liệu chấm nếu
+  sau này CLIP được duyệt.
+  - Không có kết quả AI nội dung để chấm.
+  - Khoảnh khắc chỉ được chấm theo khoảng nghỉ.
+  - Ghi rõ hai giới hạn này trong báo cáo chấm.
+
+**Chế độ Chụp cá nhân không đổi.** Chế độ này vẫn dùng CLIP như bản 3.0 (đã được chấp nhận ngày 2026-10-28). Quy tắc
+ở đây chỉ áp dụng cho Media.
+
 ## 13. Quyết định chờ chủ dự án duyệt
 
 | Mã | Câu hỏi | Các phương án | Đề xuất |
 |---|---|---|---|
-| **UX-1** | Phân tích chạy thế nào? | (a) **một nút "Phân tích sự kiện" chạy chung** (phương án bản 3); (b) nút riêng cho từng nhóm (cỡ cảnh + nét / nội dung / người) | (a): ít thao tác; vẫn tạm dừng được, và kết quả hiện dần |
+| **UX-1** (chờ duyệt) | Phân tích chạy thế nào? | (a) **một nút "Phân tích sự kiện" chạy chung** (phương án bản 3); (b) nút riêng cho từng nhóm (cỡ cảnh + nét / nội dung / người) | (a): ít thao tác; vẫn tạm dừng được, và kết quả hiện dần |
 | **UX-2** | Chọn ảnh tự động có vào Beta không? | (a) có, **chỉ gợi ý**: không đổi P/X, có nút "Áp dụng gợi ý" (hoàn tác được), ảnh đã P/X không bao giờ bị đổi; (b) để sang bản sau, Beta chỉ có báo "đủ cỡ cảnh" | (b): giữ Beta gọn |
 | **UX-3** | Có đọc số serial thân máy không? | (a) đọc, chỉ để phân biệt nguồn, lưu dạng băm, không hiển thị (đổi chính sách quyền riêng tư); (b) không đọc, dùng thư mục + gán tay | (b) |
 | **UX-4** | Rung máy và nhòe chuyển động xếp vào đâu? | (a) gộp vào **Out nét**; (b) thêm cảnh báo riêng **"Nhòe chuyển động"**; (c) không cảnh báo | (a) |
-| **MOD-1** | Chấp nhận rủi ro CLIP cho việc có thu tiền? | có / không (không thì nhãn nội dung ảnh chỉ gán tay) | Chủ dự án quyết |
+| **MOD-1** | Có dùng CLIP trong Media (việc có thu tiền) không? | **có**: gợi ý nội dung, chia theo đổi cảnh, gợi ý booth theo hình ảnh; **không**: chạy phương án dự phòng ở mục 12a cho **cả** gợi ý nội dung **và** chia khoảnh khắc | Chủ dự án quyết |
 | **MOD-2** | Bộ cài vẫn chứa ArcFace / TOPIQ cho Chụp cá nhân | (a) giữ; (b) tách bộ cài; (c) cho phép bỏ khi cài | Chủ dự án quyết (liên quan việc chụp cá nhân có thu tiền không) |
 | **NAME** | Tên hiển thị các nhãn | giữ tên làm việc / đổi | Giữ cho Beta |
 | **THR** | Ngưỡng đạt ở mục 11 | đồng ý / sửa | Đồng ý |
@@ -430,9 +528,14 @@ nhãn mẫu ở Mốc 1**. Kiểm tra gồm năm phần:
 - Phần nhúng CLIP lưu theo ảnh (`asset_vectors`); mô tả chữ tính lúc build (`scripts/convert_clip.py`).
 - Đã có: gộp / tách / "khác nhau" / hoàn tác; bước tự kiểm tra bản đóng gói; test chặn mạng; lệnh chẩn đoán chỉ ra số.
 
+- Burst theo giờ (≤ 3 giây) đã có ở `app/quality/burst.py`; đây là phương án dự phòng cho việc tránh chọn ảnh trùng.
+
 **Cần ảnh mẫu:**
 - Mọi ngưỡng và tỉ lệ ở mục 11.
-- Các ca SZ-01a…05, FC-01…05, MED-02, MED-03 (ảnh thật).
+- Các ca SZ-01a…05, FC-01…05, MED-02 (ảnh thật).
+- Dung sai τ của quy tắc lệch giờ.
+- Nếu MOD-1 = không: MT-F1 và MED-02 ở chế độ dự phòng.
+- MED-03 / 03b / 03c chạy được **bằng ảnh tổng hợp** trong test tự động, không cần ảnh mẫu.
 - Tỉ lệ nhận được mặt và mức độ gom của SFace.
 
 **Cần Windows/CUDA:**
@@ -457,3 +560,10 @@ nhãn mẫu ở Mốc 1**. Kiểm tra gồm năm phần:
 | 4 | Tiêu chí nghiệm thu: tỉ lệ Chưa xác định; gắn đúng + tìm thấy cho từng nhãn; gộp nhầm / tách nhầm / nhận được mặt; ngưỡng Trật nét, số mẫu, "chưa đủ mẫu" | Mục 11 (bảng tiêu chí) |
 | 5 | Ca ảnh cận mờ: tách dò được mặt / chỉ dò được người, khung người dự phòng hoặc Chưa xác định; ca LED: không đủ căn cứ Trật nét | Mục 5 (hai đường xếp, SZ-01a/b), mục 6 (ba điều kiện Trật nét, FC-02a/b) |
 | 6 | Kiểm tra mô hình trước bản build đầu tiên, kể cả bản dán nhãn; báo riêng mô hình nạp khi chạy và có trong bộ cài; đánh dấu điều khoản chờ xác minh | Mục 12 (kiểm tra bắt buộc, báo cáo A/B), mục 14 (Mốc 0) |
+
+## Phụ lục B — Đối chiếu hai mục rà soát bản 4
+
+| # | Yêu cầu | Đã sửa ở |
+|---|---|---|
+| 1 | Chốt quy tắc lệch giờ MED-03; khoảng đối chiếu độc lập với ảnh đang kiểm tra; dữ liệu giờ cụ thể; khoảng chồng nhau; trạng thái sau Chuyển → Ctrl+Z → Ctrl+Z | Mục 8: "Quy tắc lệch giờ" (chỉ kiểm tra ảnh của nguồn vừa chỉnh; khoảng đối chiếu chỉ tính từ ảnh **không** thuộc nguồn đó, nên độc lập với ảnh được kiểm tra; τ = 30 s; chồng nhau thì không cảnh báo; gợi ý theo tâm gần nhất; khoảng trống thì không cảnh báo; cảnh báo lưu cùng bước chỉnh giờ và hoàn tác theo nó); bảng dữ liệu MED-03; bảng trạng thái S0–S4 có giải thích từng ảnh; ca phụ MED-03b (vùng chồng), MED-03c (không có khoảng đối chiếu), MED-03d (ảnh máy kia không bị kéo theo) |
+| 2 | Ghi đủ chức năng phụ thuộc CLIP; dự phòng cho nội dung **và** khoảnh khắc; ca nghiệm thu; giới hạn bản dán nhãn; giữ báo cáo A/B; trọng số chưa kiểm tra thì loại khỏi build hoặc chặn build | Mục 12a (5 chức năng, dự phòng, ca CT-F1…3, MT-F1, BT-F1, PK-F1, ảnh hưởng tới bản dán nhãn); mục 12 ("Quy tắc chặn build theo trọng số", `configs/media-models.json`, bảng chặn / dự phòng, báo cáo A/B tách riêng); MOD-1 ở mục 13 |
