@@ -280,3 +280,37 @@ def test_special_entry_points_never_show_the_picker(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("app.ui.app_shell.AppShell", boom)
     code = app_main.main(["KiraPick.exe", "--diagnose-grouping"])  # no arguments: an error code, no window
     assert code != 0
+
+
+def test_switching_modes_many_times_opens_only_verified_weights(qtbot, shell, env) -> None:  # noqa: ANN001, F811
+    """U6 (LIC-1 S12): personal (with a people analysis when the weights are present) -> picker -> Media -> picker,
+    three times in one run: nothing outside the allow-list is ever opened, nothing bypasses the check."""
+    from app.ai.models import ModelRegistry
+    from app.ai.policy import LOAD_LOG
+
+    LOAD_LOG.clear()
+    can_analyse = ModelRegistry().can_detect()
+    for i in range(3):
+        qtbot.keyClick(shell.picker, Qt.Key.Key_1)
+        w = shell.made[i]
+        qtbot.waitExposed(w)
+        if can_analyse and i == 0:
+            _import(qtbot, w, env["photos"])
+            w.start_analysis("people")
+            qtbot.waitUntil(lambda: w.analyze_thread is None, timeout=60000)
+            # the analysis runs in a child process: what it opened is recorded in the session (schema v8)
+            child = [r[0] for r in w.project.conn.execute("SELECT DISTINCT model_id FROM analysis_run_models")]
+            assert child and all(ModelRegistry().policy.verified(m) for m in child), child
+        w._ask_leave_mode = lambda: True
+        assert w.request_mode_change()
+        qtbot.waitUntil(lambda: shell.picker.isVisible(), timeout=15000)
+        qtbot.keyClick(shell.picker, Qt.Key.Key_2)
+        media = shell.media
+        assert media is not None and media.isVisible()
+        qtbot.keyClick(media, Qt.Key.Key_Escape)
+        qtbot.waitUntil(lambda: shell.picker.isVisible(), timeout=15000)
+    report = LOAD_LOG.report()
+    registry = ModelRegistry()
+    assert all(registry.policy.verified(m) for m in report["opened"]), report["opened"]
+    assert not any(k.startswith("?") for k in report["skipped"])
+    LOAD_LOG.clear()
