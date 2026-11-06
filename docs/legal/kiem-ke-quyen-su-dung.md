@@ -1,5 +1,7 @@
 # Kiểm kê thành phần và quyền sử dụng (bản 2, 2026-11-06)
 
+> **Cập nhật 2026-11-06:** đánh giá theo từng file ở `docs/legal/phuong-an-3.0.1.md` (bản trình 2, mục 1) **thay thế** mục 4 và 5 dưới đây. Thay đổi chính: SFace và cuDNN 9 chuyển sang "chờ xác minh"; YOLOX-S/-M, YuNet, eDifFIQA, MediaPipe đủ căn cứ theo công bố của chủ sở hữu; AuraFace chờ xác minh.
+
 - **Phạm vi:** kiểm chứng và trình phương án.
   - Không đổi mã chạy, không đổi mặc định, không đóng gói, không chạy benchmark.
   - Sửa mã, thay mặc định và xử lý bản đang phân phối đều trình chủ dự án duyệt riêng.
