@@ -7,6 +7,14 @@
 Downloads face_landmarker.task (Apache-2.0), converts the landmark and blendshape
 TFLite models to ONNX (opset 17), checks them against the TFLite interpreter and
 prints the SHA-256 to put in configs/model-manifest.json. The app never runs this.
+
+    conv/bin/python scripts/convert_mediapipe.py --check
+
+LIC-1 S9: converts into a temporary folder (the repository files are not touched), checks the downloaded .task
+against TASK_SHA256, and proves that each file in models/converted/ (the files the allow-list pins) is a conversion
+of exactly that .task: the same weights (every initializer, by value), the same operators, and the same outputs on
+the same inputs. tf2onnx is not byte-reproducible (node and initializer names, order and folding change from run
+to run), so the files themselves are compared by content, not by hash. Exit 2: the .task differs; exit 3: a file differs.
 """
 
 from __future__ import annotations
@@ -20,6 +28,7 @@ import zipfile
 from pathlib import Path
 
 TASK_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+TASK_SHA256 = "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"  # read 2026-11-06
 OUT = Path(__file__).resolve().parents[1] / "models" / "converted"
 MODELS = {"face_landmarks_detector": "mediapipe_face_landmarks_v2.onnx",
           "face_blendshapes": "mediapipe_face_blendshapes_v2.onnx"}
@@ -33,21 +42,53 @@ sys.exit(convert.main())
 """
 
 
-def main() -> int:
+def _same_content(fresh: Path, pinned: Path, x) -> tuple[bool, str]:  # noqa: ANN001
+    """Same weights (multiset of initializer values) and the same outputs on ``x`` and two more inputs."""
+    import numpy as np
+    import onnx
+    import onnxruntime as ort
+    from onnx import numpy_helper
+
+    a, b = onnx.load(str(fresh)), onnx.load(str(pinned))
+
+    def weights(m):  # noqa: ANN001, ANN202
+        return sorted(hashlib.sha256(numpy_helper.to_array(t).tobytes() + str(t.data_type).encode()).hexdigest()
+                      for t in m.graph.initializer)
+
+    if weights(a) != weights(b):
+        return False, "weights differ"
+    # (tf2onnx may also fold or order operators differently between runs: the outputs decide)
+    sessions = [ort.InferenceSession(str(p), providers=["CPUExecutionProvider"]) for p in (fresh, pinned)]
+    diff = 0.0
+    for seed in range(3):
+        xs = x if seed == 0 else (np.random.default_rng(seed).random(x.shape).astype(np.float32) * float(x.max()))
+        outs = [sorted(s.run(None, {s.get_inputs()[0].name: xs}), key=lambda arr: arr.size) for s in sessions]
+        diff = max(diff, *(float(np.abs(p.reshape(-1) - q.reshape(-1)).max()) for p, q in zip(*outs, strict=True)))
+    return diff <= 1e-5, f"{len(a.graph.initializer)} weights equal, outputs on 3 inputs differ by {diff:.1e}"
+
+
+def main(argv: list[str] | None = None) -> int:
     import numpy as np
     import onnxruntime as ort
     import tensorflow as tf
 
-    OUT.mkdir(parents=True, exist_ok=True)
+    check = "--check" in (sys.argv[1:] if argv is None else argv)
     with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out" if check else OUT
+        out.mkdir(parents=True, exist_ok=True)
         task = Path(tmp) / "face_landmarker.task"
         urllib.request.urlretrieve(TASK_URL, task)  # noqa: S310 - fixed https URL
+        task_sha = hashlib.sha256(task.read_bytes()).hexdigest()
+        print(f"face_landmarker.task sha256 {task_sha}")
+        if task_sha != TASK_SHA256:
+            print("the downloaded .task is not the one the conversion was made from")
+            return 2
         zipfile.ZipFile(task).extractall(tmp)
         shim = Path(tmp) / "tf2onnx_shim.py"
         shim.write_text(_SHIM)
         for name, target in MODELS.items():
             tflite = Path(tmp) / f"{name}.tflite"
-            onnx_path = OUT / target
+            onnx_path = out / target
             subprocess.run([sys.executable, str(shim), "--tflite", str(tflite), "--output", str(onnx_path),
                             "--opset", "17"], check=True)
             it = tf.lite.Interpreter(model_path=str(tflite))
@@ -65,6 +106,11 @@ def main() -> int:
             print(f"{target}: max diff vs TFLite {diff:.2e}, size {onnx_path.stat().st_size}, sha256 {digest}")
             if diff > 1e-2:
                 return 1
+            if check:
+                same, why = _same_content(onnx_path, OUT / target, x)
+                print(f"{target}: {'same content as' if same else 'DIFFERS from'} models/converted ({why})")
+                if not same:
+                    return 3
     return 0
 
 
