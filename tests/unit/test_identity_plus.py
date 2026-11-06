@@ -533,6 +533,9 @@ def test_gpu_failure_at_run_time_switches_the_model_to_cpu(tmp_path: Path, monke
             calls.append("cpu")
             return ["ok"]
 
+        def get_providers(self) -> list[str]:  # read by runtime._open_session for report A
+            return ["CPUExecutionProvider"]
+
     monkeypatch.setattr(runtime.ort, "InferenceSession", Cpu)
     session = runtime.Session(Broken(), "directml", None, model)
     assert session.run(None, {}) == ["ok"] and session.device == "cpu"
