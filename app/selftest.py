@@ -119,7 +119,7 @@ def run(report_path: Path, photos: Path | None = None) -> int:
 
         gpu_model = registry.status("person_detector_m")
         if gpu_model.state is ModelState.READY:
-            probe = create_session(gpu_model.path, prefer_gpu=True)
+            probe = create_session(registry.require("person_detector_m"), prefer_gpu=True)  # through the allow-list
             import numpy as np
 
             inp = probe.session.get_inputs()[0]
@@ -189,8 +189,9 @@ def run(report_path: Path, photos: Path | None = None) -> int:
                               "media": {"loaded": media.report_loaded(), "unavailable": media.report_unavailable()}}
         opened_not_verified = [i for i in report["report_a"]["personal"]["opened"]
                                if not registry.policy.verified(i)]
-        if opened_not_verified:
-            raise RuntimeError(f"weights opened outside the allow-list: {opened_not_verified}")
+        bypassed = [k for k in report["report_a"]["personal"]["skipped"] if k.startswith("?")]
+        if opened_not_verified or bypassed:
+            raise RuntimeError(f"weights opened outside the allow-list: {opened_not_verified + bypassed}")
         step(f"report A: {len(report['report_a']['personal']['opened'])} opened, "
              f"{len(report['report_a']['personal']['skipped'])} skipped")
         if report["network_attempts"]:

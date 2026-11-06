@@ -104,9 +104,14 @@ def test_each_verified_weight_missing_in_turn(tmp_path: Path, missing: str) -> N
 
 def test_self_test_without_any_weight_fails_honestly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import json
+    import socket
 
     from app import selftest
 
+    for name in ("connect", "connect_ex"):  # the self-test blocks the network for good: restore it afterwards
+        monkeypatch.setattr(socket.socket, name, getattr(socket.socket, name))
+    monkeypatch.setattr(socket, "create_connection", socket.create_connection)
+    monkeypatch.setattr(socket, "getaddrinfo", socket.getaddrinfo)
     monkeypatch.setenv("KIRAPICK_MODELS_DIR", str(tmp_path / "empty"))
     (tmp_path / "empty").mkdir()
     report = tmp_path / "r.json"
