@@ -12,8 +12,8 @@ on:
   workflow_dispatch:
     inputs:
       editions:
-        description: "Editions to build (comma-separated: directml,cuda,openvino)"
-        default: "directml,cuda,openvino"
+        description: "Editions to build (comma-separated: directml,cuda,openvino; empty = all three, or none when inspect_release is set)"
+        default: ""
       run_perf:
         description: "Also run the Windows tests: full suite, GUI smoke, Snap/DPI, performance, stress (no build needed)"
         type: boolean
