@@ -22,6 +22,9 @@ on:
         description: "K2: P/X latency repeatability, 20 fresh-process runs per test, measurement only (editions=none)"
         type: boolean
         default: false
+      inspect_release:
+        description: "Rights inventory: JSON list of published release tags, e.g. [\"v3.0.0\",\"v3.0.0a\"] (editions=none). Downloads, installs silently, lists files + SHA-256; never runs the app"
+        default: ""
   push:
     branches: [main, beta]
 
@@ -348,6 +351,64 @@ jobs:
   # in a commit message. Each part prints its OWN notice (suite / gui-windows / snap-dpi / perf / stress): the job is
   # non-blocking, so a green job is not evidence that any part passed (review RV14-01) — read the notices.
   # K2: P/X latency repeatability (measurement only; thresholds live in the perf tests and are unchanged).
+  # Rights inventory (docs/legal/kiem-ke-quyen-su-dung.md): what a PUBLISHED installer really contains. Downloads the
+  # release assets, checks them against GitHub's digests, installs silently on this throw-away runner and lists every
+  # installed file with its SHA-256. KiraPick.exe is never started, so no model is loaded; nothing is built or published.
+  inspect-release:
+    if: github.event.inputs.inspect_release != ''
+    runs-on: windows-2022
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ${{ fromJson(github.event.inputs.inspect_release) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download, verify, install silently, inventory
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ matrix.tag }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $PWD "inventory"; New-Item -ItemType Directory -Force $out | Out-Null
+          $rel = gh api "repos/${{ github.repository }}/releases/tags/$env:TAG" | ConvertFrom-Json
+          $dl = Join-Path $env:RUNNER_TEMP "dl"; New-Item -ItemType Directory -Force $dl | Out-Null
+          $assets = @()
+          foreach ($a in $rel.assets) {
+            gh release download $env:TAG --repo "${{ github.repository }}" -p $a.name -D $dl --clobber
+            $sha = (Get-FileHash (Join-Path $dl $a.name) -Algorithm SHA256).Hash.ToLower()
+            $assets += [pscustomobject]@{ name = $a.name; bytes = $a.size; sha256 = $sha; github_digest = $a.digest; match = ("sha256:$sha" -eq $a.digest) }
+          }
+          $zip = Get-ChildItem $dl -Filter "*-BoCai.zip" | Select-Object -First 1
+          if ($zip) { Expand-Archive $zip.FullName (Join-Path $dl "x") ; $root = Join-Path $dl "x" } else { $root = $dl }
+          $setup = Get-ChildItem $root -Recurse -Filter "KiraPick-Setup-*.exe" | Select-Object -First 1
+          $app = Join-Path $env:LOCALAPPDATA "Programs\KiraPick"
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOICONS" -Wait
+          Get-Process KiraPick -ErrorAction SilentlyContinue | Stop-Process -Force
+          $files = Get-ChildItem $app -Recurse -File | ForEach-Object {
+            [pscustomobject]@{ path = $_.FullName.Substring($app.Length + 1); bytes = $_.Length; sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() } }
+          $models = @($files | Where-Object { $_.path -like "models\*" })
+          $sidecars = @{}
+          foreach ($m in $models | Where-Object { $_.path -like "*.sha256" }) { $sidecars[$m.path] = (Get-Content (Join-Path $app $m.path) -Raw).Trim() }
+          $docs = @($files | Where-Object { $_.path -like "docs\*" } | ForEach-Object { $_.path })
+          $licTexts = @{}
+          foreach ($d in $docs) { $t = Get-Content (Join-Path $app $d) -Raw -ErrorAction SilentlyContinue
+            $licTexts[$d] = [pscustomobject]@{ apache2_full = [bool]($t -match "TERMS AND CONDITIONS FOR USE, REPRODUCTION"); lgpl3_full = [bool]($t -match "GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3"); lgpl21_full = [bool]($t -match "GNU LESSER GENERAL PUBLIC LICENSE\s+Version 2\.1"); ccby4_full = [bool]($t -match "Attribution 4\.0 International"); mentions_polyform = [bool]($t -match "PolyForm"); mentions_insightface = [bool]($t -match "InsightFace") } }
+          $report = [pscustomobject]@{ tag = $env:TAG; target = $rel.target_commitish; release_name = $rel.name; prerelease = $rel.prerelease; assets = $assets; installed_root = $app; file_count = $files.Count; models = $models; model_sidecars = $sidecars; docs = $docs; doc_license_texts = $licTexts; app_started = $false }
+          $report | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $out "inventory-$env:TAG.json") -Encoding UTF8
+          $files | ConvertTo-Json -Depth 3 | Set-Content (Join-Path $out "installed-files-$env:TAG.json") -Encoding UTF8
+          $lines = @("assets: " + (($assets | ForEach-Object { "$($_.name) match=$($_.match)" }) -join "; "))
+          $lines += "installed files: $($files.Count); models: " + (($models | Where-Object { $_.path -notlike '*.sha256' } | ForEach-Object { Split-Path $_.path -Leaf }) -join ", ")
+          $lines += "docs: " + ($docs -join ", ")
+          Write-Host "::notice title=inventory $env:TAG::$($lines -join '%0A')"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: inventory-${{ matrix.tag }}
+          path: inventory/
+          retention-days: 30
+
   k2-repeat:
     if: github.event.inputs.k2_repeat == 'true'
     runs-on: windows-2022
