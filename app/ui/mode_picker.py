@@ -33,15 +33,17 @@ SIDE_BY_SIDE_MIN_W = 760  # narrower: the cards stack
 IMAGES_MIN_H = 420  # lower window: the cards keep only their name and description
 STACKED_IMAGES_MIN_H = 760  # stacked cards need twice the height for their pictures
 FOCUS_BORDER = 3
+FOCUS_Y = {"personal": 0.3, "event": 0.45}  # keep the cosplayer's face / the stage in view
 PICTURE_RATIO = 0.48  # height / width of the illustrations (as in the mockup)
 
 
 class _Picture(QWidget):
     """The card's illustration, scaled to cover its area (cropped, never stretched), with rounded top corners."""
 
-    def __init__(self, path: str | None, parent: QWidget | None = None) -> None:
+    def __init__(self, path: str | None, focus_y: float = 0.5, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._pixmap = QPixmap(path) if path else QPixmap()
+        self._focus_y = focus_y  # which part stays in view when the photo is cropped to the card (0 top, 1 bottom)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setMinimumHeight(60)
 
@@ -61,7 +63,7 @@ class _Picture(QWidget):
             return
         scaled = self._pixmap.scaled(rect.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                      Qt.TransformationMode.SmoothTransformation)
-        source = QRect((scaled.width() - rect.width()) // 2, (scaled.height() - rect.height()) // 2,
+        source = QRect((scaled.width() - rect.width()) // 2, int((scaled.height() - rect.height()) * self._focus_y),
                        rect.width(), rect.height())
         painter.drawPixmap(rect, scaled, source)
 
@@ -81,7 +83,7 @@ class ModeCard(QFrame):
         self.setAccessibleDescription(text)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         path = mode_image_path(mode)
-        self.picture = _Picture(str(path) if path else None, self)
+        self.picture = _Picture(str(path) if path else None, FOCUS_Y.get(mode, 0.5), self)
         self.title = QLabel(title)
         font = QFont(self.title.font())
         font.setPointSizeF(font.pointSizeF() * 1.6)

@@ -42,12 +42,13 @@ def icon_path() -> Path | None:
 
 
 def mode_image_path(name: str) -> Path | None:
-    """The mode picker's illustration ``name`` ("personal" / "event"), from the source tree or a packaged build."""
+    """The mode picker's photo ``name`` ("personal" / "event"; the owner's own photos), from the source tree or a
+    packaged build."""
     import sys
 
     here = Path(__file__).resolve().parents[1]
-    for candidate in (Path(getattr(sys, "_MEIPASS", here)) / "assets" / "modes" / f"{name}.png",
-                      here / "packaging" / "modes" / f"{name}.png"):
+    for candidate in (Path(getattr(sys, "_MEIPASS", here)) / "assets" / "modes" / f"{name}.jpg",
+                      here / "packaging" / "modes" / f"{name}.jpg"):
         if candidate.is_file():
             return candidate
     return None
