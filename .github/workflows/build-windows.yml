@@ -382,10 +382,20 @@ jobs:
           }
           $zip = Get-ChildItem $dl -Filter "*-BoCai.zip" | Select-Object -First 1
           if ($zip) { Expand-Archive $zip.FullName (Join-Path $dl "x") ; $root = Join-Path $dl "x" } else { $root = $dl }
-          $setup = Get-ChildItem $root -Recurse -Filter "KiraPick-Setup-*.exe" | Select-Object -First 1
-          $app = Join-Path $env:LOCALAPPDATA "Programs\KiraPick"
+          # Portable zip (if published): list and hash its model files without installing anything
+          $portable = Get-ChildItem $dl -Filter "*-portable.zip" | Select-Object -First 1
+          if ($portable) {
+            $px = Join-Path $env:RUNNER_TEMP "portable"; Expand-Archive $portable.FullName $px -Force
+            $pm = @(Get-ChildItem $px -Recurse -File | Where-Object { $_.DirectoryName -like "*\models" } | ForEach-Object { "$($_.Name) $($_.Length) $((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())" })
+            Write-Host "::notice title=inventory portable $env:TAG::$($portable.Name)%0A$($pm -join '%0A')"
+            Remove-Item -Recurse -Force $px
+          }
+          $setup = Get-ChildItem $root -Recurse -Filter "*Setup*.exe" | Select-Object -First 1
+          $before = @(Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs") -Directory -ErrorAction SilentlyContinue | ForEach-Object Name)
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOICONS" -Wait
-          Get-Process KiraPick -ErrorAction SilentlyContinue | Stop-Process -Force
+          Get-Process KiraPick, "Snorlu*" -ErrorAction SilentlyContinue | Stop-Process -Force
+          # The installed folder: the one holding a models folder (older versions used other names)
+          $app = (Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs") -Directory | Where-Object { Test-Path (Join-Path $_.FullName "models") } | Select-Object -First 1).FullName
           $files = Get-ChildItem $app -Recurse -File | ForEach-Object {
             [pscustomobject]@{ path = $_.FullName.Substring($app.Length + 1); bytes = $_.Length; sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() } }
           $models = @($files | Where-Object { $_.path -like "models\*" })
