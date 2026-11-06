@@ -137,7 +137,7 @@
 |---|---|---|---|---|
 | YuNet | có (MIT) | có theo giấy phép trọng số; dữ liệu WIDER FACE **chưa xác minh** | có (MIT) | thông báo MIT |
 | SFace | có (Apache-2.0) | như trên; dữ liệu **chưa xác minh** | có | toàn văn Apache-2.0; ghi rõ đã đổi sang float16 |
-| YOLOX-S / -M | có (LICENSE Apache-2.0 của repo) | có theo LICENSE repo; phạm vi với trọng số **chưa xác minh** | như cột trước | toàn văn Apache-2.0; ghi rõ float16 (M) |
+| YOLOX-S / -M | có (LICENSE Apache-2.0 của repo) | **căn cứ chưa đầy đủ** (mức B, xem `phuong-an-3.0.1.md` mục 1.1): LICENSE nằm ở repo mã; phạm vi với trọng số **chưa xác minh** | như cột trước | toàn văn Apache-2.0; ghi rõ float16 (M) |
 | eDifFIQA | có (CC BY 4.0) | có | có | ghi công + đường dẫn giấy phép (đã có ghi công) |
 | MediaPipe mesh / blendshapes | có (model card Apache-2.0) | **chưa xác minh** (giấy phép của file `.task`) | **chưa xác minh** | ghi rõ đã chuyển sang ONNX |
 | **ArcFace** | **chưa xác minh** | **không có căn cứ** | **không có căn cứ** cho người dùng thương mại | — |
