@@ -391,6 +391,10 @@ jobs:
             Remove-Item -Recurse -Force $px
           }
           $setup = Get-ChildItem $root -Recurse -Filter "*Setup*.exe" | Select-Object -First 1
+          # Every installer file (standalone asset and the one inside BoCai.zip), to show whether they are the same file
+          $ins = @(Get-ChildItem $dl -Recurse -File | Where-Object { $_.Name -like "*Setup*" -and $_.Extension -in ".exe", ".bin" } | ForEach-Object {
+            "$($_.FullName.Substring($dl.Length + 1)) $($_.Length) $((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())" })
+          Write-Host "::notice title=installers $env:TAG::installed: $($setup.FullName.Substring($dl.Length + 1))%0A$($ins -join '%0A')"
           $before = @(Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs") -Directory -ErrorAction SilentlyContinue | ForEach-Object Name)
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOICONS" -Wait
           Get-Process KiraPick, "Snorlu*" -ErrorAction SilentlyContinue | Stop-Process -Force
