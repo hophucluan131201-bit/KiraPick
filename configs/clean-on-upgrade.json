@@ -1,0 +1,31 @@
+{
+  "_comment": "CLEAN-1 (LIC-1 S8): files an older KiraPick installer put in the installation folder that this version does not ship and that must not stay. Exact paths only, no wildcard, so a file the user put there is never touched (user data lives in %LOCALAPPDATA%\\KiraPick, not here). Source: inventory of the published v3.0.0 / v3.0.0a installers (CI run 42199575662) and of v0.2.0b1..v2.2.1 (runs 42208112442, 42245312724, 42245711312), which use the same file names. packaging/installer.iss [InstallDelete] must list exactly these (tests/unit/test_packaging.py).",
+  "files": [
+    "models\\w600k_r50.onnx",
+    "models\\w600k_r50.onnx.sha256",
+    "models\\person_reid_youtu_2021nov.onnx",
+    "models\\person_reid_youtu_2021nov.onnx.sha256",
+    "models\\topiq_iaa_res50.onnx",
+    "models\\topiq_iaa_res50.onnx.sha256",
+    "models\\topiq_nr_koniq_res50.onnx",
+    "models\\topiq_nr_koniq_res50.onnx.sha256",
+    "models\\topiq_nr_face_res50.onnx",
+    "models\\topiq_nr_face_res50.onnx.sha256",
+    "models\\face_recognition_sface_2021dec.onnx",
+    "models\\face_recognition_sface_2021dec.onnx.sha256",
+    "models\\clip_l14_image.onnx",
+    "models\\clip_l14_image.onnx.sha256",
+    "models\\clip_prompts_v1.npz",
+    "models\\clip_prompts_v1.npz.sha256",
+    "models\\laion_aesthetic.onnx",
+    "models\\laion_aesthetic.onnx.sha256",
+    "models\\yolox_m.onnx.sha256",
+    "_internal\\cv2\\opencv_videoio_ffmpeg4140_64.dll",
+    "_internal\\onnxruntime\\capi\\onnxruntime_providers_tensorrt.dll",
+    "_internal\\nvidia\\cublas\\bin\\cublas64_12.dll",
+    "_internal\\nvidia\\cublas\\bin\\cublasLt64_12.dll",
+    "_internal\\nvidia\\cudnn\\bin\\cudnn_graph64_9.dll",
+    "_internal\\nvidia\\cudnn\\bin\\cudnn_ops64_9.dll",
+    "_internal\\nvidia\\cufft\\bin\\cufft64_11.dll"
+  ]
+}

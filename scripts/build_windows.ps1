@@ -94,28 +94,10 @@ try {
 Step "3/6 Mô hình AI (kiểm tra SHA-256)"
 $models = Join-Path $Root "build\models"
 New-Item -ItemType Directory -Force -Path $models | Out-Null
-Get-ChildItem "models\weights\*.onnx" -ErrorAction SilentlyContinue | ForEach-Object {
-    if (-not (Test-Path (Join-Path $models $_.Name))) { Copy-Item $_.FullName $models }
-}
-Invoke-Tool "Tải mô hình AI" $bpy @("scripts\fetch_models.py", "--purpose", "identity,identity_plus,quality,gpu", "--dest", $models)
-
-# Converted from PyTorch checkpoints in a separate, build-only venv: TOPIQ (aesthetic, technical,
-# face quality) and CLIP ViT-L/14 + LAION aesthetic + style prompts.
-$converted = @("topiq_iaa_res50.onnx", "topiq_nr_koniq_res50.onnx", "topiq_nr_face_res50.onnx",
-               "clip_l14_image.onnx", "laion_aesthetic.onnx", "clip_prompts_v1.npz")
-$missing = @($converted | Where-Object { -not (Test-Path (Join-Path $models "$_.sha256")) })
-if ($missing) {
-    if (-not (Test-Path ".venv-convert\Scripts\python.exe")) {
-        Invoke-Tool "Tạo .venv-convert" $pyExe ($pyArgs + @("-m", "venv", ".venv-convert"))
-    }
-    $cpy = Join-Path $Root ".venv-convert\Scripts\python.exe"
-    Invoke-Tool "Cài công cụ chuyển đổi" $cpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "packaging\requirements-convert.txt")
-    Invoke-Tool "Cài pyiqa" $cpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "--no-deps", "pyiqa==0.1.14.1")
-    Invoke-Tool "Chuyển các mô hình TOPIQ" $cpy @("scripts\convert_topiq.py", "--out", $models, "--variant", "all")
-    Invoke-Tool "Chuyển CLIP + LAION" $cpy @("scripts\convert_clip.py", "--out", $models)
-    Get-ChildItem $models -Filter "*.pth" | Remove-Item  # checkpoints are not shipped
-    Get-ChildItem $models -Filter "*.pt" | Remove-Item
-}
+# LIC-1 S8: only the weights configs/model-policy.json verifies are fetched (fetch_models.py skips pending / never
+# ones); nothing else is copied in from the build machine, and nothing is converted from PyTorch checkpoints any more
+# (TOPIQ never, CLIP / LAION pending).
+Invoke-Tool "Tải mô hình AI (chỉ file trong danh sách cho phép)" $bpy @("scripts\fetch_models.py", "--purpose", "identity,quality,gpu", "--dest", $models)
 
 # Large models: weights stored as float16 (half the size; checked against the originals).
 Invoke-Tool "Cài onnx (chỉ để thu gọn mô hình)" $bpy @("-m", "pip", "install", "--disable-pip-version-check", "-q", "onnx==1.23.2")
@@ -126,9 +108,8 @@ $dist = Join-Path $Root "dist\KiraPick"
 if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
 Invoke-Tool "PyInstaller" $bpy @("-m", "PyInstaller", "--noconfirm", "--clean", "--workpath", "build\pyi", "--distpath", "dist", "packaging\kirapick.spec")
 New-Item -ItemType Directory -Force -Path (Join-Path $dist "models") | Out-Null
+# The weights only: their SHA-256 is pinned in the allow-list, side files (*.sha256) are not shipped any more
 Copy-Item (Join-Path $models "*.onnx") (Join-Path $dist "models")
-Copy-Item (Join-Path $models "*.npz") (Join-Path $dist "models")
-Copy-Item (Join-Path $models "*.sha256") (Join-Path $dist "models")
 
 Step "5/6 Tự kiểm tra bản đóng gói (chặn mạng)"
 $report = Join-Path $Root "dist\selftest.json"
@@ -178,8 +159,17 @@ foreach ($d in @($out, $notes)) {
     New-Item -ItemType Directory -Force -Path $d | Out-Null
 }
 Copy-Item "packaging\notes\*" $notes
-Copy-Item "LICENSE.md", "THIRD_PARTY_NOTICES.md", "docs\model-licenses.md" $notes
+Copy-Item "LICENSE.md", "THIRD_PARTY_NOTICES.md" $notes  # model-licenses.md is development history (LIC-1)
 Copy-Item "packaging\notes\HUONG_DAN_CAI_DAT.txt", "LICENSE.md" $dist
+# LIC-1 S10: the full licence texts, collected from the repository and from the packages of this build
+Invoke-Tool "Giấy phép (toàn văn)" $bpy @("scripts\collect_licenses.py", "--dest", (Join-Path $notes "licenses"), "--edition", $Edition)
+# The same documents inside the program folder, so the portable zip carries them too
+Copy-Item $notes (Join-Path $dist "docs") -Recurse -Force
+# LIC-1 S8 gate: weights = the allow-list, no weight elsewhere, no FFmpeg / TensorRT / duplicate NVIDIA DLL, licences
+$gate = Join-Path $Root "dist\package-check-$Edition.json"
+& $bpy "scripts\check_package.py" $dist "--edition" $Edition "--json" $gate
+if ($LASTEXITCODE -eq 3) { Write-Host "Lưu ý: bản CUDA có DLL cuDNN 9 (căn cứ phân phối chờ xác minh, LIC-7)" }
+elseif ($LASTEXITCODE -ne 0) { throw "Kiểm tra gói thất bại (xem $gate)" }
 
 $guide = Join-Path $Root "packaging\notes\HUONG_DAN_CAI_DAT.txt"
 # An internal test (".dev") or a beta (pre-release) build: its own installer identity (packaging\installer.iss),

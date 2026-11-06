@@ -379,6 +379,9 @@ jobs:
         tag: ${{ fromJson(github.event.inputs.inspect_release) }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - name: Download, verify, install silently, inventory
         shell: pwsh
         env:
@@ -415,6 +418,10 @@ jobs:
           Get-Process KiraPick, "Snorlu*" -ErrorAction SilentlyContinue | Stop-Process -Force
           # The installed folder: the one holding a models folder (older versions used other names)
           $app = (Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs") -Directory | Where-Object { Test-Path (Join-Path $_.FullName "models") } | Select-Object -First 1).FullName
+          # LIC-1 acceptance P1-P4 on what is really installed (old releases are expected to fail: information only)
+          $ed = if ($env:TAG -match "a$") { "cuda" } else { "directml" }
+          python scripts/check_package.py $app --edition $ed --json (Join-Path $out "package-check.json") *>&1 | Tee-Object -Variable pc | Out-Null
+          Write-Host "::notice title=package check $env:TAG::$(($pc | Select-Object -Last 12) -join '%0A')"
           $files = Get-ChildItem $app -Recurse -File | ForEach-Object {
             [pscustomobject]@{ path = $_.FullName.Substring($app.Length + 1); bytes = $_.Length; sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() } }
           $models = @($files | Where-Object { $_.path -like "models\*" })

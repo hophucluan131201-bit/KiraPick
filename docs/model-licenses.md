@@ -1,5 +1,11 @@
 # Model weights and licenses
 
+> **Since LIC-1 (2026-11-06) the allow-list `configs/model-policy.json` decides which weights are shipped and opened**
+> (verified: YOLOX-S/M, YuNet, eDifFIQA, MediaPipe ×2; pending: SFace, CLIP + prompts, LAION, YoutuReID; never:
+> ArcFace, TOPIQ ×3). The per-file basis is in `docs/legal/phuong-an-3.0.1.md` (appendix B); what a package carries
+> is listed in `THIRD_PARTY_NOTICES.md`. The table below is the development history and still describes the
+> weights earlier versions shipped; it is not copied into the installer any more.
+
 Pinned in [`configs/model-manifest.json`](../configs/model-manifest.json) (SHA-256, size, source URL).
 Fetched once with `scripts/fetch_models.py` into `models/weights/` (git-ignored). The app verifies
 the hash before use and never downloads at runtime.

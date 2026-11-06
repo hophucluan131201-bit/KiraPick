@@ -1,50 +1,50 @@
 # Third-party notices
 
-Software
-- Python 3.12 - PSF License
-- Qt 6 / PySide6 6.12 (Essentials) - LGPL-3.0. Qt libraries are shipped as separate,
-  replaceable DLLs in this folder; source: https://download.qt.io / https://code.qt.io
-- OpenCV 4.14 (opencv-python-headless) - Apache-2.0
-- ONNX Runtime 1.24 (DirectML build) - MIT; DirectML.dll - Microsoft DirectML redistributable
-  license (redistributed with the app as permitted)
-- NumPy - BSD-3-Clause
-- Pillow - MIT-CMU (HPND)
-- rawpy - MIT; LibRaw - LGPL-2.1 or CDDL-1.0
-- ExifRead - BSD-3-Clause
-- PyYAML - MIT
-- CUDA edition only: ONNX Runtime GPU build - MIT; NVIDIA CUDA runtime, cuBLAS, cuFFT, cuRAND, NVRTC and
-  cuDNN DLLs from NVIDIA's pip wheels - NVIDIA software license agreements (runtime libraries
-  redistributable with applications)
-- OpenVINO edition only: ONNX Runtime OpenVINO Execution Provider and Intel OpenVINO 2025.4 - Apache-2.0
-- PyInstaller bootloader - GPL-2.0 with the PyInstaller bootloader exception
-- Microsoft Visual C++ runtime DLLs (msvcp140*, vcruntime140_1, concrt140, vcomp140) - redistributed
-  app-locally under the Microsoft Visual C++ Redistributable license terms
+The full licence texts are in `docs\licenses\` (see `INDEX.txt` there). They are collected at build time by
+`scripts/collect_licenses.py`; `scripts/check_package.py` refuses a package without them.
 
-AI model weights (bundled, verified by SHA-256; see docs/model-licenses.md in the source)
-- YuNet face detector 2023mar (OpenCV Zoo) - MIT, Shiqi Yu
-- SFace face recognition 2021dec (OpenCV Zoo) - Apache-2.0
-- YOLOX-S and YOLOX-M (Megvii-BaseDetection/YOLOX 0.1.1rc0) - Apache-2.0
-- MediaPipe Face Landmarker v2 (face mesh + blendshapes, Google) - Apache-2.0; converted to ONNX
-  (scripts/convert_mediapipe.py)
-- TOPIQ image aesthetics (CFANet, ResNet50, AVA) from IQA-PyTorch - PolyForm Noncommercial 1.0.0,
-  Copyright (c) 2022 Chaofeng Chen; C. Chen et al., "TOPIQ: A Top-down Approach from Semantics to
-  Distortions for Image Quality Assessment", IEEE TIP 2024. Non-commercial use only.
-- TOPIQ technical quality (CFANet NR, KonIQ-10k) and TOPIQ face quality (CGFIQA-40k) from
-  IQA-PyTorch - PolyForm Noncommercial 1.0.0, Copyright (c) 2022 Chaofeng Chen. Non-commercial use only.
-- OpenAI CLIP ViT-L/14 image encoder - code MIT (Copyright (c) 2021 OpenAI); OpenAI's model card calls
-  any deployed use out of scope and excludes face recognition; used for aesthetics and personal taste only.
-  Radford et al., "Learning Transferable Visual Models From Natural Language Supervision", ICML 2021.
-- LAION improved aesthetic predictor (sac+logos+ava1-l14-linearMSE) - Apache-2.0, C. Schuhmann / LAION
-- ArcFace face recognition (ResNet50, WebFace600K; w600k_r50.onnx from InsightFace buffalo_l,
-  release v0.7) - InsightFace pretrained models are "available for non-commercial research
-  purposes only". Deng et al., "ArcFace: Additive Angular Margin Loss for Deep Face Recognition",
-  CVPR 2019; https://github.com/deepinsight/insightface. Non-commercial use only.
-- YoutuReID person re-identification 2021nov (OpenCV Zoo, Tencent Youtu Lab) - Apache-2.0.
-  Trained on the research datasets Market-1501, DukeMTMC-reID and MSMT17.
-- eDifFIQA(T) face image quality jun2024 (OpenCV Zoo) - CC BY 4.0.
-  Attribution: Ž. Babnik, P. Peer, V. Štruc, "eDifFIQA: Towards Efficient Face Image
-  Quality Assessment based on Denoising Diffusion Probabilistic Models",
-  IEEE Transactions on Biometrics, Behavior, and Identity Science, 2024.
-  https://github.com/LSIbabnikz/eDifFIQA
+## Software
 
-No component downloads anything at run time; the application works with networking disabled.
+- Python 3.13 — PSF License (`Python-LICENSE.txt`); Python packages of the build with their licences:
+  `python-packages.txt`
+- Qt 6 / PySide6 6.12 (Essentials) — LGPL-3.0 (`LGPL-3.0.txt`, which supplements `GPL-3.0.txt`). The Qt libraries
+  are separate, replaceable DLLs in this folder; source: https://download.qt.io / https://code.qt.io
+- OpenCV 4.14 (opencv-python-headless) — Apache-2.0 (`Apache-2.0.txt`); packaging MIT (`opencv-python-LICENSE.txt`);
+  bundled libraries: `opencv-LICENSE-3RD-PARTY.txt`. The video module's FFmpeg library is not shipped (the app
+  reads no video).
+- ONNX Runtime 1.24 — MIT (`onnxruntime-LICENSE.txt`), notices `onnxruntime-ThirdPartyNotices.txt`
+- DirectML edition: DirectML.dll 1.15.4 — Microsoft DirectML licence terms (`DirectML-LICENSE.txt`,
+  `DirectML-ThirdPartyNotices.txt`), redistributed in this application as those terms allow
+- CUDA edition: ONNX Runtime GPU — MIT; NVIDIA CUDA runtime, cuBLAS, cuFFT, cuRAND, NVRTC and cuDNN DLLs from
+  NVIDIA's pip wheels — NVIDIA licence agreements (`NVIDIA-*-License.txt`). The TensorRT provider is not shipped.
+- OpenVINO edition: ONNX Runtime OpenVINO Execution Provider and Intel OpenVINO — Apache-2.0
+- rawpy — MIT (`rawpy-LICENSE.txt`); LibRaw — LGPL-2.1 or CDDL-1.0 (`LibRaw-LICENSE.txt`, `LGPL-2.1.txt`)
+- NumPy — BSD-3-Clause; Pillow — MIT-CMU (HPND); ExifRead — BSD-3-Clause; PyYAML — MIT
+- PyInstaller bootloader — GPL-2.0 with the PyInstaller bootloader exception
+- Microsoft Visual C++ runtime DLLs (msvcp140*, vcruntime140_1, concrt140, vcomp140) — redistributed app-locally
+  under the Microsoft Visual C++ Redistributable licence terms
+
+## AI model weights in this package
+
+Every weight file is pinned by SHA-256 in `configs/model-policy.json`; the app opens no other file.
+
+- YOLOX-S and YOLOX-M person detectors (Megvii-BaseDetection/YOLOX, release 0.1.1rc0) — Apache-2.0
+  (`Apache-2.0.txt`), Copyright (c) Megvii Inc. YOLOX-M is stored with float16 weights (changed from the original).
+- YuNet face detector 2023mar (OpenCV Zoo) — MIT, Copyright (c) 2020 Shiqi Yu (`MIT-YuNet.txt`); training
+  repository libfacedetection.train — BSD-3-Clause (`BSD-3-Clause-libfacedetection.train.txt`)
+- eDifFIQA(T) face image quality jun2024 (OpenCV Zoo) — CC BY 4.0 (`CC-BY-4.0.txt`,
+  https://creativecommons.org/licenses/by/4.0/). Attribution: Ž. Babnik, P. Peer, V. Štruc, "eDifFIQA: Towards
+  Efficient Face Image Quality Assessment based on Denoising Diffusion Probabilistic Models", IEEE Transactions on
+  Biometrics, Behavior, and Identity Science, 2024; https://github.com/LSIbabnikz/eDifFIQA. Used unchanged.
+- MediaPipe Face Landmarker v2: face mesh and blendshapes (Google) — Apache-2.0 per Google's model cards
+  (`Apache-2.0.txt`). Changed from the original: converted from `face_landmarker.task` (SHA-256 64184e22…c9ff) to
+  ONNX with `scripts/convert_mediapipe.py`.
+
+No component downloads anything at run time; the application works with networking disabled (the only exception is
+the update check the user starts in ⚙ Tuỳ chọn → Cập nhật KiraPick).
+
+## Not shipped
+
+Weights that earlier versions shipped and this one neither ships nor opens (licence terms, or no basis for paid
+work yet): InsightFace ArcFace (w600k_r50), TOPIQ aesthetic / technical / face quality, YoutuReID, SFace, OpenAI CLIP
+ViT-L/14 with its style prompts, and the LAION aesthetic head. See docs/legal/phuong-an-3.0.1.md in the source.

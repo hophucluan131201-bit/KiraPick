@@ -108,9 +108,40 @@ Name: "vi"; MessagesFile: "compiler:Languages\Vietnamese.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+; CLEAN-1 (LIC-1 S8): files an older installer put here that this version does not ship. Exact names only (no
+; wildcard), so nothing the user put in the folder is touched; user data is in %LOCALAPPDATA%\KiraPick. Generated
+; from configs/clean-on-upgrade.json (tests/unit/test_packaging.py keeps both equal).
+[InstallDelete]
+Type: files; Name: "{app}\models\w600k_r50.onnx"
+Type: files; Name: "{app}\models\w600k_r50.onnx.sha256"
+Type: files; Name: "{app}\models\person_reid_youtu_2021nov.onnx"
+Type: files; Name: "{app}\models\person_reid_youtu_2021nov.onnx.sha256"
+Type: files; Name: "{app}\models\topiq_iaa_res50.onnx"
+Type: files; Name: "{app}\models\topiq_iaa_res50.onnx.sha256"
+Type: files; Name: "{app}\models\topiq_nr_koniq_res50.onnx"
+Type: files; Name: "{app}\models\topiq_nr_koniq_res50.onnx.sha256"
+Type: files; Name: "{app}\models\topiq_nr_face_res50.onnx"
+Type: files; Name: "{app}\models\topiq_nr_face_res50.onnx.sha256"
+Type: files; Name: "{app}\models\face_recognition_sface_2021dec.onnx"
+Type: files; Name: "{app}\models\face_recognition_sface_2021dec.onnx.sha256"
+Type: files; Name: "{app}\models\clip_l14_image.onnx"
+Type: files; Name: "{app}\models\clip_l14_image.onnx.sha256"
+Type: files; Name: "{app}\models\clip_prompts_v1.npz"
+Type: files; Name: "{app}\models\clip_prompts_v1.npz.sha256"
+Type: files; Name: "{app}\models\laion_aesthetic.onnx"
+Type: files; Name: "{app}\models\laion_aesthetic.onnx.sha256"
+Type: files; Name: "{app}\models\yolox_m.onnx.sha256"
+Type: files; Name: "{app}\_internal\cv2\opencv_videoio_ffmpeg4140_64.dll"
+Type: files; Name: "{app}\_internal\onnxruntime\capi\onnxruntime_providers_tensorrt.dll"
+Type: files; Name: "{app}\_internal\nvidia\cublas\bin\cublas64_12.dll"
+Type: files; Name: "{app}\_internal\nvidia\cublas\bin\cublasLt64_12.dll"
+Type: files; Name: "{app}\_internal\nvidia\cudnn\bin\cudnn_graph64_9.dll"
+Type: files; Name: "{app}\_internal\nvidia\cudnn\bin\cudnn_ops64_9.dll"
+Type: files; Name: "{app}\_internal\nvidia\cufft\bin\cufft64_11.dll"
+
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\dist\installer-notes\*"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "..\dist\installer-notes\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\KiraPick.exe"

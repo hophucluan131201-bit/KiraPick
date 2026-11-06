@@ -57,9 +57,16 @@ a = Analysis(
 )
 # Not needed by this widgets-only app: Qt's own translations (the UI text is the app's own; no
 # QTranslator is loaded) and the software OpenGL renderer (no OpenGL / Qt Quick is used).
-_UNUSED = ("translations", "opengl32sw.dll")
+# LIC-1 S8: FFmpeg (opencv_videoio_ffmpeg, LGPL-2.1; the app never reads video) and the TensorRT provider (never
+# used) are not shipped. See docs/legal/danh-sach-file-ban-tiep-theo.md.
+_UNUSED = ("translations", "opengl32sw.dll", "opencv_videoio_ffmpeg4140_64.dll", "onnxruntime_providers_tensorrt.dll")
 a.datas = [d for d in a.datas if not any(u in d[0].replace("\\", "/").split("/") for u in _UNUSED)]
 a.binaries = [b for b in a.binaries if Path(b[0]).name.lower() not in _UNUSED]
+# NVIDIA DLLs once only: the copies next to KiraPick.exe (edition_bins) are the ones loaded; the same files that
+# PyInstaller also collects under nvidia/<pkg>/bin/ are duplicates
+_top = {Path(b[0]).name.lower() for b in a.binaries if "/" not in b[0].replace("\\", "/")}
+a.binaries = [b for b in a.binaries
+              if not (b[0].replace("\\", "/").startswith("nvidia/") and Path(b[0]).name.lower() in _top)]
 
 pyz = PYZ(a.pure)
 exe = EXE(

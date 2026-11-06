@@ -12,16 +12,11 @@ Required Notice: Copyright 2026 KiraPick (https://github.com/hophucluan131201-bi
   "phi thương mại" ở trên chỉ áp dụng cho mã nguồn của KiraPick.
 
 LƯU Ý MIỄN TRỪ TRÁCH NHIỆM
-- Bản này có mô hình AI CHỈ ĐƯỢC DÙNG PHI THƯƠNG MẠI / NGHIÊN CỨU:
-  khuôn mặt ArcFace của InsightFace ("non-commercial research purposes only") và
-  các mô hình chấm ảnh TOPIQ (thẩm mỹ, kỹ thuật, khuôn mặt – PolyForm Noncommercial,
-  huấn luyện trên dữ liệu nghiên cứu AVA, KonIQ-10k, CGFIQA-40k).
-- Mô hình CLIP ViT-L/14 của OpenAI (mã nguồn MIT) dùng để chấm thẩm mỹ (cùng bộ chấm
-  LAION, Apache-2.0) và học gu của bạn. Tài liệu của OpenAI ghi: mọi việc đưa mô hình
-  vào sử dụng thực tế, thương mại hay không, "nằm ngoài phạm vi"; chỉ dùng cho ảnh,
-  không bao giờ để nhận dạng khuôn mặt. KiraPick dùng nó chỉ trên máy bạn, offline. Mô hình dáng người YoutuReID
-  (Apache-2.0) được huấn luyện trên dữ liệu nghiên cứu (Market-1501, DukeMTMC-reID,
-  MSMT17). Bản quyền các mô hình thuộc tác giả của chúng.
+- Bản này KHÔNG có mô hình AI nào chỉ cho phép dùng phi thương mại hay nghiên cứu:
+  ArcFace (InsightFace), các mô hình TOPIQ, YoutuReID, SFace, CLIP và LAION không còn
+  nằm trong bộ cài và app không mở chúng (danh sách cho phép: configs/model-policy.json
+  trong mã nguồn). Các mô hình đi kèm và giấy phép của chúng: docs\THIRD_PARTY_NOTICES.md,
+  toàn văn trong docs\licenses\. Bản quyền các mô hình thuộc tác giả của chúng.
 - Khi cài và dùng bản này, bạn đồng ý chỉ dùng cho mục đích cá nhân, phi thương mại;
   không bán lại, không dùng để kiếm tiền, không dùng để nhận diện người cho dịch vụ,
   giám sát hay theo dõi ai.
@@ -53,37 +48,23 @@ Software
 - ExifRead - BSD-3-Clause
 - PyYAML - MIT
 - CUDA edition only: ONNX Runtime GPU build - MIT; NVIDIA CUDA runtime, cuBLAS, cuFFT, cuRAND, NVRTC and
-  cuDNN DLLs from NVIDIA's pip wheels - NVIDIA software license agreements (runtime libraries
-  redistributable with applications)
+  cuDNN DLLs from NVIDIA's pip wheels - NVIDIA licence agreements (texts in docs\licenses); the TensorRT
+  provider is not shipped
 - OpenVINO edition only: ONNX Runtime OpenVINO Execution Provider and Intel OpenVINO 2025.4 - Apache-2.0
 - PyInstaller bootloader - GPL-2.0 with the PyInstaller bootloader exception
 - Microsoft Visual C++ runtime DLLs (msvcp140*, vcruntime140_1, concrt140, vcomp140) - redistributed
   app-locally under the Microsoft Visual C++ Redistributable license terms
 
-AI model weights (bundled, verified by SHA-256; see docs/model-licenses.md in the source)
-- YuNet face detector 2023mar (OpenCV Zoo) - MIT, Shiqi Yu
-- SFace face recognition 2021dec (OpenCV Zoo) - Apache-2.0
-- YOLOX-S and YOLOX-M (Megvii-BaseDetection/YOLOX 0.1.1rc0) - Apache-2.0
-- MediaPipe Face Landmarker v2 (face mesh + blendshapes, Google) - Apache-2.0; converted to ONNX
-- TOPIQ image aesthetics (CFANet, ResNet50, AVA) from IQA-PyTorch - PolyForm Noncommercial 1.0.0,
-  Copyright (c) 2022 Chaofeng Chen; C. Chen et al., "TOPIQ: A Top-down Approach from Semantics to
-  Distortions for Image Quality Assessment", IEEE TIP 2024. Non-commercial use only.
-- TOPIQ technical quality (CFANet NR, KonIQ-10k) and TOPIQ face quality (CGFIQA-40k) from
-  IQA-PyTorch - PolyForm Noncommercial 1.0.0, Copyright (c) 2022 Chaofeng Chen. Non-commercial use only.
-- OpenAI CLIP ViT-L/14 image encoder - code MIT (Copyright (c) 2021 OpenAI); OpenAI's model card calls
-  any deployed use out of scope and excludes face recognition; used for aesthetics and personal taste only.
-  Radford et al., "Learning Transferable Visual Models From Natural Language Supervision", ICML 2021.
-- LAION improved aesthetic predictor (sac+logos+ava1-l14-linearMSE) - Apache-2.0, C. Schuhmann / LAION
-- ArcFace face recognition (ResNet50, WebFace600K; w600k_r50.onnx from InsightFace buffalo_l,
-  release v0.7) - InsightFace pretrained models are "available for non-commercial research
-  purposes only". Deng et al., "ArcFace: Additive Angular Margin Loss for Deep Face Recognition",
-  CVPR 2019; https://github.com/deepinsight/insightface. Non-commercial use only.
-- YoutuReID person re-identification 2021nov (OpenCV Zoo, Tencent Youtu Lab) - Apache-2.0.
-  Trained on the research datasets Market-1501, DukeMTMC-reID and MSMT17.
-- eDifFIQA(T) face image quality jun2024 (OpenCV Zoo) - CC BY 4.0.
+AI model weights (bundled, each pinned by SHA-256 in configs/model-policy.json; full licence texts in docs\licenses)
+- YOLOX-S and YOLOX-M person detectors (Megvii-BaseDetection/YOLOX 0.1.1rc0) - Apache-2.0; YOLOX-M stored
+  with float16 weights
+- YuNet face detector 2023mar (OpenCV Zoo) - MIT, Copyright (c) 2020 Shiqi Yu
+- eDifFIQA(T) face image quality jun2024 (OpenCV Zoo) - CC BY 4.0, used unchanged.
   Attribution: Ž. Babnik, P. Peer, V. Štruc, "eDifFIQA: Towards Efficient Face Image
   Quality Assessment based on Denoising Diffusion Probabilistic Models",
   IEEE Transactions on Biometrics, Behavior, and Identity Science, 2024.
   https://github.com/LSIbabnikz/eDifFIQA
+- MediaPipe Face Landmarker v2 (face mesh + blendshapes, Google) - Apache-2.0; converted to ONNX
+Not shipped (earlier versions only): ArcFace, TOPIQ, YoutuReID, SFace, CLIP ViT-L/14 + style prompts, LAION head.
 
 No component downloads anything at run time; the application works with networking disabled.
