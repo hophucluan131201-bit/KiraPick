@@ -350,6 +350,12 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     shoot.mkdir()
     for f in photos:
         shutil.copy2(f, shoot / f.name)
+    import hashlib
+
+    def originals() -> dict[str, str]:  # U8: the photos are never changed by import, analysis or grouping
+        return {f.name: hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted(shoot.iterdir())}
+
+    before = originals()
 
     w = _window(qtbot, env)
     if not w.models_ready():
@@ -360,29 +366,40 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     assert w.analyze_thread is None and "🧠 Nhận diện chủ thể" in w.status.text()
     assert w.act_analyze.isEnabled() and not w.act_quality.isEnabled() and not w.act_select.isEnabled()
     w.start_analysis("people")
-    qtbot.waitUntil(lambda: w.analyze_thread is None and "Nhận diện xong" in w.status.text(), timeout=120000)
+    # No verified face recogniser (SFace pending, LIC-1): people are found, grouping is by hand
+    qtbot.waitUntil(lambda: w.analyze_thread is None and "Đã dò người" in w.status.text(), timeout=120000)
+    assert mw.NO_AUTO_GROUPING in w.status.text()
     assert not w.project.conn.execute("SELECT 1 FROM measurements").fetchone()  # no scoring yet
+    assert not w.project.conn.execute("SELECT 1 FROM occurrences WHERE subject_id IS NOT NULL").fetchone()
     assert w.act_quality.isEnabled() and not w.act_select.isEnabled()
     w.start_analysis("quality")
     qtbot.waitUntil(lambda: w.analyze_thread is None and "Phân tích xong" in w.status.text(), timeout=120000)
     assert w.act_select.isEnabled()
+    found = [r[0] for r in w.project.conn.execute(
+        "SELECT DISTINCT asset_id FROM occurrences WHERE is_main = 1 ORDER BY asset_id")]
+    assert len(found) >= 3
+    names = iter(["Người 1", "Người 2", "Người 3"])
+    monkeypatch.setattr(mw.QInputDialog, "getText", lambda *a, **k: (next(names), True))
+    for chunk in ([found[0]], [found[1]], found[2:]):  # grouped by hand
+        assert w.create_subject_from(chunk) is not None
+    w._fill_people()
     subjects = actions.subjects_summary(w.project.conn)
-    assert len(subjects) >= 3  # distinct cosplayers with clear faces
-    kinds = [w.people.item(i).data(Qt.ItemDataRole.UserRole)[0] for i in range(w.people.count())]
-    assert kinds.count("subject") == len(subjects) and "unidentified" in kinds  # DSC_0198: face hidden by hands
+    assert len(subjects) == 3
 
     # Quality: every main person measured on the full-resolution photo, a score shown with its parts.
     measured = w.project.conn.execute(
         "SELECT input_source, values_json FROM measurements WHERE extractor = 'quality'").fetchall()
     assert measured and all(r[0] == "embedded_jpeg" for r in measured)  # full-size camera JPEG, not the thumbnail
     assert any(json.loads(r[1])["eye_sharp"] for r in measured)
+    assert all(json.loads(r[1]).get("aesthetic_mos") is None for r in measured)  # TOPIQ never runs
     w.people.setCurrentRow(0)  # filter the grid to the first person
     first = w.people.item(0).data(Qt.ItemDataRole.UserRole)[1]
-    assert w.model.rowCount() == subjects[0]["photos"]
+    by_id = {r["id"]: r for r in subjects}
+    assert w.model.rowCount() == by_id[first]["photos"]
     assert w.detail.people_label.text().startswith(actions.subject_label(w.project.conn, first))
     explained = w.detail.score_card.text()  # the Phân tích AI tab
-    assert w.detail.score_card.value_text.isdigit() and "Hợp gu cá nhân" in explained and "mắt" in explained
-    assert "thẩm mỹ" in explained  # judged (hint) when the aesthetic model is present, else listed as not judged
+    assert w.detail.score_card.value_text.isdigit() and "mắt" in explained
+    second = w.people.item(1).data(Qt.ItemDataRole.UserRole)[1]
 
     monkeypatch.setattr(mw.QInputDialog, "getText", lambda *a, **k: ("Aki", True))
     w.rename_current_person()
@@ -397,7 +414,7 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     merged = actions.subjects_summary(w.project.conn)
     assert len(merged) == len(subjects) - 1
     aki = next(r for r in merged if r["display_name"] == "Aki")
-    assert aki["photos"] == subjects[0]["photos"] + subjects[1]["photos"]
+    assert aki["photos"] == by_id[first]["photos"] + by_id[second]["photos"]
 
     # Re-running the analysis/grouping keeps the user's merge and name.
     w.start_analysis("people")
@@ -420,6 +437,7 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     w2.start_import(shoot)
     qtbot.waitUntil(lambda: w2.import_thread is None and w2.analyze_thread is None, timeout=60000)
     assert any(r["display_name"] == "Aki" for r in actions.subjects_summary(w2.project.conn))
+    assert originals() == before
 
 
 def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> None:

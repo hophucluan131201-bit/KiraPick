@@ -121,6 +121,14 @@ class ModelRegistry:
     def all_status(self) -> list[ModelStatus]:
         return [self.status(model_id) for model_id in self.specs]
 
+    def can_detect(self) -> bool:
+        """People and faces can be found (YOLOX-S + YuNet): the analysis runs, grouping may still be manual only."""
+        return all(self.status(i).state is ModelState.READY for i in ("person_detector_s", "face_detector"))
+
+    def can_recognise(self) -> bool:
+        """A face recogniser is verified: only then are people grouped automatically (LIC-1 S3)."""
+        return self.status("face_embedder").state is ModelState.READY
+
     def ready(self, purpose: str) -> bool:
         """All models needed for one purpose are present and verified."""
         ids = [i for i, s in self.specs.items() if s.purpose == purpose]

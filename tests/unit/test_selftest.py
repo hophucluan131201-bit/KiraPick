@@ -10,7 +10,7 @@ import pytest
 
 from app.ai.models import ModelRegistry
 
-HAVE = ModelRegistry().ready("identity") and ModelRegistry().ready("quality")
+HAVE = ModelRegistry().can_detect()  # detection weights verified (face recognition is optional, LIC-1)
 
 
 @pytest.mark.skipif(not HAVE, reason="AI models not fetched")

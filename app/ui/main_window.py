@@ -163,6 +163,19 @@ def _long_side(rec: AssetRecord) -> int | None:
     return max(rec.width or 0, rec.height or 0) or None
 
 
+
+NO_AUTO_GROUPING = ("gom người tự động chưa có trong bản này: chọn ảnh, bấm chuột phải → ➕ Tạo chủ thể mới "
+                    "hoặc Gán cho chủ thể…")
+NO_PEOPLE_FOUND = "Ảnh này chưa có người được dò (chưa phân tích, hoặc app không tìm thấy người): chưa gom tay được"
+
+
+def _action_kind(label: str) -> str:
+    for prefix, kind in (("đặt tên", "rename"), ("gộp", "merge"), ("đánh dấu", "mark_different"), ("bỏ", "remove"),
+                         ("xác nhận", "confirm"), ("gán", "assign"), ("tạo chủ thể mới", "create")):
+        if label.startswith(prefix):
+            return kind
+    return "other"
+
 class MainWindow(QMainWindow):
     # "⇄ Đổi chế độ": emitted once the window has released its session and is about to close (app.ui.app_shell)
     mode_change_ready = Signal()
@@ -1207,7 +1220,7 @@ class MainWindow(QMainWindow):
     def models_ready(self) -> bool:
         if self._registry is None:
             self._registry = ModelRegistry()
-        return self._registry.ready("identity")
+        return self._registry.can_detect()
 
     def _step_state(self) -> tuple[int, int, int]:
         """(photos, photos with people detected, photos scored) of the current folder."""
@@ -1337,6 +1350,9 @@ class MainWindow(QMainWindow):
         device = {"cuda": "GPU NVIDIA", "directml": "GPU DirectML", "openvino": "OpenVINO"}.get(summary["device"], "CPU")
         device += f", {_duration(time.monotonic() - getattr(self, '_analysis_started', time.monotonic()))}"
         parts = [f"Nhận diện xong ({device}): {people} chủ thể", f"{unknown} ảnh chưa xác định"]
+        if not summary.get("grouping", True):
+            parts[0] = f"Đã dò người ({device}): {people} chủ thể do bạn gom"
+            parts.append(NO_AUTO_GROUPING)
         if review:
             parts.append(f"{review} gợi ý cần xem lại")
         if summary["failed"]:
@@ -1609,12 +1625,23 @@ class MainWindow(QMainWindow):
     def _run_menu(menu: QMenu, global_pos: object) -> object:
         return menu.exec(global_pos)  # type: ignore[arg-type]  # tests replace this to pick an entry
 
+    def photos_with_people(self, assets: list[int]) -> list[int]:
+        """The photos among ``assets`` where the app found at least one person (manual grouping needs one)."""
+        if self.project is None or not assets:
+            return []
+        marks = ",".join("?" * len(assets))
+        found = {r[0] for r in self.project.conn.execute(
+            f"SELECT DISTINCT asset_id FROM occurrences WHERE asset_id IN ({marks})", assets)}
+        return [a for a in assets if a in found]
+
     def _people_menu_at(self, global_pos: object, assets: list[int]) -> None:
         """People actions for exactly these photos — one menu and one behaviour for the grid and the panel."""
         if self.project is None or not assets:
             return
         menu = QMenu(self)
         flt, target = self.model.current_filter, self.model.current_target
+        # Grouping by hand works on the people the app found: a photo without one cannot join a person (LIC-1 S3)
+        with_people = self.photos_with_people(assets)
         remove = confirm = None
         if flt is Filter.SUBJECT and target is not None:
             name = actions.subject_label(self.project.conn, target)
@@ -1627,12 +1654,25 @@ class MainWindow(QMainWindow):
         for r in actions.subjects_summary(self.project.conn, self._people_order()):  # same order as the list
             if r["id"] != target:
                 targets[assign_menu.addAction(r["display_name"] or f"Chủ thể {r['id']}")] = r["id"]
-        assign_menu.setEnabled(bool(targets))
+        assign_menu.setEnabled(bool(targets) and bool(with_people))
+        if not with_people:
+            new_subject.setEnabled(False)
+            new_subject.setToolTip(NO_PEOPLE_FOUND)
+            assign_menu.setToolTip(NO_PEOPLE_FOUND)
+        elif len(with_people) < len(assets):
+            skipped = len(assets) - len(with_people)
+            note = f"{skipped} ảnh chưa có người được dò sẽ được bỏ qua"
+            new_subject.setToolTip(new_subject.toolTip() + f" ({note})")
+            assign_menu.setToolTip(note)
+        requested, assets = len(assets), with_people or assets
         chosen = self._run_menu(menu, global_pos)
         if chosen is None:
             return
         if chosen is new_subject:
-            self.create_subject_from(assets, target if flt is Filter.SUBJECT else None)
+            if self.create_subject_from(assets, target if flt is Filter.SUBJECT else None) is not None \
+                    and requested > len(assets):
+                self.status.setText(self.status.text()
+                                    + f" {requested - len(assets)} ảnh chưa có người được dò nên chưa gom được.")
             return
         n = f"{len(assets)} ảnh" if len(assets) > 1 else "1 ảnh"
 
@@ -1674,7 +1714,11 @@ class MainWindow(QMainWindow):
             return None  # refused (too large to undo): nothing changed
         subject_id = made[-1]
         self._after_people_change()
-        self.status.setText(f"Đã tạo {actions.subject_label(self.project.conn, subject_id)} với {len(assets)} ảnh.")
+        placed = self.project.conn.execute(
+            "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE subject_id = ?", (subject_id,)).fetchone()[0]
+        skipped = len(assets) - placed
+        self.status.setText(f"Đã tạo {actions.subject_label(self.project.conn, subject_id)} với {placed} ảnh."
+                            + (f" {skipped} ảnh chưa có người được dò nên chưa gom được." if skipped else ""))
         return subject_id
 
     def _selection_text(self, rec: AssetRecord | None) -> str | None:
@@ -2357,6 +2401,8 @@ class MainWindow(QMainWindow):
         """A subject correction as one undoable operation (plain transaction if no history is open)."""
         if self.project is None:
             return False
+        # One local log line per grouping action, for the GRP-1 trial count: the kind only, never names or paths
+        log.info("people action: kind=%s", _action_kind(label))
         if self.undo is None:
             with self.project.transaction() as conn:
                 fn(conn)

@@ -60,6 +60,7 @@ class AnalyzeSummary:
     fallback_reason: str | None = None
     learning: str | None = None  # what the grouping learnt from this user's corrections
     gpu_check: str | None = None  # which graphics card was measured / used, with timings
+    grouping: bool = True  # False: no verified face recogniser, people are grouped by hand only (LIC-1 S3)
 
 
 def _box_json(box: tuple[float, float, float, float] | None) -> str | None:
@@ -132,7 +133,9 @@ class AnalyzeJob:
             progress(AnalyzeProgress("load_models", 0, len(todo)))
             persons = PersonDetector.load(self.registry, prefer_gpu=self.prefer_gpu)
             faces = FaceDetector(self.registry)
-            embedder = FaceEmbedder(self.registry)
+            # The face recogniser is optional: without a verified one, people are found and measured, and the user
+            # groups them by hand (LIC-1 S3)
+            embedder = FaceEmbedder(self.registry) if self.registry.can_recognise() else None
             summary.device = persons.device
             progress(AnalyzeProgress("device:" + persons.device, 0, len(todo)))
             summary.fallback_reason = gpu_note or persons.session.fallback_reason
@@ -153,7 +156,10 @@ class AnalyzeJob:
                 should_cancel, used, prefer_gpu=self.prefer_gpu)
             if mode == "quality" and used:
                 summary.device = used[0]
-        if not summary.cancelled and mode != "quality":
+        if not summary.cancelled and mode != "quality" and not self.registry.can_recognise():
+            summary.grouping = False  # no automatic grouping: manual groups are left exactly as they are
+            refresh_outfits(self.project)
+        elif not summary.cancelled and mode != "quality":
             from app.identity.cluster import recluster  # local import: clustering is pure, no models
 
             from app.learning.tuning import tune_from_store
@@ -199,7 +205,7 @@ class AnalyzeJob:
                     found_persons = persons.detect(bgr)
                     found_faces = faces.detect(bgr)
                     for face in found_faces:
-                        if face.score >= USABLE_FACE_SCORE:
+                        if embedder is not None and face.score >= USABLE_FACE_SCORE:
                             face.embedding = embedder.embed(bgr, face)
                     feats = features_for(bgr, associate(found_persons, found_faces), USABLE_FACE_SCORE)
                     self._store(asset_id, feats)
