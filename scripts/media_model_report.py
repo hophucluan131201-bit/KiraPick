@@ -18,12 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.ai.models import ModelRegistry, default_models_dir, load_manifest, sha256_of  # noqa: E402
-from app.media.models import load_policy  # noqa: E402
+from app.media.models import media_policy  # noqa: E402
 
 
 def build_report(models_dir: Path, milestone: int) -> dict:
     specs = load_manifest()
-    policy = load_policy()
+    policy = media_policy()
     registry = ModelRegistry(models_dir, specs)
     by_file = {s.file: s for s in specs.values()}
     rows, unknown = [], []

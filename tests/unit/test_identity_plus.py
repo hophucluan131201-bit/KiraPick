@@ -12,6 +12,7 @@ import pytest
 
 from app.ai.identity_plus import ARCFACE_VERSION, BODY_VERSION
 from app.ai.models import ModelRegistry, ModelState, load_manifest, sha256_of
+from app.ai.policy import policy_for_tests
 from app.identity.cluster import (
     ARCFACE_REID, SFACE_HSV, Occ, group, look_similarity, pair_link, recluster, session_profile,
 )
@@ -139,12 +140,14 @@ def test_fetch_extracts_the_pinned_member_of_a_zip(tmp_path: Path, monkeypatch: 
                    size=len(payload), archive_member="w.onnx", url=archive.as_uri())
     (tmp_path / "w.onnx").unlink()
     dest = tmp_path / "models"
-    monkeypatch.setattr(fetch, "ModelRegistry", lambda d: ModelRegistry(d, {spec.id: spec}))
+    policy = policy_for_tests({spec.id: (spec.sha256, spec.size)})  # a test pin: the real list never allows ArcFace
+    monkeypatch.setattr(fetch, "ModelRegistry", lambda d: ModelRegistry(d, {spec.id: spec}, policy))
     monkeypatch.setattr("sys.argv", ["fetch", "--dest", str(dest)])
     assert fetch.main() == 0
     assert (dest / "w.onnx").read_bytes() == payload
     assert sorted(p.name for p in dest.iterdir()) == ["w.onnx"]  # the archive itself is not kept
-    assert ModelRegistry(dest, {spec.id: spec}).status(spec.id).state is ModelState.READY
+    assert ModelRegistry(dest, {spec.id: spec}, policy).status(spec.id).state is ModelState.READY
+    assert ModelRegistry(dest, {spec.id: spec}).status(spec.id).state is ModelState.BLOCKED  # real list
 
 
 def test_download_resumes_after_a_broken_transfer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -417,23 +420,21 @@ def test_person_boxes_of_both_detectors_are_merged() -> None:
     assert PersonDetector(medium_misses_her).detect(np.zeros((640, 640, 3), np.uint8)) == []
 
 
-def test_registry_accepts_float16_weights_only_from_the_pinned_original(tmp_path: Path) -> None:
-    """scripts/shrink_models.py writes "<sha> <size> fp16w-of:<original sha>" next to the file."""
+def test_float16_weights_are_accepted_only_by_their_pinned_hash(tmp_path: Path) -> None:
+    """The shrunk file's own SHA-256 must be pinned in the allow-list; a side file proves nothing (it used to)."""
     import hashlib
 
     original, shrunk = b"original weights" * 100, b"half weights" * 50
-    spec = replace(load_manifest()["face_embedder_arcface"], file="m.onnx",
+    spec = replace(load_manifest()["person_detector_m"], file="m.onnx",
                    sha256=hashlib.sha256(original).hexdigest(), size=len(original))
     (tmp_path / "m.onnx").write_bytes(shrunk)
-    registry = lambda: ModelRegistry(tmp_path, {spec.id: spec})  # noqa: E731
-    assert registry().status(spec.id).state is ModelState.CORRUPT  # no sidecar: not the pinned file
-    sidecar = tmp_path / "m.onnx.sha256"
-    sidecar.write_text(f"{hashlib.sha256(shrunk).hexdigest()} {len(shrunk)} fp16w-of:{'0' * 64}\n")
-    assert registry().status(spec.id).state is ModelState.CORRUPT  # made from some other file
-    sidecar.write_text(f"{hashlib.sha256(shrunk).hexdigest()} {len(shrunk)} fp16w-of:{spec.sha256}\n")
-    assert registry().status(spec.id).state is ModelState.READY
+    (tmp_path / "m.onnx.sha256").write_text(f"{hashlib.sha256(shrunk).hexdigest()} {len(shrunk)} fp16w-of:{spec.sha256}\n")
+    pinned_original = policy_for_tests({spec.id: (spec.sha256, spec.size)})
+    assert ModelRegistry(tmp_path, {spec.id: spec}, pinned_original).status(spec.id).state is ModelState.CORRUPT
+    pinned_shrunk = policy_for_tests({spec.id: (hashlib.sha256(shrunk).hexdigest(), len(shrunk))})
+    assert ModelRegistry(tmp_path, {spec.id: spec}, pinned_shrunk).status(spec.id).state is ModelState.READY
     (tmp_path / "m.onnx").write_bytes(shrunk[:-1] + b"X")  # tampered after shrinking
-    assert registry().status(spec.id).state is ModelState.CORRUPT
+    assert ModelRegistry(tmp_path, {spec.id: spec}, pinned_shrunk).status(spec.id).state is ModelState.CORRUPT
 
 
 def test_new_subject_from_photos_survives_regrouping(project: Project) -> None:

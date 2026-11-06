@@ -11,6 +11,7 @@ import pytest
 
 from app.ai import runtime
 from app.ai.models import ModelRegistry, ModelState, ModelUnavailableError, load_manifest
+from app.ai.policy import policy_for_tests
 
 REG = ModelRegistry()
 HAVE_MODELS = all(s.state is ModelState.READY for s in REG.all_status())
@@ -42,7 +43,9 @@ def test_registry_reports_missing_and_tampered_files(tmp_path: Path) -> None:
         {"id": "b", "name": "B", "file": "absent.onnx", "sha256": "0" * 64, "size": 1, "license": "MIT",
          "url": "https://x", "provenance": "test", "runtime": "onnxruntime"},
     ]}))
-    reg = ModelRegistry(tmp_path, load_manifest(manifest))
+    reg = ModelRegistry(tmp_path, load_manifest(manifest),
+                        policy_for_tests({"a": (hashlib.sha256(b"model-bytes").hexdigest(), 11),
+                                          "b": ("0" * 64, 1)}))
     assert reg.status("a").state is ModelState.READY
     assert reg.status("b").state is ModelState.MISSING
     before = good.stat().st_mtime_ns
