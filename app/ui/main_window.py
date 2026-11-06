@@ -973,15 +973,14 @@ class MainWindow(QMainWindow):
 
     def learning_text(self) -> str:
         """What this user's corrections taught the app (for the 🎓 dialog)."""
-        from app.identity.cluster import ARCFACE_REID, SFACE_HSV, session_profile
+        from app.identity.cluster import SFACE_HSV, session_profile
         from app.learning.tuning import tune
 
         store = self.teacher.store
         if store is None:
             return "Không mở được dữ liệu học trên máy này; app dùng mức mặc định."
         counts = store.identity_counts()
-        base = session_profile(self.project.conn) if self.project is not None else (
-            ARCFACE_REID if (self._registry or ModelRegistry()).ready("identity_plus") else SFACE_HSV)
+        base = session_profile(self.project.conn) if self.project is not None else SFACE_HSV
         tuning = tune(store.identity_examples(), base)
         lines = [
             "<b>Nhận diện chủ thể</b>",

@@ -11,7 +11,7 @@ from app.quality.select import Pick, save_run
 from app.storage import decisions, exports
 from app.storage.project import Project
 from app.storage.workflow import STEPS, StepState, steps
-from app.workers import analyze_job, embed_job, quality_job
+from app.workers import analyze_job, quality_job
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def _stage(conn: sqlite3.Connection, ids: list[int], stage: str, version: int, s
                      " stage_version = excluded.stage_version", [(a, stage, version, state) for a in ids])
 
 
-DETECT, EMBED, QUALITY = ("detect", analyze_job.STAGE_VERSION), ("embed", embed_job.STAGE_VERSION), \
+DETECT, QUALITY = ("detect", analyze_job.STAGE_VERSION), \
     ("quality", quality_job.STAGE_VERSION)
 
 
@@ -59,21 +59,18 @@ def test_import_paused_or_interrupted_is_partial(conn: sqlite3.Connection) -> No
 
 
 def test_people_partial_then_done(conn: sqlite3.Connection) -> None:
+    """People = detection ended (the ArcFace / ReID 'embed' stage is gone, LIC-1)."""
     ids = _photos(conn, 4)
     _stage(conn, ids[:2], *DETECT)
-    _stage(conn, ids[:2], *EMBED)
     assert steps(conn, importing=None)["people"] == StepState(False, "2/4")
     _stage(conn, ids[2:], *DETECT)
-    assert steps(conn, importing=None)["people"] == StepState(False, "2/4")  # detected but not embedded yet
-    _stage(conn, ids[2:], *EMBED)
     assert steps(conn, importing=None)["people"] == StepState(True, None)
 
 
 def test_failed_photos_count_as_processed(conn: sqlite3.Connection) -> None:
     ids = _photos(conn, 3)
     _stage(conn, ids[:2], *DETECT)
-    _stage(conn, ids[:2], *EMBED)
-    _stage(conn, ids[2:], *DETECT, state="failed")  # never gets an embed stage
+    _stage(conn, ids[2:], *DETECT, state="failed")
     _photos(conn, 1, status="error")  # unreadable photos are not analysed at all
     assert steps(conn, importing=None)["people"] == StepState(True, None)
     _stage(conn, ids[:1], *QUALITY)
@@ -126,7 +123,6 @@ def test_thousands_use_dots() -> None:
 def test_photo_that_became_unreadable_after_detection_is_not_waited_for(conn: sqlite3.Connection) -> None:
     ids = _photos(conn, 2)
     _stage(conn, ids, *DETECT)
-    _stage(conn, ids, *EMBED)
     _stage(conn, ids[:1], *QUALITY)
     conn.execute("UPDATE assets SET status = 'missing' WHERE id = ?", (ids[1],))
     s = steps(conn, importing=None)
@@ -138,7 +134,6 @@ def test_quality_is_not_done_before_detection_finished_for_the_session(conn: sql
     """Review CR4-01: 10 photos, 1 detected and measured -> not ✓ while 9 still wait for detection."""
     ids = _photos(conn, 10)
     _stage(conn, ids[:1], *DETECT)
-    _stage(conn, ids[:1], *EMBED)
     _stage(conn, ids[:1], *QUALITY)
     assert steps(conn, importing=None)["quality"] == StepState(False, "1/10")
     _stage(conn, ids[1:], *DETECT, state="failed")  # nothing to measure on these: processed
@@ -160,8 +155,7 @@ def test_rerun_of_a_stage_never_double_counts_or_reuses_old_results(conn: sqlite
     ids = _photos(conn, 2)
     for _ in range(3):
         _stage(conn, ids, *DETECT)
-        _stage(conn, ids, *EMBED)
-    assert conn.execute("SELECT COUNT(*) FROM stage_status").fetchone()[0] == 4
+    assert conn.execute("SELECT COUNT(*) FROM stage_status").fetchone()[0] == 2  # one row per photo and stage (detect only: the embed stage is gone)
     assert steps(conn, importing=None)["people"].done
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute("INSERT INTO stage_status (asset_id, stage, stage_version, state, attempts, updated_at) "
@@ -180,6 +174,5 @@ def test_a_step_never_run_is_not_partial(conn: sqlite3.Connection) -> None:
 def test_quality_never_run_after_detection_is_not_partial(conn: sqlite3.Connection) -> None:
     ids = _photos(conn, 3)
     _stage(conn, ids, *DETECT)
-    _stage(conn, ids, *EMBED)
     s = steps(conn, importing=None)
     assert s["people"].done and s["quality"] == StepState(False, None)

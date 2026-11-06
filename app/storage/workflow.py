@@ -31,10 +31,9 @@ def fraction(done: int, total: int) -> str:
 
 def _stage_versions() -> dict[str, int]:
     # The analysis modules own their versions; imported here (not at module load) to keep storage light.
-    from app.workers import analyze_job, embed_job, quality_job
+    from app.workers import analyze_job, quality_job
 
-    return {analyze_job.STAGE: analyze_job.STAGE_VERSION, embed_job.STAGE: embed_job.STAGE_VERSION,
-            quality_job.STAGE: quality_job.STAGE_VERSION}
+    return {analyze_job.STAGE: analyze_job.STAGE_VERSION, quality_job.STAGE: quality_job.STAGE_VERSION}
 
 
 def _processed(conn: sqlite3.Connection, stage: str, version: int, of: str) -> tuple[int, int]:
@@ -72,9 +71,8 @@ def steps(conn: sqlite3.Connection, *, importing: tuple[int, int] | None) -> dic
     det_done, ok = _processed(conn, "detect", v["detect"], readable)
     detected = f"""SELECT asset_id FROM stage_status WHERE stage = 'detect' AND state = 'done'
                    AND stage_version >= {int(v['detect'])} AND asset_id IN ({readable})"""
-    emb_done, emb_total = _processed(conn, "embed", v["embed"], detected)
-    # A photo counts for "people" once detection ended for it and, if detected, its vectors exist.
-    people_done = det_done - (emb_total - emb_done)
+    # A photo counts for "people" once detection ended for it (the ArcFace / ReID 'embed' stage is gone: LIC-1)
+    people_done = det_done
     ever_detected = conn.execute("SELECT 1 FROM stage_status WHERE stage = 'detect' LIMIT 1").fetchone()
     # Never run: plain (not "◐ 0/N"); results from an older version still show ◐ to invite a re-run.
     out["people"] = _progress(people_done, ok) if ever_detected else _NOT_STARTED

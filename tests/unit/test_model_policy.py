@@ -119,3 +119,25 @@ def test_handed_out_weight_is_recorded_with_the_hash_of_the_file(tmp_path: Path)
     opened = LOAD_LOG.report()["opened"]
     assert opened["face_detector"]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
     assert opened["face_detector"]["file"] == path.name
+
+
+NEVER_LOADERS = {"ArcFaceEmbedder", "BodyEmbedder", "AestheticModel", "TechnicalIQA", "FaceIQA", "Embedders"}
+OWN_MODULES = {"identity_plus.py", "aesthetic.py", "iqa.py", "embed_job.py"}
+
+
+def test_no_app_code_builds_the_never_or_reid_loaders() -> None:
+    """C4: the ArcFace / YoutuReID / TOPIQ load paths are gone: nothing outside their own modules constructs them,
+    and the analysis no longer calls the embed stage."""
+    import ast
+
+    root = Path(__file__).resolve().parents[2] / "app"
+    for path in sorted(root.rglob("*.py")):
+        if path.name in OWN_MODULES:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                name = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", None)
+                assert name not in NEVER_LOADERS, f"{path.relative_to(root)} builds {name}"
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "embed_job":
+                assert node.attr not in ("run", "available"), f"{path.relative_to(root)} calls embed_job.{node.attr}"

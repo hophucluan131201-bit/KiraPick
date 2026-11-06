@@ -156,7 +156,8 @@ def load_extras(registry: ModelRegistry, prefer_gpu: bool) -> Extras:
         except Exception:  # noqa: BLE001 - a broken optional model must not stop the stage
             log.exception("could not load %s", cls.__name__)
             return None
-    return Extras(make(ClipAesthetic), make(TechnicalIQA), make(FaceIQA))
+    # CLIP is opened only if the allow-list verifies it (pending today); TOPIQ technical / face IQA never.
+    return Extras(make(ClipAesthetic), None, None)
 
 
 def _guard(what: str, fn):  # noqa: ANN001, ANN202
@@ -194,10 +195,9 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
     except ModelUnavailableError:
         eyes = None  # honest: eyes stay "not judged"
     t_load = time.perf_counter()
-    try:
-        aesthetic: AestheticModel | None = AestheticModel(registry, prefer_gpu=prefer_gpu)
-    except ModelUnavailableError:
-        aesthetic = None  # honest: aesthetics stay "not judged"
+    # TOPIQ (aesthetic, technical, face IQA) is never loaded: its licence does not allow it (model-policy: never).
+    # Aesthetics stay "not judged" (no fabricated score).
+    aesthetic: AestheticModel | None = None
     extras = load_extras(registry, prefer_gpu)
     last_timings.clear()
     last_timings["load_models"] = round(time.perf_counter() - t_load, 2)

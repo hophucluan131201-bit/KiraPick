@@ -142,16 +142,6 @@ class AnalyzeJob:
             self.crop_dir.mkdir(parents=True, exist_ok=True)
             self._detect_all(todo, persons, faces, embedder, summary, progress, should_cancel)
             del persons, faces, embedder  # one heavy model set at a time
-        if not summary.cancelled and mode != "quality":
-            from app.workers import embed_job
-
-            def embed_progress(phase: str, done: int, total: int) -> None:
-                if phase.startswith("device:") and not todo:
-                    summary.device = phase[len("device:"):]  # only this stage ran
-                progress(AnalyzeProgress(phase, done, total))
-
-            _, _, summary.cancelled = embed_job.run(self.project, self.registry, embed_progress, should_cancel,
-                                                    prefer_gpu=self.prefer_gpu)
         if gpu_note and not summary.fallback_reason:
             summary.fallback_reason = gpu_note
         if not summary.cancelled and mode != "people":

@@ -59,12 +59,12 @@ def test_steps_when_every_detection_failed(qtbot, env: dict) -> None:  # noqa: F
 
 
 def test_steps_after_stage_version_change(qtbot, env: dict) -> None:  # noqa: F811
-    from app.workers import analyze_job, embed_job
+    from app.workers import analyze_job
 
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
     with w.project.transaction() as conn:
-        for stage, version in (("detect", analyze_job.STAGE_VERSION - 1), ("embed", embed_job.STAGE_VERSION)):
+        for stage, version in (("detect", analyze_job.STAGE_VERSION - 1),):
             conn.execute("""INSERT INTO stage_status (asset_id, stage, stage_version, state, attempts, updated_at)
                             SELECT id, ?, ?, 'done', 1, 't' FROM assets WHERE status = 'ok'""", (stage, version))
     w.refresh_steps()
