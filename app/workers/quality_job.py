@@ -42,11 +42,14 @@ from app.quality.measure import (
     layout_descriptor,
 )
 from app.storage.project import Project, utc_now
+from app.storage import provenance
 from app.storage.vectors import save_vector
 
 log = logging.getLogger(__name__)
 
 STAGE = "quality"
+QUALITY_MODELS = ("face_detector", "face_quality", "face_mesh", "face_blendshapes", "clip_l14_image",
+                  "laion_aesthetic", "aesthetic", "tech_iqa", "face_iqa")
 STAGE_VERSION = 5  # 2: eyes (MediaPipe); 3: aesthetic hint (TOPIQ); 4: close-up sharpness;
 # 5: CLIP vector + LAION + style tags, TOPIQ technical and face quality
 EXTRACTOR = "quality"
@@ -208,6 +211,9 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
     if device is not None:
         device.append(aesthetic.device if aesthetic is not None else "cpu")
         progress("device:" + device[0], 0, 0)
+    with project.transaction() as conn:  # provenance (schema v8): this stage and the weights it really opened
+        run_id = provenance.start_run(conn, STAGE)
+        provenance.record_models(conn, run_id, QUALITY_MODELS)
     done = failed = 0
     total = len(todo)
     progress(STAGE, 0, total)
@@ -236,7 +242,7 @@ def run(project: Project, registry: ModelRegistry, progress: Callable[[str, int,
                 t0 = time.perf_counter()
                 full, source = fut.result()
                 _add_time("wait_for_photo_decode", t0)
-                _store(project, asset_id, full, source, refiner, face_quality, eyes, aesthetic, extras)
+                _store(project, asset_id, full, source, refiner, face_quality, eyes, aesthetic, extras, run_id=run_id)
                 done += 1
             except (ImageReadError, cv2.error, OSError, MemoryError) as exc:
                 _mark(project, asset_id, "failed", f"{type(exc).__name__}: {exc}"[:300])
@@ -256,7 +262,8 @@ def _add_time(key: str, since: float) -> None:
 
 def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refiner: FaceRefiner | None,
            face_quality: FaceQuality | None, eyes: EyeState | None = None,
-           aesthetic: AestheticModel | None = None, extras: Extras | None = None) -> None:
+           aesthetic: AestheticModel | None = None, extras: Extras | None = None, *,
+           run_id: int | None = None) -> None:
     h, w = full.shape[:2]
     scale = min(1.0, WORK_LONG_SIDE / max(h, w))
     small = cv2.resize(full, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else full
@@ -304,15 +311,16 @@ def _store(project: Project, asset_id: int, full: np.ndarray, source: str, refin
         for occ_id, values, layout in results:
             conn.execute(
                 """INSERT INTO measurements (asset_id, occurrence_id, extractor, extractor_version, input_source,
-                   values_json, computed_at) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (asset_id, occ_id, EXTRACTOR, QUALITY_VERSION, source, json.dumps(values), now),
+                   values_json, computed_at, run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (asset_id, occ_id, EXTRACTOR, QUALITY_VERSION, source, json.dumps(values), now, run_id),
             )
             conn.execute("DELETE FROM occurrence_vectors WHERE occurrence_id = ? AND kind = 'layout'", (occ_id,))
             if layout is not None:
-                conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'layout', ?, ?)",
-                             (occ_id, LAYOUT_VERSION, np.asarray(layout, "<f4").tobytes()))
+                conn.execute("""INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id)
+                                VALUES (?, 'layout', ?, ?, ?)""",
+                             (occ_id, LAYOUT_VERSION, np.asarray(layout, "<f4").tobytes(), run_id))
         if emb is not None:
-            save_vector(conn, asset_id, "clip", CLIP_VERSION, emb)
+            save_vector(conn, asset_id, "clip", CLIP_VERSION, emb, run_id)
         _mark(project, asset_id, "done", None, conn)
 
 

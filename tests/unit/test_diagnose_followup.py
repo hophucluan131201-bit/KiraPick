@@ -64,8 +64,8 @@ def _session(tmp: Path) -> tuple[Project, dict[str, int]]:
                              (asset, json.dumps(person) if person else None, json.dumps(face_box) if face_box else None)
                              ).lastrowid)
         if face is not None:
-            conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'face', 't', ?)", (o, face.astype("<f4").tobytes()))
-        conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'outfit', 't', ?)", (o, look.astype("<f4").tobytes()))
+            conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'face', 't', ?)", (o, face.astype("<f4").tobytes()))
+        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'outfit', 't', ?)", (o, look.astype("<f4").tobytes()))
         occ[key] = o
 
     add("p1_body", 1, [0.1, 0.1, 0.4, 0.8], [0.25, 0.15, 0.1, 0.1], k1)

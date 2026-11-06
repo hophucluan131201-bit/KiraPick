@@ -7,12 +7,13 @@ import sqlite3
 import numpy as np
 
 
-def save_vector(conn: sqlite3.Connection, asset_id: int, kind: str, version: str, vec: np.ndarray) -> None:
+def save_vector(conn: sqlite3.Connection, asset_id: int, kind: str, version: str, vec: np.ndarray,
+                run_id: int | None = None) -> None:
     conn.execute(
-        """INSERT INTO asset_vectors (asset_id, kind, model_version, vector) VALUES (?, ?, ?, ?)
+        """INSERT INTO asset_vectors (asset_id, kind, model_version, vector, run_id) VALUES (?, ?, ?, ?, ?)
            ON CONFLICT (asset_id, kind) DO UPDATE SET model_version = excluded.model_version,
-           vector = excluded.vector""",
-        (asset_id, kind, version, np.asarray(vec, "<f2").tobytes()))
+           vector = excluded.vector, run_id = excluded.run_id""",
+        (asset_id, kind, version, np.asarray(vec, "<f2").tobytes(), run_id))
 
 
 def load_vectors(conn: sqlite3.Connection, kind: str, version: str) -> dict[int, np.ndarray]:

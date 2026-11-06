@@ -26,11 +26,13 @@ from app.ai.models import ModelRegistry
 from app.core.errors import ImageReadError
 from app.identity.features import OUTFIT_VERSION, OccurrenceFeatures, features_for, outfit_descriptor, outfit_image
 from app.ingest.preview import load_image
+from app.storage import provenance
 from app.storage.project import Project, utc_now
 
 log = logging.getLogger(__name__)
 
 STAGE = "detect"
+DETECT_MODELS = ("person_detector_s", "person_detector_m", "face_detector", "face_embedder")
 STAGE_VERSION = 2  # bump when detection/feature extraction changes; 2: YOLOX-M + YOLOX-S merged on GPU
 ANALYSIS_LONG_SIDE = 1600
 USABLE_FACE_SCORE = 0.75  # below this a face is "seen" but not trusted for identity
@@ -76,6 +78,7 @@ class AnalyzeJob:
         self.prefer_gpu = prefer_gpu
         self.learning_dir = learning_dir  # this user's learning data (app.learning), optional
         self.crop_dir = project.cache_dir / "crops"
+        self._run_id: int | None = None  # analysis_runs row of the running detect stage
 
     # ----------------------------------------------------------- queue
     def _queue_and_list(self) -> list[tuple[int, Path]]:
@@ -133,6 +136,9 @@ class AnalyzeJob:
             summary.device = persons.device
             progress(AnalyzeProgress("device:" + persons.device, 0, len(todo)))
             summary.fallback_reason = gpu_note or persons.session.fallback_reason
+            with self.project.transaction() as conn:  # provenance (schema v8): this stage and its real weights
+                self._run_id = provenance.start_run(conn, STAGE)
+                provenance.record_models(conn, self._run_id, DETECT_MODELS)
             self.crop_dir.mkdir(parents=True, exist_ok=True)
             self._detect_all(todo, persons, faces, embedder, summary, progress, should_cancel)
             del persons, faces, embedder  # one heavy model set at a time
@@ -231,28 +237,30 @@ class AnalyzeJob:
                 occ_id = self._match(f, unmatched)
                 values = (
                     _box_json(f.person_box), f.person_score, _box_json(f.face_box), f.face_score,
-                    f.prominence, int(f.is_main), STAGE_VERSION,
+                    f.prominence, int(f.is_main), STAGE_VERSION, self._run_id,
                 )
                 if occ_id is None:
                     occ_id = int(conn.execute(
                         """INSERT INTO occurrences (asset_id, person_box, person_score, face_box, face_score,
-                           prominence, is_main, analysis_version, created_at) VALUES (?,?,?,?,?,?,?,?,?)""",
+                           prominence, is_main, analysis_version, run_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
                         (asset_id, *values, now),
                     ).lastrowid)
                 else:
                     del unmatched[occ_id]
                     conn.execute(
                         """UPDATE occurrences SET person_box = ?, person_score = ?, face_box = ?, face_score = ?,
-                           prominence = ?, is_main = ?, analysis_version = ? WHERE id = ?""",
+                           prominence = ?, is_main = ?, analysis_version = ?, run_id = ? WHERE id = ?""",
                         (*values, occ_id),
                     )
                 conn.execute("DELETE FROM occurrence_vectors WHERE occurrence_id = ?", (occ_id,))
                 if f.face_vector is not None:
-                    conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'face', ?, ?)",
-                                 (occ_id, FACE_VECTOR_VERSION, _vec(f.face_vector)))
+                    conn.execute("""INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id)
+                                    VALUES (?, 'face', ?, ?, ?)""",
+                                 (occ_id, FACE_VECTOR_VERSION, _vec(f.face_vector), self._run_id))
                 if f.outfit_vector is not None:
-                    conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'outfit', ?, ?)",
-                                 (occ_id, OUTFIT_VERSION, _vec(f.outfit_vector)))
+                    conn.execute("""INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id)
+                                    VALUES (?, 'outfit', ?, ?, ?)""",
+                                 (occ_id, OUTFIT_VERSION, _vec(f.outfit_vector), self._run_id))
                 crop_name = None
                 if f.crop is not None:
                     crop_name = f"crops/{occ_id:08d}.jpg"
@@ -310,6 +318,7 @@ def refresh_outfits(project: Project) -> int:
     updated = 0
     images: dict[int, np.ndarray | None] = {}
     with project.transaction() as conn:
+        run_id = provenance.start_run(conn, "outfit") if rows else None  # app code only: no weights
         for r in rows:
             if r["asset_id"] not in images:
                 images.clear()  # rows are ordered by photo: keep one decoded thumbnail
@@ -323,8 +332,8 @@ def refresh_outfits(project: Project) -> int:
             vec = outfit_descriptor(small, tuple(json.loads(r["person_box"]))) if small is not None else None
             conn.execute("DELETE FROM occurrence_vectors WHERE occurrence_id = ? AND kind = 'outfit'", (r["id"],))
             if vec is not None:
-                conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'outfit', ?, ?)",
-                             (r["id"], OUTFIT_VERSION, _vec(vec)))
+                conn.execute("""INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector, run_id)
+                                VALUES (?, 'outfit', ?, ?, ?)""", (r["id"], OUTFIT_VERSION, _vec(vec), run_id))
                 updated += 1
     if rows:
         log.info("outfit vectors refreshed: %d of %d", updated, len(rows))

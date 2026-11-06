@@ -101,8 +101,8 @@ def store(project: Project, asset_id: int, found: list[tuple[int, str, str, np.n
         conn.execute("""DELETE FROM occurrence_vectors WHERE kind IN ('face_arc', 'body')
                         AND occurrence_id IN (SELECT id FROM occurrences WHERE asset_id = ?)""", (asset_id,))
         for occ_id, kind, version, vec in found:
-            conn.execute("INSERT INTO occurrence_vectors VALUES (?, ?, ?, ?)",
-                         (occ_id, kind, version, np.asarray(vec, "<f4").tobytes()))
+            conn.execute("""INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector)
+                            VALUES (?, ?, ?, ?)""", (occ_id, kind, version, np.asarray(vec, "<f4").tobytes()))
         _mark(conn, asset_id, "done", None)
 
 

@@ -38,7 +38,7 @@ def project(tmp_path: Path) -> Project:
 
 
 def _vec(project: Project, occ: int, kind: str, v: np.ndarray) -> None:
-    project.conn.execute("INSERT INTO occurrence_vectors VALUES (?, ?, 'v', ?)", (occ, kind, v.astype("<f4").tobytes()))
+    project.conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, ?, 'v', ?)", (occ, kind, v.astype("<f4").tobytes()))
 
 
 # ------------------------------------------------------------------ profile

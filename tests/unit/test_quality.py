@@ -119,7 +119,7 @@ def add_scored(p: Project, asset: int, subject: int | None, sharp: float, layout
                     values_json, computed_at) VALUES (?, ?, 'quality', 'q1', 'embedded_jpeg', ?, 'n')""",
                  (asset, occ, json.dumps({"body_sharp": sharp, "body_clip": 0.0, "body_luma": 50, "area": 0.4,
                                           "offcentre": 0.1})))
-    conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'layout', 'v', ?)", (occ, layout.astype("<f4").tobytes()))
+    conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'layout', 'v', ?)", (occ, layout.astype("<f4").tobytes()))
 
 
 def test_per_person_selection_and_saved_run(project: Project) -> None:

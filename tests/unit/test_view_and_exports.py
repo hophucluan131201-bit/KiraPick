@@ -33,7 +33,7 @@ def test_migration_7_on_a_v6_session(tmp_path: Path) -> None:
     conn.execute("INSERT INTO decisions (asset_id, subject_id, flag, rating, favorite, focus, updated_at)"
                  " VALUES (?, NULL, 'keep', 4, 1, 'sharp', 't')", (aid,))
     db.migrate(conn)
-    assert db.current_version(conn) == 7
+    assert db.current_version(conn) == db.SCHEMA_VERSION  # v7 and every later migration
     row = conn.execute("SELECT flag, rating, favorite, focus FROM decisions WHERE asset_id = ?", (aid,)).fetchone()
     assert tuple(row) == ("keep", 4, 1, "sharp")
     assert view.rotations(conn) == {} and exports.count(conn) == 0

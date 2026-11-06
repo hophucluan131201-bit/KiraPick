@@ -43,7 +43,7 @@ def _add(p: Project, asset: int, face: np.ndarray | None, outfit: np.ndarray | N
            VALUES (?, '[0.1,0.1,0.5,0.8]', 1.0, ?, 1, 'n')""", (asset, main)).lastrowid)
     for kind, vec in (("face", face), ("outfit", outfit)):
         if vec is not None:
-            conn.execute("INSERT INTO occurrence_vectors VALUES (?, ?, 't', ?)", (occ, kind, vec.astype("<f4").tobytes()))
+            conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, ?, 't', ?)", (occ, kind, vec.astype("<f4").tobytes()))
     return occ
 
 

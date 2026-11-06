@@ -152,9 +152,9 @@ def _add(p: Project, asset: int, face: np.ndarray | None, *, minute: int = 0, ma
         """INSERT INTO occurrences (asset_id, person_box, prominence, is_main, analysis_version, created_at)
            VALUES (?, ?, 1.0, ?, 1, 'n')""", (asset, json.dumps([0.1, 0.1, 0.5, 0.8]), main)).lastrowid)
     if face is not None:
-        conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'face', 't', ?)", (occ, face.astype("<f4").tobytes()))
+        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'face', 't', ?)", (occ, face.astype("<f4").tobytes()))
     if outfit is not None:
-        conn.execute("INSERT INTO occurrence_vectors VALUES (?, 'outfit', 't', ?)", (occ, outfit.astype("<f4").tobytes()))
+        conn.execute("INSERT INTO occurrence_vectors (occurrence_id, kind, model_version, vector) VALUES (?, 'outfit', 't', ?)", (occ, outfit.astype("<f4").tobytes()))
     return occ
 
 

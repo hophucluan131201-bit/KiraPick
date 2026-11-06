@@ -273,6 +273,28 @@ CREATE TABLE export_runs (
     files        INTEGER NOT NULL
 );
 """),
+    (8, """
+-- Result provenance (LIC-1 S7): which weights produced which result. A run is one analysis stage; its models are
+-- the files really opened (SHA-256 of the file, provider). Rows from before v8 keep run_id NULL = source unknown.
+CREATE TABLE analysis_runs (
+    id           INTEGER PRIMARY KEY,
+    started_at   TEXT NOT NULL,
+    app_version  TEXT NOT NULL,
+    mode         TEXT NOT NULL,          -- 'personal' | 'media'
+    stage        TEXT NOT NULL           -- 'detect', 'quality', 'outfit', ...
+);
+CREATE TABLE analysis_run_models (
+    run_id    INTEGER NOT NULL REFERENCES analysis_runs(id) ON DELETE CASCADE,
+    model_id  TEXT NOT NULL,
+    sha256    TEXT NOT NULL,
+    provider  TEXT NOT NULL,
+    PRIMARY KEY (run_id, model_id, provider)
+);
+ALTER TABLE occurrences ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id);
+ALTER TABLE occurrence_vectors ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id);
+ALTER TABLE measurements ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id);
+ALTER TABLE asset_vectors ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id);
+"""),
 ]
 
 SCHEMA_VERSION = MIGRATIONS[-1][0]
