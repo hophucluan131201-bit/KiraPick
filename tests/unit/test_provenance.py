@@ -51,9 +51,12 @@ def _dump(path: Path, sql: str) -> list[tuple]:
         conn.close()
 
 
-USER_ROWS = ("SELECT asset_id, flag, rating, favorite FROM decisions ORDER BY asset_id",
-             "SELECT id, display_name, user_locked FROM subjects ORDER BY id",
-             "SELECT id, subject_id, assignment FROM occurrences ORDER BY id")
+USER_ROWS = ("SELECT * FROM decisions ORDER BY asset_id",
+             "SELECT id, display_name, user_locked, merged_into, created_at FROM subjects ORDER BY id",
+             "SELECT * FROM subject_pairs ORDER BY a, b",
+             # what the user assigned by hand (automatic assignments may move aside: DATA-1)
+             "SELECT id, asset_id, subject_id, assignment, excluded_subject_id FROM occurrences "
+             "WHERE assignment = 'manual' ORDER BY id")
 
 
 def test_v7_session_upgrades_keeps_old_results_as_unknown_source_and_backs_up(tmp_path: Path) -> None:

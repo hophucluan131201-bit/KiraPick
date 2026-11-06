@@ -260,7 +260,8 @@ class AnalyzeJob:
                     os.replace(tmp, target)
                 conn.execute("UPDATE occurrences SET crop_file = ? WHERE id = ?", (crop_name, occ_id))
             for occ_id in unmatched:  # people no longer detected in this photo
-                conn.execute("DELETE FROM occurrences WHERE id = ?", (occ_id,))
+                # ... except one the user put into a person by hand: their correction is never lost (LIC-1 S6)
+                conn.execute("DELETE FROM occurrences WHERE id = ? AND assignment != 'manual'", (occ_id,))
             # New boxes: the quality measurements of this photo must be redone.
             conn.execute("DELETE FROM measurements WHERE asset_id = ? AND extractor = 'quality'", (asset_id,))
             conn.execute("""UPDATE stage_status SET state = 'pending', attempts = 0

@@ -297,6 +297,17 @@ ALTER TABLE asset_vectors ADD COLUMN run_id INTEGER REFERENCES analysis_runs(id)
 -- PROV-1 (b): results of unknown source are not used, so the analysis must run again to have a source.
 -- Nothing is deleted: P/X, groups, names and the old rows stay; re-detection keeps occurrence ids (box match).
 UPDATE stage_status SET state = 'pending', attempts = 0 WHERE stage IN ('detect', 'quality');
+-- DATA-1 (owner, 2026-11-06): groups the app made on its own with ArcFace are hidden; groups the user edited stay.
+-- A subject counts as edited when its name is locked, it has a photo the user assigned, or it is in a "different"
+-- pair. The automatic members of the other subjects move aside (legacy_* keep where they were): nothing is lost.
+ALTER TABLE occurrences ADD COLUMN legacy_subject_id INTEGER;
+ALTER TABLE occurrences ADD COLUMN legacy_assignment TEXT;
+UPDATE occurrences SET legacy_subject_id = subject_id, legacy_assignment = assignment,
+       subject_id = NULL, assignment = 'none'
+ WHERE assignment IN ('auto', 'suggested') AND subject_id IS NOT NULL
+   AND subject_id NOT IN (SELECT id FROM subjects WHERE user_locked = 1)
+   AND subject_id NOT IN (SELECT subject_id FROM occurrences WHERE assignment = 'manual' AND subject_id IS NOT NULL)
+   AND subject_id NOT IN (SELECT a FROM subject_pairs UNION SELECT b FROM subject_pairs);
 """),
 ]
 

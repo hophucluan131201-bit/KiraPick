@@ -1330,7 +1330,7 @@ class MainWindow(QMainWindow):
             self.taste.load_clips(self.project.conn)  # new CLIP vectors: the taste score can cover them
             self.retrain_taste()
             return
-        people = self.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
+        people = self.project.conn.execute("SELECT COUNT(DISTINCT subject_id) FROM occurrences WHERE subject_id IS NOT NULL").fetchone()[0]
         unknown = self.project.conn.execute(
             f"SELECT COUNT(*) FROM ({actions.UNIDENTIFIED_ASSETS})").fetchone()[0]
         review = len(merge_suggestions(self.project.conn))
@@ -2467,7 +2467,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Chọn ảnh", "Hãy nhập một thư mục ảnh trước.")
             return None
         conn = self.project.conn
-        people = conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
+        people = conn.execute("SELECT COUNT(DISTINCT subject_id) FROM occurrences WHERE subject_id IS NOT NULL").fetchone()[0]
         in_view = [r.id for r in self.model.records() if r.status == "ok"]
         flt, target = self.model.current_filter, self.model.current_target
         view_name = (f"ảnh của {actions.subject_label(conn, target)}" if flt is Filter.SUBJECT and target is not None
