@@ -12,6 +12,7 @@
 |---|---|---|
 | 0.1 | **Mốc 1 có ba nhóm lọc:** cỡ cảnh, nội dung ảnh, lỗi nét. **Người & vai trò thuộc Mốc 2** | Review 2026-11-07 |
 | 0.2 | **CLIP `pending`** ở Media (MED-CLIP): MOD-1 là hồ sơ chấp nhận rủi ro, **không phải căn cứ quyền**. Mốc 1 chạy **phương án dự phòng §12a**: nội dung ảnh chỉ gán tay (CT-F1, CT-F2), "Gợi ý lại" nội dung tắt (CT-F3), khoảnh khắc chỉ chia theo khoảng nghỉ (MT-F1), tên booth gợi ý trong cùng khoảnh khắc (BT-F1) | LIC-1, MED-CLIP |
+| 0.2a | **Mục 12, 12a, 13, 14 viết lại theo LIC-1:** Media chỉ nạp trọng số `verified` cho chế độ `media` trong `configs/model-policy.json`; CLIP và SFace `pending`; phương án dự phòng §12a là cách chạy hiện hành | Review 2026-11-07 (sau đợt 2) |
 | 0.3 | **SFace `pending`**: Mốc 2 gom người **chỉ gán tay**, trừ khi có căn cứ (R1). Danh sách cho phép là `configs/model-policy.json` dùng chung (thay `configs/media-models.json`); trạng thái chỉ còn verified / pending / never | LIC-1 |
 | 0.4 | **Mọi nhãn AI** (cỡ cảnh, lỗi nét) hiện kèm **"(thử nghiệm)"** cho tới khi có kết quả chấm trên ảnh thật đạt ngưỡng §11 | Review 2026-11-07 |
 | 0.5 | **Dữ liệu:** mỗi sự kiện một thư mục và một cơ sở dữ liệu ở `%LOCALAPPDATA%\KiraPick\media\<mã>\`. CSDL sự kiện dùng chung cấu trúc bảng ảnh với phiên Chụp cá nhân (nay là v8, có ghi nguồn kết quả), cộng các bảng Media riêng (`app/media/schema.py`) chỉ áp cho sự kiện. Cùng một thư mục ảnh mở ở hai chế độ là hai CSDL: P/X, sao, nhãn tách riêng | Kế hoạch M1 |
@@ -89,7 +90,7 @@ Mọi nhãn (cỡ cảnh, nội dung, cảnh báo nét, người, vai trò, kho�
 
 - **Nhãn:** Sân khấu, Booth / Gian hàng, Decor, Sản phẩm, Merch. **Một ảnh mang được nhiều nhãn**, mỗi nhãn có trạng
   thái riêng.
-- **Cách gợi ý:**
+- **Cách gợi ý** (chỉ khi CLIP `verified`; **hiện CLIP `pending`**: nội dung chỉ gán tay, §12a CT-F1/F2/F3):
   - Dùng **CLIP ViT-L/14**: so phần nhúng ảnh với mô tả bằng chữ của từng nhãn. Mô tả được tính sẵn lúc build, như
     `clip_prompts_v1.npz` [Repo].
   - Gắn mọi nhãn vượt ngưỡng; ngưỡng của từng nhãn chỉnh trên tập chỉnh ngưỡng (mục 11).
@@ -172,7 +173,7 @@ cảnh báo nét (mục 6).
 ## 7. Người: gom, tên và vai trò là ba việc riêng
 
 1. **Gom cùng người (AI):** bằng khuôn mặt, mô hình **SFace** (Apache-2.0) [Repo: `app/ai/detect.py`]. Kết quả là các
-   nhóm người chưa có tên.
+   nhóm người chưa có tên. **Hiện SFace `pending`** (mục 12): Mốc 2 gom người chỉ gán tay cho tới khi có căn cứ quyền.
 2. **Gán tên (người dùng):** tuỳ chọn.
 3. **Gán vai trò (người dùng):** Diễn giả / Celeb / Talent / Đại biểu.
    - Gán được khi chưa có tên.
@@ -209,7 +210,7 @@ cảnh báo nét (mục 6).
 ## 8. Khoảnh khắc
 
 **AI tự chia** theo giờ chụp đã chỉnh lệch (mục 9), dựa trên hai tiêu chí: khoảng nghỉ dài, và đổi cảnh về hình ảnh
-(độ giống CLIP giữa các nhóm ảnh liên tiếp).
+(độ giống CLIP giữa các nhóm ảnh liên tiếp). **Hiện CLIP `pending`**: chỉ chia theo khoảng nghỉ (MT-F1, §12a).
 
 **Khoảnh khắc đã sửa tay giữ nguyên danh sách ảnh** (thay cho cách "ranh giới gắn với ảnh" của bản 3):
 - Khi người dùng **tách, gộp, "Tách tại đây", chuyển ảnh** hoặc **đổi tên**, khoảnh khắc đó trở thành **"đã sửa tay"**
@@ -397,76 +398,46 @@ cảnh báo nét (mục 6).
 
 ## 12. Mô hình và giấy phép
 
-Media là việc **có thu tiền**. Bảng dưới liệt kê từng bộ trọng số trong `configs/model-manifest.json` [Repo].
+Media là việc **có thu tiền**. **Căn cứ duy nhất** để Media nạp một trọng số là `configs/model-policy.json` (LIC-1,
+dùng chung cho cả hai chế độ, thay `configs/media-models.json` của bản 5). Trạng thái chỉ có ba loại:
+- **verified**: có căn cứ quyền, SHA-256 của file được ghim trong danh sách; nạp được ở các chế độ ghi trong `modes`;
+- **pending**: chưa có căn cứ; **không nạp ở chế độ nào**, chức năng dùng phương án dự phòng;
+- **never**: không bao giờ nạp, không đóng gói.
 
-| Mô hình | Nguồn và phiên bản | Giấy phép mã / trọng số | Media dùng? | Điều khoản dữ liệu huấn luyện |
+**Media chỉ nạp trọng số `verified` có chế độ `media`**, qua `MediaRegistry` (`app/media/models.py`); yêu cầu nào khác bị
+từ chối trước khi mở file. Xác nhận của chủ dự án chỉ duyệt việc triển khai, **không phải căn cứ quyền**; vì vậy MOD-1
+(chấp nhận rủi ro CLIP) không làm CLIP thành `verified`.
+
+| Trọng số (id) | Trạng thái hiện tại | Chế độ | Media dùng cho | Khi không nạp được |
 |---|---|---|---|---|
-| YOLOX-S / -M (dò người) | Megvii YOLOX 0.1.1rc0 | Apache-2.0 | **Có** | **Chờ xác minh** (COCO) |
-| YuNet 2023mar (dò mặt) | opencv_zoo@48b10fa | MIT | **Có** | **Chờ xác minh** |
-| SFace 2021dec (nhận mặt) | opencv_zoo@48b10fa | Apache-2.0 | **Có** | **Chờ xác minh** |
-| CLIP ViT-L/14 ảnh + mô tả chữ | OpenAI ViT-L-14.pt, chuyển lúc build | MIT (mã); model card: "deployed use out of scope" | **Có** | Đã chấp nhận 2026-10-28; **chờ xác nhận lại cho việc có thu tiền** (MOD-1) |
-| MediaPipe Face Landmarker v2 + blendshapes | `face_landmarker.task` v1, chuyển ONNX | Apache-2.0 | **Có** (mắt mở) | **Chờ xác minh** (model card) |
-| eDifFIQA(T) | opencv_zoo@48b10fa | CC-BY-4.0 | Không | — |
-| ArcFace w600k_r50 | InsightFace buffalo_l v0.7 | **Phi thương mại** | **Không** | Cấm dùng thương mại |
-| YoutuReID | opencv_zoo@48b10fa | Apache-2.0 | Không | Dữ liệu nghiên cứu |
-| TOPIQ ×3 | IQA-PyTorch | **PolyForm Noncommercial** | **Không** | Cấm dùng thương mại |
-| LAION aesthetic head | improved-aesthetic-predictor | Apache-2.0 | Không | Chờ xác minh |
+| YOLOX-S (`person_detector_s`) | **verified** | cá nhân, media | cỡ cảnh, chủ thể, nét | **Chặn build** từ Mốc 1 |
+| YOLOX-M (`person_detector_m`) | **verified** | cá nhân, media | như trên, khi GPU nhanh hơn | Dùng YOLOX-S |
+| YuNet (`face_detector`) | **verified** | cá nhân, media | cỡ cảnh, nét | **Chặn build** từ Mốc 1 |
+| SFace (`face_embedder`) | **pending** | — | gom người (Mốc 2) | Gom người **chỉ gán tay** |
+| CLIP ViT-L/14 (`clip_l14_image`, `clip_prompts`) | **pending** | — | nội dung, đổi cảnh, gần trùng | **Phương án dự phòng §12a** (đang dùng) |
+| eDifFIQA(T), MediaPipe ×2 | verified | chỉ cá nhân | không dùng ở Media | — |
+| LAION aesthetic | pending | — | không dùng ở Media | — |
+| YoutuReID | pending | — | không dùng | — |
+| ArcFace, TOPIQ ×3 | **never** | — | không dùng | Không đóng gói |
 
-**Rủi ro "nạp qua bước dùng chung"** [Repo]:
-- Bước phân tích của Chụp cá nhân tự nạp ArcFace + YoutuReID khi có sẵn (`app/workers/embed_job.py`,
-  `registry.ready("identity_plus")`).
-- TOPIQ nằm ở `app/ai/aesthetic.py` và `app/ai/iqa.py`.
+Điều khoản dữ liệu huấn luyện và nguồn của từng trọng số: `docs/model-licenses.md`, `docs/legal/`.
 
-**Kiểm tra mô hình là bước bắt buộc trước bản build đầu tiên** có dùng hoặc đóng gói trọng số Media, **kể cả bản dán
-nhãn mẫu ở Mốc 1**. Kiểm tra gồm năm phần:
-1. **Danh sách cho phép** `MEDIA_MODELS`: `person_detector_s/m`, `face_detector`, `face_embedder`, `clip_l14_image`,
-   `clip_prompts`, `face_mesh`, `face_blendshapes`.
-   - Media nạp mô hình qua một lớp bọc `ModelRegistry`; lớp này **báo lỗi ngay** nếu có yêu cầu nạp mô hình ngoài danh
-     sách.
-2. **Test quét mã:** mã Media không được import `identity_plus`, `aesthetic`, `iqa`, `embed_job`, hay phần LAION của
-   `clip_aesthetic`.
-3. **Báo cáo A — mô hình Media thực sự nạp khi chạy:**
-   - lệnh `--self-test` có thêm bước Media;
-   - bước này chạy phân tích Media trên ảnh tổng hợp, rồi ghi **từng mô hình đã nạp kèm SHA-256** vào `selftest.json`;
-   - CI so với `MEDIA_MODELS` và manifest; có mô hình ngoài danh sách thì **lỗi**.
-4. **Báo cáo B — mô hình có mặt trong bộ cài:**
-   - CI liệt kê mọi file trong thư mục `models\` của bản đóng gói, kèm SHA-256 và giấy phép theo manifest;
-   - đánh dấu file nào **không phải** mô hình Media. Bộ cài hiện vẫn chứa ArcFace / TOPIQ cho Chụp cá nhân (MOD-2).
-5. **Điều khoản chờ xác minh:** các mục "Chờ xác minh" ở bảng trên được kiểm tra trên model card / LICENSE gốc và ghi
-   vào `docs/model-licenses.md` **trước bản dán nhãn mẫu**. Mục nào chưa xác minh được thì ghi rõ "chưa xác minh" trong
-   báo cáo build.
-
-**Quy tắc chặn build theo trọng số:**
-- **Danh sách máy đọc được:** mỗi trọng số trong `MEDIA_MODELS` có một trạng thái, lưu trong file mới
-  `configs/media-models.json`:
-  - **đã xác minh**;
-  - **đã duyệt có rủi ro**, ví dụ CLIP nếu MOD-1 = có;
-  - **chờ xác minh**;
-  - **không dùng**.
-- **Media chỉ nạp** trọng số "đã xác minh" hoặc "đã duyệt có rủi ro". Trọng số "chờ xác minh" bị **loại khỏi danh sách
-  nạp** của bản build đó.
-- **Trọng số bị loại mà có phương án dự phòng** (CLIP, mục 12a): bản build chạy dự phòng. Báo cáo A ghi "CLIP: không nạp
-  — dự phòng".
-- **Trọng số bị loại mà không có phương án dự phòng:** **bản build bị chặn**, CI báo lỗi và ghi tên trọng số đang chặn.
-
-| Trọng số | Cần cho | Nếu "chờ xác minh" |
-|---|---|---|
-| YOLOX-S / -M | cỡ cảnh, chủ thể | **Chặn build** từ Mốc 1 |
-| YuNet | cỡ cảnh, gom người | **Chặn build** từ Mốc 1 |
-| SFace | gom người | Mốc 1 **không chặn** (chưa dùng); **chặn** từ Mốc 2; hoặc gom người chỉ gán tay (mục 7) nếu chủ dự án chọn |
-| MediaPipe (mắt) | điểm chọn ảnh (UX-2) | Chỉ chặn nếu UX-2 = có |
-| CLIP | mục 12a | **Không chặn**; dùng dự phòng |
-
-- **Báo cáo A** (mô hình thực sự nạp khi chạy) và **báo cáo B** (mô hình có trong bộ cài) vẫn **tách riêng**.
-  - Báo cáo B liệt kê cả trọng số của Chụp cá nhân (ArcFace, TOPIQ, CLIP…) **có trong bộ cài nhưng Media không nạp**,
-    ghi "ngoài Media — xem MOD-2".
-  - Một trọng số có trong bộ cài mà không có trong manifest làm **CI lỗi**.
+**Kiểm chứng đã có trong repo** (LIC-1, Mốc 1 M10):
+1. `MediaRegistry` từ chối mọi trọng số không `verified` cho Media; test `tests/unit/test_media_models.py`.
+2. **Quét mã:** mã Media (kể cả cửa sổ Media) không import luồng phân tích Chụp cá nhân (`identity_plus`, `aesthetic`,
+   `iqa`, `clip_aesthetic`, `embed_job`, `quality_job`, `analyze_job`) và không tự tạo `ModelRegistry`.
+3. **Báo cáo A** (`--self-test`): bước Media chạy phân tích trên ảnh tổng hợp và ghi từng trọng số đã mở kèm SHA-256 và
+   provider; mở trọng số ngoài danh sách Media thì self-test **lỗi**. Kết quả Linux / CI: chỉ `person_detector_s` +
+   `face_detector` (YOLOX-M khi có GPU).
+4. **Báo cáo B** (`scripts/check_package.py`): mọi file trong `models\` của bản đóng gói phải là trọng số `verified`
+   có SHA-256 ghim; không có trọng số `never` hay `pending`.
+5. Mỗi lượt phân tích Media ghi `analysis_runs` (chế độ `media`) và trọng số thật đã mở; mỗi nhãn AI mang `run_id`.
 
 ## 12a. Các chức năng phụ thuộc CLIP và phương án dự phòng
 
-CLIP ViT-L/14 chỉ được nạp trong Media khi **MOD-1 = có** (mục 13) và điều khoản của nó được ghi là **"đã duyệt cho
-Media"** (mục 12). Nếu không, Media chạy **phương án dự phòng** dưới đây. Lựa chọn này là cấu hình của bản build và được
-ghi trong báo cáo A.
+CLIP ViT-L/14 chỉ được nạp trong Media khi `configs/model-policy.json` ghi nó là **`verified`** cho chế độ `media`
+(mục 12). **Hiện CLIP là `pending`**, nên Media đang chạy **phương án dự phòng** dưới đây (đã làm ở Mốc 1). Báo cáo A ghi
+CLIP trong danh sách "không nạp" kèm phương án dự phòng.
 
 | Chức năng | Dùng CLIP để làm gì | Phương án dự phòng (không CLIP) | Ca nghiệm thu khi dự phòng |
 |---|---|---|---|
@@ -484,8 +455,7 @@ ghi trong báo cáo A.
   - Khoảnh khắc chỉ được chấm theo khoảng nghỉ.
   - Ghi rõ hai giới hạn này trong báo cáo chấm.
 
-**Chế độ Chụp cá nhân không đổi.** Chế độ này vẫn dùng CLIP như bản 3.0 (đã được chấp nhận ngày 2026-10-28). Quy tắc
-ở đây chỉ áp dụng cho Media.
+**Chế độ Chụp cá nhân** cũng theo cùng danh sách: CLIP `pending` nên Chụp cá nhân hiện cũng không nạp CLIP (LIC-1).
 
 ## 13. Quyết định của chủ dự án (đã chốt 2026-11-06)
 
@@ -496,7 +466,7 @@ ghi trong báo cáo A.
 | **UX-2** | **Chưa làm** Chọn ảnh tự động; để bản sau. Bản Beta chỉ báo "đủ cỡ cảnh" theo khoảnh khắc |
 | **UX-3** | **Không đọc** số serial; nguồn máy theo thư mục + hãng / dòng máy, và gán tay |
 | **UX-4** | Rung máy và nhòe chuyển động tính là **Out nét** |
-| **MOD-1** | **Dùng CLIP** trong Media; chủ dự án **chấp nhận rủi ro** của model card. Trạng thái CLIP trong `configs/media-models.json`: "đã duyệt có rủi ro". Phương án dự phòng ở mục 12a vẫn được làm, dùng khi CLIP thiếu hoặc lỗi |
+| **MOD-1** | Chủ dự án chấp nhận rủi ro của model card CLIP (2026-11-06). **Sau LIC-1:** đây là hồ sơ chấp nhận rủi ro, **không phải căn cứ quyền**; CLIP vẫn `pending` trong `configs/model-policy.json` (MED-CLIP) và Media chạy phương án dự phòng §12a |
 | **MOD-2** | Chủ dự án **có thu tiền** khi chụp cá nhân → ArcFace và TOPIQ trong chế độ Chụp cá nhân là **vấn đề giấy phép cần xử lý**. Đây là việc riêng, ngoài phạm vi Media; mình sẽ trình đề xuất thay thế riêng |
 | **NAME** | Giữ tên làm việc |
 | **THR** | Đồng ý các ngưỡng ở mục 11 |
@@ -542,8 +512,10 @@ ghi trong báo cáo A.
 - RAW+JPEG ghép theo thư mục + tên; trùng tên ở hai thư mục là hai ảnh (`app/ingest/scanner.py`).
 - Lựa chọn lưu theo `decisions.asset_id`; giờ chụp ở `assets.capture_time`.
 - Manifest: nguồn, SHA-256, giấy phép của từng mô hình ở mục 12.
-- ArcFace / YoutuReID được `embed_job.py` tự nạp; TOPIQ ở `aesthetic.py` / `iqa.py`.
-- Phần nhúng CLIP lưu theo ảnh (`asset_vectors`); mô tả chữ tính lúc build (`scripts/convert_clip.py`).
+- Đường nạp ArcFace / YoutuReID (`embed_job.py`) và TOPIQ (`aesthetic.py`, `iqa.py`) đã gỡ khỏi phân tích (LIC-1 C4);
+  ArcFace, TOPIQ là `never`, YoutuReID `pending`.
+- Danh sách cho phép `configs/model-policy.json` (verified / pending / never, SHA-256 ghim); `MediaRegistry` chỉ nạp
+  `verified` cho Media; CLIP và SFace `pending`.
 - Đã có: gộp / tách / "khác nhau" / hoàn tác; bước tự kiểm tra bản đóng gói; test chặn mạng; lệnh chẩn đoán chỉ ra số.
 
 - Burst theo giờ (≤ 3 giây) đã có ở `app/quality/burst.py`; đây là phương án dự phòng cho việc tránh chọn ảnh trùng.
@@ -552,7 +524,7 @@ ghi trong báo cáo A.
 - Mọi ngưỡng và tỉ lệ ở mục 11.
 - Các ca SZ-01a…05, FC-01…05, MED-02 (ảnh thật).
 - Dung sai τ của quy tắc lệch giờ.
-- Nếu MOD-1 = không: MT-F1 và MED-02 ở chế độ dự phòng.
+- MT-F1 và MED-02 ở chế độ dự phòng (CLIP `pending`).
 - MED-03 / 03b / 03c chạy được **bằng ảnh tổng hợp** trong test tự động, không cần ảnh mẫu.
 - Tỉ lệ nhận được mặt và mức độ gom của SFace.
 
@@ -564,7 +536,7 @@ ghi trong báo cáo A.
 
 **Chờ xác minh (tài liệu gốc):**
 - Điều khoản dữ liệu huấn luyện của YOLOX, YuNet, SFace, MediaPipe, LAION.
-- Phạm vi chấp nhận rủi ro CLIP (MOD-1).
+- Căn cứ quyền cho CLIP và SFace (để chuyển từ `pending` sang `verified`; xác nhận của chủ dự án không thay được).
 
 ---
 
@@ -584,4 +556,4 @@ ghi trong báo cáo A.
 | # | Yêu cầu | Đã sửa ở |
 |---|---|---|
 | 1 | Chốt quy tắc lệch giờ MED-03; khoảng đối chiếu độc lập với ảnh đang kiểm tra; dữ liệu giờ cụ thể; khoảng chồng nhau; trạng thái sau Chuyển → Ctrl+Z → Ctrl+Z | Mục 8: "Quy tắc lệch giờ" (chỉ kiểm tra ảnh của nguồn vừa chỉnh; khoảng đối chiếu chỉ tính từ ảnh **không** thuộc nguồn đó, nên độc lập với ảnh được kiểm tra; τ = 30 s; chồng nhau thì không cảnh báo; gợi ý theo tâm gần nhất; khoảng trống thì không cảnh báo; cảnh báo lưu cùng bước chỉnh giờ và hoàn tác theo nó); bảng dữ liệu MED-03; bảng trạng thái S0–S4 có giải thích từng ảnh; ca phụ MED-03b (vùng chồng), MED-03c (không có khoảng đối chiếu), MED-03d (ảnh máy kia không bị kéo theo) |
-| 2 | Ghi đủ chức năng phụ thuộc CLIP; dự phòng cho nội dung **và** khoảnh khắc; ca nghiệm thu; giới hạn bản dán nhãn; giữ báo cáo A/B; trọng số chưa kiểm tra thì loại khỏi build hoặc chặn build | Mục 12a (5 chức năng, dự phòng, ca CT-F1…3, MT-F1, BT-F1, PK-F1, ảnh hưởng tới bản dán nhãn); mục 12 ("Quy tắc chặn build theo trọng số", `configs/media-models.json`, bảng chặn / dự phòng, báo cáo A/B tách riêng); MOD-1 ở mục 13 |
+| 2 | Ghi đủ chức năng phụ thuộc CLIP; dự phòng cho nội dung **và** khoảnh khắc; ca nghiệm thu; giới hạn bản dán nhãn; giữ báo cáo A/B; trọng số chưa kiểm tra thì loại khỏi build hoặc chặn build | Mục 12a (5 chức năng, dự phòng, ca CT-F1…3, MT-F1, BT-F1, PK-F1, ảnh hưởng tới bản dán nhãn); mục 12 (bản 6: `configs/model-policy.json` thay `configs/media-models.json`, bảng chặn / dự phòng, báo cáo A/B tách riêng); MOD-1 ở mục 13 |

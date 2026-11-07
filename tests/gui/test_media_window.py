@@ -226,3 +226,35 @@ def test_sample_labelling_mode_writes_reference_answers_only(qtbot, home) -> Non
     view.sample_button.setChecked(False)
     qtbot.keyClick(view.grid, Qt.Key.Key_C)  # back to working labels
     assert lb.labels_of(conn, ids["DSC_0001"])["shot"] == [("can", "confirmed", None)]
+
+
+def test_backspace_and_alt_digits_do_nothing_to_photos_while_typing(qtbot, home) -> None:  # noqa: ANN001
+    """Review 2026-11-07: Backspace (bỏ P/X) in a text field edits the text, never a photo's P / X."""
+    from PySide6.QtWidgets import QLineEdit
+
+    home.create("Gõ chữ")
+    view = home.view
+    view.start_import(home.shoot)
+    qtbot.waitUntil(lambda: view.import_thread is None, timeout=30000)
+    ids = _ids(view)
+    conn = view.media_event.conn
+    view.select([ids["DSC_0000"]])
+    qtbot.keyClick(view.grid, Qt.Key.Key_P)
+    qtbot.keyClick(view.grid, Qt.Key.Key_3, Qt.KeyboardModifier.AltModifier)
+    assert decisions.get(conn, ids["DSC_0000"]).flag == "keep" and decisions.get(conn, ids["DSC_0000"]).rating == 3
+    field = QLineEdit(view)  # any text field inside the Media window (search, rename…)
+    view.layout().addWidget(field)
+    field.show()
+    field.setFocus()
+    qtbot.waitUntil(field.hasFocus, timeout=5000)
+    qtbot.keyClicks(field, "Khai mac")  # ASCII: QTest cannot type composed Vietnamese letters
+    qtbot.keyClick(field, Qt.Key.Key_Backspace)
+    qtbot.keyClick(field, Qt.Key.Key_5, Qt.KeyboardModifier.AltModifier)
+    qtbot.keyClick(field, Qt.Key.Key_T)
+    assert field.text() == "Khai mat"  # Backspace removed "c"; Alt+5 typed nothing; the T key typed "t"
+    assert decisions.get(conn, ids["DSC_0000"]).flag == "keep"  # Backspace did not clear P
+    assert decisions.get(conn, ids["DSC_0000"]).rating == 3  # Alt+5 did not rate
+    assert "shot" not in lb.labels_of(conn, ids["DSC_0000"])  # T did not set Toàn
+    view.grid.setFocus()
+    qtbot.keyClick(view.grid, Qt.Key.Key_Backspace)  # back on the grid: Backspace clears P
+    assert decisions.get(conn, ids["DSC_0000"]).flag is None

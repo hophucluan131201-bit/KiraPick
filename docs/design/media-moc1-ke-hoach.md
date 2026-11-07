@@ -222,7 +222,10 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 | **MED-SAMPLE** | Hai album VNNIC (19/6, chính; 18/6, bổ sung), mục 4a | **Đã có đường dẫn**; còn kiểm số ảnh, độ phân giải, EXIF, quyền sử dụng |
 | **CLEAN-2** | Giữ hay xoá 10 DLL cuDNN do bản 3.0.0a đã cài khi nâng cấp | **Chờ chủ dự án** (hiện giữ) |
 | Đặc tả v6 | Ghi các chỉnh sửa kỹ thuật ở mục 0 vào đặc tả | **Đã làm** |
-| **Đợt 2** | Bắt đầu M6–M11 sau vòng review đợt 1 | **Đã làm** (mục 7), chờ review |
+| **Đợt 2** | Bắt đầu M6–M11 sau vòng review đợt 1 | **Qua review** 2026-11-07 (mục 7) |
+| Phím Media | Alt+0…5 sao, Backspace bỏ P/X | **Giữ** (review); thêm ca Backspace / Alt+số trong ô nhập chữ: không đổi ảnh |
+| Ngưỡng nét | 0,25 / 0,40 / ×1,8 | **Giữ để thử**; chỉ đổi theo số của tập chỉnh ngưỡng |
+| Checklist bản đầy đủ | Cài mới, nâng cấp, Windows/DPI, GPU/CUDA, dán nhãn ảnh thật | `docs/checklist-test-ban-day-du.md`; chủ dự án chốt thời điểm build và tổ chức test |
 | **R1-UNDO-AI** | Hoàn tác một thao tác khoảnh khắc làm trước lần "Phân tích lại" thì trả cả bảng khoảnh khắc về ảnh chụp trước thao tác đó, nên phần AI chia lại cũng bị trả về (khoảnh khắc 📌 và P/X không bị ảnh hưởng). Giữ cách này, hay chỉ trả các khoảnh khắc 📌 liên quan? | **Giữ cho Mốc 1** (review 2026-11-07). Cửa sổ báo rõ khi hoàn tác khôi phục cả cách chia trước đó; ca kiểm thử ở mục 7 |
 
 ---
