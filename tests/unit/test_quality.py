@@ -225,9 +225,10 @@ def test_aesthetic_part_averages_topiq_and_laion() -> None:
     topiq = (AESTHETIC_LOW + AESTHETIC_HIGH) / 2  # -> 50
     s = score(base | {"aesthetic_mos": topiq, "laion_mos": LAION_HIGH})  # -> 100
     assert s.parts["aesthetic"] == 75.0
-    assert "TOPIQ" in s.aesthetic_detail and "LAION" in s.aesthetic_detail
+    first, second = s.aesthetic_detail.split(" · ")  # function names, not model names (REG-1)
+    assert first.startswith("thẩm mỹ ") and second.startswith("thẩm mỹ (thang 2) ")
     only_laion = score(base | {"laion_mos": LAION_LOW})
-    assert only_laion.parts["aesthetic"] == 0.0 and "TOPIQ" not in only_laion.aesthetic_detail
+    assert only_laion.parts["aesthetic"] == 0.0 and only_laion.aesthetic_detail.startswith("thẩm mỹ (thang 2)")
 
 
 def test_technical_and_face_iqa_blend_in() -> None:

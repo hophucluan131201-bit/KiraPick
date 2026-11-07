@@ -50,7 +50,9 @@ def _child(folder: str, mode: str, learning_dir: str | None, prefer_gpu: bool,
                     should_cancel=cancel.is_set, mode=mode)
             out.put(("done", asdict(summary)))
         except ModelUnavailableError as exc:
-            out.put(("failed", f"{exc}\n\nCài lại ứng dụng, hoặc (bản mã nguồn) chạy một lần:\n"
+            logging.getLogger("app.ai").warning("analysis stopped: %s", exc.status.spec.id)
+            out.put(("failed", "Thiếu hoặc hỏng một thành phần AI của bước phân tích này (xem ⚙ Tuỳ chọn → ℹ Giới "
+                               "thiệu → Mô hình và giấy phép).\n\nCài lại ứng dụng, hoặc (bản mã nguồn) chạy một lần:\n"
                                ".\\.venv\\Scripts\\python .\\scripts\\fetch_models.py"))
     except Exception as exc:  # noqa: BLE001 - reported to the window
         logging.getLogger("app.ai").exception("analysis failed")

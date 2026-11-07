@@ -372,6 +372,11 @@ class MainWindow(QMainWindow):
         options.addAction(self.act_reset)
         options.addAction(self.act_learning)
         options.addAction(self.act_help)
+        self.act_about_models = QAction("ℹ Giới thiệu — Mô hình và giấy phép…", self)
+        self.act_about_models.setToolTip("Mỗi chức năng chạy bằng gì, mô hình nào đang dùng / tắt trong bản này, "
+                                         "file, mã SHA-256 và giấy phép")
+        self.act_about_models.triggered.connect(lambda: self.show_about_models())
+        options.addAction(self.act_about_models)
         options.addSeparator()
         options.addAction(self.act_auto_advance)
         options.addAction(self.act_gpu)
@@ -392,7 +397,7 @@ class MainWindow(QMainWindow):
         options.addAction(self.act_auto_update)
         self.options_button = QToolButton(self)
         self.options_button.setText("⚙ Tuỳ chọn")
-        self.options_button.setToolTip("Làm lại, AI đã học, phím tắt, card đồ hoạ, mức gu, cập nhật")
+        self.options_button.setToolTip("Làm lại, AI đã học, phím tắt, giới thiệu, card đồ hoạ, mức gu, cập nhật")
         self.options_button.setMenu(options)
         self.options_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.search = QLineEdit()
@@ -1026,7 +1031,7 @@ class MainWindow(QMainWindow):
             "<b>Độ nét theo máy + ống kính</b>",
             *self.focus_text(),
             "",
-            "Dữ liệu học chỉ có các con số (độ giống, điểm, “dấu vân tay” CLIP của ảnh), không có ảnh, "
+            "Dữ liệu học chỉ có các con số (độ giống, điểm, “dấu vân tay” hình ảnh của ảnh), không có ảnh, "
             "tên file hay tên chủ thể, và chỉ nằm trên máy này.",
         ]
         return "<br>".join(lines)
@@ -1040,7 +1045,7 @@ class MainWindow(QMainWindow):
             "SELECT asset_id, subject_id FROM occurrences WHERE subject_id IS NOT NULL AND is_main = 1")}
         recs = {r.id: r for r in self.model.records()}
         if not recs or not self.taste.clips:
-            QMessageBox.information(self, "Dạy gu", "Cần bấm 📊 Phân tích ảnh (có mô hình CLIP) trước, "
+            QMessageBox.information(self, "Dạy gu", "Cần chức năng Hợp gu (xem ⚙ → ℹ Giới thiệu) và bấm 📊 Phân tích ảnh trước, "
                                                          "và mở danh sách có ảnh.")
             return None
         ranked = {i: r.ranked.value for i, r in recs.items() if r.ranked is not None and r.ranked.value is not None}
@@ -1077,6 +1082,12 @@ class MainWindow(QMainWindow):
                 return dict(zip([str(i) for i in data["ids"]], data["vectors"], strict=True))
         except Exception:  # noqa: BLE001 - only the explanation is lost
             return {}
+
+    def show_about_models(self) -> None:
+        """⚙ → ℹ Giới thiệu: the only screen that names models, files and licences (work screens name functions)."""
+        from app.ui.about_models import ModelsDialog
+
+        ModelsDialog(self, self._registry_or_default()).exec()
 
     def show_learning(self) -> None:
         box = QMessageBox(self)
@@ -1323,7 +1334,7 @@ class MainWindow(QMainWindow):
                                 else {"cuda": "GPU NVIDIA", "directml": "GPU DirectML", "openvino": "OpenVINO"}.get(device, "GPU"))
             return
         label = {"load_models": "Đang nạp mô hình AI…", "detect": "Đang nhận diện chủ thể…",
-                 "embed": "Đang so khuôn mặt và dáng người (ArcFace + ReID)…",
+                 "embed": "Đang so khuôn mặt và dáng người…",
                  "quality": "Đang chấm điểm ảnh (độ nét đo trên ảnh gốc)…",
                  "group": "Đang gom ảnh theo chủ thể…"}.get(phase, phase)
         if total and phase in ("detect", "embed", "quality"):
@@ -2317,8 +2328,8 @@ class MainWindow(QMainWindow):
         self.retrain_focus(wait)
         clip = self._registry_or_default().status("clip_l14_image")
         if clip.state is not ModelState.READY:
-            self._on_taste_trained(TasteStatus(False, "Chưa có mô hình CLIP nên chưa học được gu "
-                                                      f"({clip.state.value}: {clip.path.name})"))
+            self._on_taste_trained(TasteStatus(False, "Chức năng Hợp gu chưa dùng được trong bản này nên chưa học "
+                                                      "được gu (xem ⚙ Tuỳ chọn → ℹ Giới thiệu)"))
             return
         try:
             examples = store.taste_examples(CLIP_VERSION)

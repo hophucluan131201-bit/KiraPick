@@ -16,7 +16,7 @@ def test_both_scores_bars_and_reasons() -> None:
     html = explain_html(s, rank(s, 85.0, [], 0.5), TasteStatus(True, "Học từ 214 lựa chọn, độ khớp 0,78"), 2)
     assert f"Kỹ thuật {s.total:.0f}/100" in html and "Hợp gu bạn 85/100" in html
     assert "AI chọn (thứ 2)" in html
-    assert "█" in html and "nét ở mắt" in html and "TOPIQ 5,0 · LAION 6,1" in html
+    assert "█" in html and "nét ở mắt" in html and "thẩm mỹ 5,0 · thẩm mỹ (thang 2) 6,1" in html
     assert "Học từ 214 lựa chọn" in html
     assert "Chưa đánh giá" in html and "mắt nhắm/mở" in html  # blink not measured
 

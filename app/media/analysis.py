@@ -31,8 +31,8 @@ log = logging.getLogger(__name__)
 STAGE = "media_analyse"
 DETECT_LONG_SIDE = 1600  # as the personal-mode detection: YuNet runs at 640 and 1600
 DETECTION_MODELS = ("person_detector_s", "face_detector")
-NO_DETECTION = ("Chưa có mô hình dò người / khuôn mặt được phép dùng cho Media (YOLOX-S, YuNet): không xếp cỡ cảnh "
-                "và không cảnh báo nét. Khoảnh khắc vẫn được chia theo khoảng nghỉ.")
+NO_DETECTION = ("Chức năng dò người / dò khuôn mặt chưa dùng được trong bản này (xem ⚙ Tuỳ chọn → ℹ Giới thiệu): "
+                "không xếp cỡ cảnh và không cảnh báo nét. Khoảnh khắc vẫn được chia theo khoảng nghỉ.")
 
 # detect(bgr) -> (persons [(box, score)], faces [(box, score)]) on the image passed in
 Detect = Callable[[np.ndarray], tuple[list[tuple[Box, float]], list[tuple[Box, float]]]]

@@ -222,7 +222,7 @@ def score(project: Project) -> dict:
         "out_net": _focus_report(truth.get("focus", {}), ai, scoring, "out_net"),
         "trat_net": _focus_report(truth.get("focus", {}), ai, scoring, "trat_net"),
         "moments": _boundary_report(conn, truth.get("boundary", {}), skipped),
-        "content": {"applies": False, "text": "không áp dụng: chưa có nhãn nội dung bằng AI (CLIP chưa được duyệt)",
+        "content": {"applies": False, "text": "không áp dụng: chưa có nhãn nội dung bằng AI (chức năng gợi ý nội dung đang tắt)",
                     "labelled": {k: sum(1 for v in truth.get("content", {}).values() if k in v) for k in lb.CONTENT}},
         "suggested_thresholds": {"shot": _suggest_shot_thresholds(truth.get("shot", {}), ai, tuning)},
         "sample_counts": {

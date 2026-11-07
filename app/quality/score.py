@@ -52,7 +52,7 @@ class Score:
     weaknesses: list[str] = field(default_factory=list)
     not_rated: list[str] = field(default_factory=list)  # criteria that could not be judged, with why
     reasons: dict[str, str] = field(default_factory=dict)  # one plain sentence per criterion
-    aesthetic_detail: str = ""  # "TOPIQ 5,0 · LAION 6,1"
+    aesthetic_detail: str = ""  # "thẩm mỹ 5,0 · thẩm mỹ (thang 2) 6,1"
     tags: list[str] = field(default_factory=list)  # CLIP style tags (ids)
 
     def summary(self) -> str:
@@ -116,10 +116,10 @@ def score(v: dict, focus: FocusOverride | None = None) -> Score:
     detail = []
     if v.get("aesthetic_mos") is not None:
         beauty.append(_ramp(v["aesthetic_mos"], AESTHETIC_LOW, AESTHETIC_HIGH))
-        detail.append(f"TOPIQ {v['aesthetic_mos']:.1f}".replace(".", ","))
+        detail.append(f"thẩm mỹ {v['aesthetic_mos']:.1f}".replace(".", ","))
     if v.get("laion_mos") is not None:
         beauty.append(_ramp(v["laion_mos"], LAION_LOW, LAION_HIGH))
-        detail.append(f"LAION {v['laion_mos']:.1f}".replace(".", ","))
+        detail.append(f"thẩm mỹ (thang 2) {v['laion_mos']:.1f}".replace(".", ","))
     if beauty:
         parts["aesthetic"] = sum(beauty) / len(beauty)
     blink = v.get("blink")
