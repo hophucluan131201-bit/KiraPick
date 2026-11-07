@@ -258,5 +258,5 @@ Mọi kết quả AI ở đây là **trên ảnh tổng hợp** (kiểm quy tắ
 | `5205fc9` M10 | Self-test Media, chặn mạng, đổi chế độ | Bước Media trong `--self-test`; Media chạy khi chặn mạng; cùng thư mục P / X qua đổi chế độ thật; quét import | Đạt |
 
 **Tổng:** 1352 test Linux đạt. CI Windows ở chế độ kiểm tra: `lic1-checks` run 42352868649 đạt (174 đạt; 35 đạt
-dưới tường lửa; self-test `ok True`, `network_attempts []`); `perf` run 42352873974 (kết quả ở gói review). Job build /
+dưới tường lửa; self-test `ok True`, `network_attempts []`); `perf` run 42352873974 đạt (bộ Windows 1132 đạt / 221 bỏ qua; perf 27 đạt; GUI lặp lại và hiệu năng lặp 6 lần: 0 hỏng). Job build /
 đóng gói: `skipped`.
