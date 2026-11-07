@@ -14,7 +14,7 @@ import logging
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QRect, QSize, Qt, QThread, Signal
+from PySide6.QtCore import QItemSelectionModel, QRect, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -46,17 +46,40 @@ from app.media.undo import EventUndo
 from app.ui import theme
 from app.ui.asset_model import AssetListModel, AssetRecord
 from app.ui.grid import FOOTER, ThumbnailDelegate, make_grid
+from app.ui.compare_layout import initial_active, start_error
+from app.ui.compare_view import CompareView
 from app.ui.viewer import ImageViewer
 
 log = logging.getLogger(__name__)
 
 CELL = 200
-SAMPLE_KEYS = {"N": ("focus", "net"), "O": ("focus", "out_net"), "R": ("focus", "trat_net"),
-               "B": ("boundary", "start"), "0": ("skip", "1")}
-SAMPLE_HELP = ("Dán nhãn mẫu (để chấm AI, không đổi nhãn làm việc): T/U/C cỡ cảnh · 1–5 nội dung · N nét · O out nét · "
-               "R trật nét · B ảnh này bắt đầu khoảnh khắc mới · 0 chưa đánh giá. Bấm lại cùng phím để bỏ.")
-KEY_HELP = ("P chọn · X loại · Backspace bỏ · F ❤ · Alt+0…5 sao · T/U/C cỡ cảnh · 1–5 nội dung · Space ảnh lớn · "
-            "Ctrl+Z hoàn tác")
+RELOAD_DURING_IMPORT_MS = 1500  # as Chụp cá nhân: photos appear in the grid while the import runs
+# Keys: the same as Chụp cá nhân 3.0.0 for every shared action (P K X U F 0-5, ← →, Space/Enter, Esc/G, C, Z + −,
+# Q W R, Ctrl+A / F / I / E / Z, F1); Media-only labels on Alt (they did not exist in 3.0.0, so nothing moves).
+SHOT_ALT = {f"Alt+{k}": v for k, v in lb.SHOT_KEYS.items()}  # Alt+T Toàn, Alt+U Trung, Alt+C Cận
+CONTENT_ALT = {f"Alt+{k}": k for k in lb.CONTENT_KEYS}  # Alt+1…5 nội dung
+FOCUS_KEYS = {"Q": None, "W": "out_net", "R": "trat_net"}  # as 3.0.0: Q nét, W soft / out nét, R lệch / trật nét
+SAMPLE_KEYS = {"Q": ("focus", "net"), "W": ("focus", "out_net"), "R": ("focus", "trat_net"),
+               "B": ("boundary", "start"), "Alt+0": ("skip", "1")}
+SAMPLE_HELP = ("Dán nhãn mẫu (để chấm AI, không đổi nhãn làm việc): Alt+T/U/C cỡ cảnh · Alt+1–5 nội dung · Q nét · "
+               "W out nét · R trật nét · B ảnh này bắt đầu khoảnh khắc mới · Alt+0 chưa đánh giá. Bấm lại để bỏ.")
+KEY_HELP = ("P/K chọn · X loại · U bỏ chọn · 1–5 sao, 0 xoá · F ❤ · Space/Enter ảnh lớn · C so sánh · Q/W/R nét · "
+            "Alt+T/U/C cỡ cảnh · Alt+1–5 nội dung · Ctrl+Z hoàn tác · F1 tất cả phím")
+SHORTCUTS_TEXT = (
+    "Giống Chụp cá nhân 3.0.0:\n"
+    "← / →   ảnh trước / sau\n"
+    "Space / Enter   xem lớn ↔ lưới,  Esc / G   về lưới\n"
+    "Z   zoom 100% ↔ vừa khung,  + / −   phóng to / thu nhỏ (khi xem lớn)\n"
+    "C   so sánh 2–4 ảnh đang đánh dấu (Ctrl+click)\n"
+    "P / K   Chọn      X   Loại      U   Bỏ chọn\n"
+    "1 – 5   chấm sao,  0   xoá sao,  F   Yêu thích\n"
+    "Q   nét (bỏ cảnh báo nét),  W   Out nét,  R   Trật nét\n"
+    "Ctrl+A   đánh dấu tất cả,  Ctrl+F   tìm tên file,  Ctrl+I   nhập ảnh,  Ctrl+E   xuất ảnh\n"
+    "Ctrl+Z   hoàn tác\n\n"
+    "Chỉ có ở Media:\n"
+    "Alt+T / Alt+U / Alt+C   cỡ cảnh Toàn / Trung / Cận\n"
+    "Alt+1 … Alt+5   nội dung: Sân khấu, Booth / Gian hàng, Decor, Sản phẩm, Merch (bấm lại để bỏ)\n"
+    "Backspace   cũng là Bỏ chọn\n\n" + SAMPLE_HELP)
 
 
 def typing_in(widget: QWidget | None) -> bool:
@@ -83,7 +106,7 @@ class MediaAssetModel(AssetListModel):
         if self._project is not None:
             sql, params = browse.filter_sql(self.media_filter)
             params.update(min_rating=1, target_id=None)
-            rows = self._load_rows(sql, params, search=False)
+            rows = self._load_rows(sql, params, search=True)
             order = browse.time_order(self._project.conn)
             rows.sort(key=lambda r: order.get(r.id, len(order)))
             self.info = browse.card_info(self._project.conn)
@@ -255,10 +278,16 @@ class EventView(QWidget):
         self.sample_button = QPushButton("🏷 Dán nhãn mẫu")
         self.sample_button.setCheckable(True)
         self.sample_button.setToolTip(SAMPLE_HELP)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("🔎 Tìm tên file (Ctrl+F)")
+        self.search.setClearButtonEnabled(True)
+        self.search.setMaximumWidth(220)
+        self.search.textChanged.connect(lambda t: self.model.set_search(t))
         top = QHBoxLayout()
         for w in (self.back_button, self.title):
             top.addWidget(w)
         top.addStretch(1)
+        top.addWidget(self.search)
         for w in (self.import_button, self.clock_button, self.analyse_button, self.sample_button, self.export_button,
                   self.undo_button):
             top.addWidget(w)
@@ -306,9 +335,13 @@ class EventView(QWidget):
         self.grid.setModel(self.model)
         self.grid.setGridSize(QSize(CELL + 6, CELL + FOOTER + 6))
         self.viewer = ImageViewer(self)
+        self.compare = CompareView()
+        self.compare.back_requested.connect(self.leave_compare)
         self.stack = QStackedWidget()
         self.stack.addWidget(self.grid)
         self.stack.addWidget(self.viewer)
+        self.stack.addWidget(self.compare)
+        self.grid.tick_clicked.connect(self._tick_clicked)
         self.details = QLabel()
         self.details.setWordWrap(True)
         self.details.setMinimumWidth(240)
@@ -345,6 +378,9 @@ class EventView(QWidget):
         self.keep_button.clicked.connect(lambda: self._warning_action(False))
         self.grid.selectionModel().currentChanged.connect(lambda *_: self._show_details())
         self.grid.doubleClicked.connect(lambda *_: self.toggle_large())
+        self._reload_timer = QTimer(self)
+        self._reload_timer.setInterval(RELOAD_DURING_IMPORT_MS)
+        self._reload_timer.timeout.connect(self.reload_preserving_view)
         self._build_shortcuts()
         self.model.set_project(event)
         self.refresh(keep_filter=False)
@@ -365,25 +401,116 @@ class EventView(QWidget):
         sc("P", lambda: self.set_flag("keep"))
         sc("K", lambda: self.set_flag("keep"))
         sc("X", lambda: self.set_flag("reject"))
+        sc("U", lambda: self.set_flag(None))
         sc("Backspace", lambda: self.set_flag(None))
         sc("F", self.toggle_favorite)
         for n in range(6):
-            sc(f"Alt+{n}", lambda n=n: self.set_rating(n))
-        for key, value in lb.SHOT_KEYS.items():
+            sc(str(n), lambda n=n: self.set_rating(n))
+        for key, value in SHOT_ALT.items():
             sc(key, lambda v=value: self.sample("shot", v) if self.sampling else self.set_shot(v))
-        for key in lb.CONTENT_KEYS:
-            sc(key, lambda k=key: self.sample("content", lb.CONTENT_KEYS[k]) if self.sampling
+        for key, digit in CONTENT_ALT.items():
+            sc(key, lambda k=digit: self.sample("content", lb.CONTENT_KEYS[k]) if self.sampling
                else self.toggle_content(k))
-        for key, (grp, value) in SAMPLE_KEYS.items():
-            sc(key, lambda g=grp, v=value: self.sampling and self.sample(g, v))
+        for key in ("Q", "W", "R", "B", "Alt+0"):
+            sc(key, lambda k=key: self._focus_or_sample_key(k))
         sc("Space", self.toggle_large)
+        sc("Return", self.toggle_large)
         sc("Right", lambda: self.step(1))
         sc("Left", lambda: self.step(-1))
-        sc("Escape", lambda: self.stack.currentWidget() is self.viewer and self.toggle_large())
+        sc("Escape", self.back_to_grid)
+        sc("G", self.back_to_grid)
+        sc("C", self.show_compare)
+        sc("Z", lambda: self.stack.currentWidget() is self.viewer and self.viewer.toggle_zoom())
+        for key in ("+", "="):
+            sc(key, lambda: self.stack.currentWidget() is self.viewer and self.viewer.zoom_in())
+        sc("-", lambda: self.stack.currentWidget() is self.viewer and self.viewer.zoom_out())
+        QShortcut(QKeySequence("Ctrl+A"), self, self.grid.selectAll, context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        QShortcut(QKeySequence("Ctrl+F"), self, lambda: (self.search.setFocus(), self.search.selectAll()),
+                  context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        QShortcut(QKeySequence("Ctrl+I"), self, self.choose_import, context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        QShortcut(QKeySequence("Ctrl+E"), self, self.open_export, context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        QShortcut(QKeySequence("F1"), self, self.show_shortcuts, context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
         QShortcut(QKeySequence(QKeySequence.StandardKey.Undo), self, self.undo_last,
                   context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
+    def show_shortcuts(self) -> None:
+        QMessageBox.information(self, "Phím tắt — Media sự kiện", SHORTCUTS_TEXT)
+
+    def _focus_or_sample_key(self, key: str) -> None:
+        if self.sampling:
+            if key in SAMPLE_KEYS:
+                self.sample(*SAMPLE_KEYS[key])
+        elif key in FOCUS_KEYS:
+            self.set_focus_label(FOCUS_KEYS[key])
+
+    def set_focus_label(self, value: str | None) -> None:
+        """Q / W / R as in 3.0.0: Q = the photo is sharp (AI focus warnings removed), W = Out nét, R = Trật nét."""
+        ids = self.selected_ids()
+        if not ids:
+            return
+        if value is None:
+            shown = {v for a in ids for v, st, _ in lb.labels_of(self.media_event.conn, a).get("focus", [])
+                     if v != lb.UNKNOWN}
+            for v in sorted(shown):
+                self.undo.media(lb.remove, ids, "focus", v)
+            text = "Đã đánh dấu nét (bỏ cảnh báo nét)" if shown else "Ảnh không có cảnh báo nét"
+        else:
+            self.undo.media(lb.confirm, ids, "focus", value)
+            text = f"Đã gán {lb.FOCUS[value]}"
+        self.model.refresh_info()
+        self._after_action(f"{text}: {len(ids)} ảnh.")
+
+    def _tick_clicked(self, asset_id: int, shift: bool) -> None:
+        """The card's tick box = Chọn on / off, as in 3.0.0."""
+        rec = self.model.records_by_id([asset_id]).get(asset_id)
+        if rec is None:
+            return
+        self.undo.set_flag([asset_id], None if rec.flag == "keep" else "keep")
+        self.model.refresh_record(asset_id)
+        self._update_undo()
+
+    # ------------------------------------------------------------------ compare (3.0.0 Compare page)
+    def in_compare(self) -> bool:
+        return self.stack.currentWidget() is self.compare
+
+    def show_compare(self) -> bool:
+        if self.in_compare():
+            return True
+        rows = sorted(i.row() for i in self.grid.selectionModel().selectedIndexes())
+        marked = [self.model.records()[r] for r in rows if r < len(self.model.records())]
+        error = start_error(len(marked))
+        if error is not None:
+            self.say(error)
+            return False
+        active = initial_active([r.id for r in marked], self.current_id())
+        self.stack.setCurrentWidget(self.compare)
+        self.compare.show_records(marked, {r.id: pm for r in marked if (pm := self.model.pixmap(r)) is not None},
+                                  active)
+        return True
+
+    def leave_compare(self) -> bool:
+        if not self.in_compare():
+            return False
+        self.compare.stop_pending()
+        self.stack.setCurrentWidget(self.grid)
+        self.grid.setFocus()
+        return True
+
+    def back_to_grid(self) -> None:
+        if self.in_compare():
+            self.leave_compare()
+        elif self.stack.currentWidget() is self.viewer:
+            self.toggle_large()
+
+    def _refresh_compared(self, ids: list[int]) -> None:
+        if self.in_compare():
+            for rec in self.compare.records():
+                if rec.id in ids and (fresh := self.model.with_decisions(rec)) is not None:
+                    self.compare.update_record(fresh)
+
     def selected_ids(self) -> list[int]:
+        if self.in_compare():  # as 3.0.0: in Compare the keys act on the photo under the pointer
+            return [self.compare.active_id] if self.compare.active_id is not None else []
         rows = sorted(i.row() for i in self.grid.selectionModel().selectedIndexes())
         ids = [self.model.records()[r].id for r in rows if r < len(self.model.records())]
         if not ids:
@@ -426,6 +553,23 @@ class EventView(QWidget):
         p = analysis.progress_of(self.media_event.conn)
         if self.analysis_thread is None and not self.status.text():
             self.say(f"{p['total']} ảnh · đã phân tích {p['done']} · ⏳ {p['waiting']}")
+
+    def reload_preserving_view(self) -> None:
+        """Reload the grid keeping the current photo, the marked photos and the scroll position (3.0.0 behaviour)."""
+        current, marked = self.current_id(), [self.model.records()[i.row()].id
+                                               for i in self.grid.selectionModel().selectedIndexes()
+                                               if i.row() < len(self.model.records())]
+        scroll = self.grid.verticalScrollBar().value()
+        self.model.reload()
+        sel = self.grid.selectionModel()
+        for a in marked:
+            idx = self.model.index_of(a)
+            if idx.isValid():
+                sel.select(idx, QItemSelectionModel.SelectionFlag.Select)
+        idx = self.model.index_of(current) if current is not None else self.model.index(0)
+        if idx.isValid():
+            sel.setCurrentIndex(idx, QItemSelectionModel.SelectionFlag.NoUpdate)
+        self.grid.verticalScrollBar().setValue(scroll)
 
     def _fill_sources(self) -> None:
         keep = self.camera_filter.currentData()
@@ -568,6 +712,7 @@ class EventView(QWidget):
             self.undo.set_flag(ids, flag)
             for a in ids:
                 self.model.refresh_record(a)
+            self._refresh_compared(ids)
             self._update_undo()
 
     def set_rating(self, n: int) -> None:
@@ -576,6 +721,7 @@ class EventView(QWidget):
             self.undo.set_rating(ids, n)
             for a in ids:
                 self.model.refresh_record(a)
+            self._refresh_compared(ids)
             self._update_undo()
 
     def toggle_favorite(self) -> None:
@@ -699,10 +845,12 @@ class EventView(QWidget):
         t.failed.connect(lambda msg: self._import_done(None, msg))
         self.import_thread = t
         self.import_button.setEnabled(False)
+        self._reload_timer.start()
         t.start()
         return t
 
     def _import_done(self, summary: dict | None, error: str | None = None) -> None:
+        self._reload_timer.stop()
         if self.import_thread is not None:
             self.import_thread.wait()
         self.import_thread = None
@@ -779,6 +927,7 @@ class EventView(QWidget):
             self.say("Đang nhập hoặc phân tích: bấm ⏸ Tạm dừng và chờ dừng hẳn rồi quay lại.")
             return
         self.viewer.stop_pending()
+        self.compare.stop_pending()
         self.model.stop_pending()
         self.leave.emit()
 

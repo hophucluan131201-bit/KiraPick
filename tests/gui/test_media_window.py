@@ -96,10 +96,10 @@ def test_import_analyse_filter_edit_undo(qtbot, home) -> None:  # noqa: ANN001
 
     # keys: T (shot), 2 (content), P / X
     view.select([ids["DSC_0004"]])
-    qtbot.keyClick(view.grid, Qt.Key.Key_T)
+    qtbot.keyClick(view.grid, Qt.Key.Key_T, Qt.KeyboardModifier.AltModifier)
     assert lb.labels_of(view.media_event.conn, ids["DSC_0004"])["shot"] == [("toan", "confirmed", None)]
     view.select([ids["DSC_0003"], ids["DSC_0004"]])
-    qtbot.keyClick(view.grid, Qt.Key.Key_2)
+    qtbot.keyClick(view.grid, Qt.Key.Key_2, Qt.KeyboardModifier.AltModifier)
     view.content_filter.setCurrentIndex(view.content_filter.findData("booth"))
     assert _names(view) == ["DSC_0003.jpg", "DSC_0004.jpg"]
     view.content_filter.setCurrentIndex(0)
@@ -128,7 +128,7 @@ def test_r1_undo_ai_split_reanalyse_undo_with_p_x_in_the_window(qtbot, home) -> 
     ids = _ids(view)
     conn = view.media_event.conn
     view.select([ids["DSC_0000"]])
-    qtbot.keyClick(view.grid, Qt.Key.Key_C)  # confirmed label
+    qtbot.keyClick(view.grid, Qt.Key.Key_C, Qt.KeyboardModifier.AltModifier)  # confirmed label
     view.select([ids["DSC_0001"]])
     view.split_here()  # Tách tại đây
     assert len(mo.moments(conn)) == 3
@@ -161,7 +161,7 @@ def test_leaving_and_reopening_keeps_everything_and_delete_keeps_photos(qtbot, h
     ids = _ids(view)
     view.select([ids["DSC_0002"]])
     qtbot.keyClick(view.grid, Qt.Key.Key_P)
-    qtbot.keyClick(view.grid, Qt.Key.Key_U)
+    qtbot.keyClick(view.grid, Qt.Key.Key_U, Qt.KeyboardModifier.AltModifier)
     view.rename_moment("Khai mạc")
     view.back_button.click()
     assert home.view is None and home.media_event is None and home.events.count() == 1
@@ -214,17 +214,17 @@ def test_sample_labelling_mode_writes_reference_answers_only(qtbot, home) -> Non
     working = list(conn.execute("SELECT * FROM labels ORDER BY asset_id, grp, value"))
     view.sample_button.setChecked(True)
     view.select([ids["DSC_0001"]])
-    for key in (Qt.Key.Key_C, Qt.Key.Key_O, Qt.Key.Key_3, Qt.Key.Key_B):
-        qtbot.keyClick(view.grid, key)
+    for key, mod in ((Qt.Key.Key_C, Qt.KeyboardModifier.AltModifier), (Qt.Key.Key_W, None), (Qt.Key.Key_3, Qt.KeyboardModifier.AltModifier), (Qt.Key.Key_B, None)):
+        qtbot.keyClick(view.grid, key, mod) if mod else qtbot.keyClick(view.grid, key)
     assert sm.samples_of(conn, ids["DSC_0001"]) == {"boundary": ["start"], "content": ["decor"], "focus": ["out_net"],
                                                    "shot": ["can"]}
     assert "Mẫu: Cận, Out nét, Decor" in view.details.text()
-    qtbot.keyClick(view.grid, Qt.Key.Key_C)  # the same key takes it away
+    qtbot.keyClick(view.grid, Qt.Key.Key_C, Qt.KeyboardModifier.AltModifier)  # the same key takes it away
     assert "shot" not in sm.samples_of(conn, ids["DSC_0001"])
     assert list(conn.execute("SELECT * FROM labels ORDER BY asset_id, grp, value")) == working
     assert not view.undo.can_undo()  # reference answers are not in Ctrl+Z
     view.sample_button.setChecked(False)
-    qtbot.keyClick(view.grid, Qt.Key.Key_C)  # back to working labels
+    qtbot.keyClick(view.grid, Qt.Key.Key_C, Qt.KeyboardModifier.AltModifier)  # back to working labels
     assert lb.labels_of(conn, ids["DSC_0001"])["shot"] == [("can", "confirmed", None)]
 
 
@@ -240,7 +240,7 @@ def test_backspace_and_alt_digits_do_nothing_to_photos_while_typing(qtbot, home)
     conn = view.media_event.conn
     view.select([ids["DSC_0000"]])
     qtbot.keyClick(view.grid, Qt.Key.Key_P)
-    qtbot.keyClick(view.grid, Qt.Key.Key_3, Qt.KeyboardModifier.AltModifier)
+    qtbot.keyClick(view.grid, Qt.Key.Key_3)  # stars: 0-5 as in 3.0.0
     assert decisions.get(conn, ids["DSC_0000"]).flag == "keep" and decisions.get(conn, ids["DSC_0000"]).rating == 3
     field = QLineEdit(view)  # any text field inside the Media window (search, rename…)
     view.layout().addWidget(field)
@@ -249,12 +249,57 @@ def test_backspace_and_alt_digits_do_nothing_to_photos_while_typing(qtbot, home)
     qtbot.waitUntil(field.hasFocus, timeout=5000)
     qtbot.keyClicks(field, "Khai mac")  # ASCII: QTest cannot type composed Vietnamese letters
     qtbot.keyClick(field, Qt.Key.Key_Backspace)
-    qtbot.keyClick(field, Qt.Key.Key_5, Qt.KeyboardModifier.AltModifier)
-    qtbot.keyClick(field, Qt.Key.Key_T)
-    assert field.text() == "Khai mat"  # Backspace removed "c"; Alt+5 typed nothing; the T key typed "t"
+    qtbot.keyClick(field, Qt.Key.Key_5)
+    qtbot.keyClick(field, Qt.Key.Key_U)
+    assert field.text() == "Khai ma5u"  # Backspace removed "c"; 5 and U were typed, not applied to the photo
     assert decisions.get(conn, ids["DSC_0000"]).flag == "keep"  # Backspace did not clear P
-    assert decisions.get(conn, ids["DSC_0000"]).rating == 3  # Alt+5 did not rate
-    assert "shot" not in lb.labels_of(conn, ids["DSC_0000"])  # T did not set Toàn
+    assert decisions.get(conn, ids["DSC_0000"]).rating == 3  # 5 did not rate
     view.grid.setFocus()
     qtbot.keyClick(view.grid, Qt.Key.Key_Backspace)  # back on the grid: Backspace clears P
     assert decisions.get(conn, ids["DSC_0000"]).flag is None
+
+
+def test_media_keys_and_operations_follow_3_0_0(qtbot, home) -> None:  # noqa: ANN001
+    """Review 2026-11-07 (3.0.0 is the reference): U clears P/X, 0-5 rate, C compares 2-4 marked photos, the card's
+    tick box is Chọn, Q/W/R are the focus keys, Ctrl+F searches; Media labels moved to Alt+T/U/C and Alt+1-5."""
+    home.create("3.0.0")
+    view = _import_and_analyse(qtbot, home)
+    ids = _ids(view)
+    conn = view.media_event.conn
+    view.select([ids["DSC_0001"]])
+    qtbot.keyClick(view.grid, Qt.Key.Key_P)
+    qtbot.keyClick(view.grid, Qt.Key.Key_4)
+    assert decisions.get(conn, ids["DSC_0001"]).flag == "keep" and decisions.get(conn, ids["DSC_0001"]).rating == 4
+    qtbot.keyClick(view.grid, Qt.Key.Key_U)
+    assert decisions.get(conn, ids["DSC_0001"]).flag is None
+    assert "shot" not in lb.labels_of(conn, ids["DSC_0001"]) or \
+        lb.labels_of(conn, ids["DSC_0001"])["shot"][0][1] != "confirmed"  # U no longer means Trung
+    qtbot.keyClick(view.grid, Qt.Key.Key_U, Qt.KeyboardModifier.AltModifier)
+    assert lb.labels_of(conn, ids["DSC_0001"])["shot"] == [("trung", "confirmed", 0.95)]
+    qtbot.keyClick(view.grid, Qt.Key.Key_W)
+    assert ("out_net", "confirmed", None) in lb.labels_of(conn, ids["DSC_0001"])["focus"]
+    qtbot.keyClick(view.grid, Qt.Key.Key_Q)  # sharp: warnings removed
+    assert [x for x in lb.labels_of(conn, ids["DSC_0001"]).get("focus", []) if x[0] != "?"] == []
+    # tick box on the card
+    idx = view.model.index_of(ids["DSC_0002"])
+    view.grid.tick_clicked.emit(ids["DSC_0002"], False)
+    assert decisions.get(conn, ids["DSC_0002"]).flag == "keep"
+    view.grid.tick_clicked.emit(ids["DSC_0002"], False)
+    assert decisions.get(conn, ids["DSC_0002"]).flag is None and idx.isValid()
+    # compare: C with 2 marked photos, P acts on the active tile, Esc back to the grid
+    view.select([ids["DSC_0000"], ids["DSC_0003"]])
+    qtbot.keyClick(view.grid, Qt.Key.Key_C)
+    assert view.in_compare() and len(view.compare.records()) == 2
+    active = view.compare.active_id
+    qtbot.keyClick(view.compare, Qt.Key.Key_X)
+    assert decisions.get(conn, active).flag == "reject"
+    qtbot.keyClick(view.compare, Qt.Key.Key_Escape)
+    assert not view.in_compare()
+    view.select([ids["DSC_0000"]])
+    qtbot.keyClick(view.grid, Qt.Key.Key_C)
+    assert not view.in_compare() and "2–4" in view.status.text()
+    # search, as Chụp cá nhân
+    view.search.setText("0004")
+    assert _names(view) == ["DSC_0004.jpg"]
+    view.search.clear()
+    assert len(_names(view)) == 5

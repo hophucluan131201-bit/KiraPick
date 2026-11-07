@@ -36,7 +36,9 @@ _SHOWN = "('suggested', 'confirmed')"
 
 
 def filter_sql(f: MediaFilter) -> tuple[str, dict]:
-    parts: list[str] = [" AND a.status = 'ok'"]
+    """Without a filter every shown photo is listed, also those still being imported ("Đang xử lý…", as in
+    Chụp cá nhân); any label / state filter keeps readable photos only."""
+    parts: list[str] = [" AND a.status = 'ok'"] if f.active else []
     params: dict = {}
     if f.shot is not None:
         if f.shot == lb.UNKNOWN:
@@ -85,8 +87,8 @@ def matching_ids(conn: sqlite3.Connection, f: MediaFilter) -> list[int]:
     """The photos a filter shows, in corrected-time order (tests and export use this without the GUI)."""
     sql, params = filter_sql(f)
     rows = [r[0] for r in conn.execute(
-        "SELECT a.id FROM assets a LEFT JOIN decisions d ON d.asset_id = a.id AND d.subject_id IS NULL WHERE 1" + sql,
-        params)]
+        "SELECT a.id FROM assets a LEFT JOIN decisions d ON d.asset_id = a.id AND d.subject_id IS NULL "
+        "WHERE a.status = 'ok'" + sql, params)]
     order = time_order(conn)
     return sorted(rows, key=lambda a: order.get(a, len(order)))
 
