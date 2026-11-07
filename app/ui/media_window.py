@@ -247,7 +247,6 @@ class EventView(QWidget):
         self.clock_button = QPushButton("🕒 Máy ảnh & giờ")
         self.analyse_button = QPushButton("🧠 Phân tích sự kiện")
         self.export_button = QPushButton("⤴ Xuất ảnh")
-        self.export_button.setEnabled(False)  # M11
         self.undo_button = QPushButton("↶ Hoàn tác")
         top = QHBoxLayout()
         for w in (self.back_button, self.title):

@@ -175,3 +175,30 @@ def test_leaving_and_reopening_keeps_everything_and_delete_keeps_photos(qtbot, h
     assert home.delete_selected(confirm=False) and home.events.count() == 0
     assert ev.list_events(home.root) == []
     assert hashes(home.shoot) == before  # deleting an event never touches a photo
+
+
+def test_export_dialog_previews_then_copies_p_photos(qtbot, home, tmp_path: Path) -> None:  # noqa: ANN001
+    from app.media import export as mx
+    from app.ui.media_export import MediaExportDialog
+
+    before = hashes(home.shoot)
+    home.create("Xuất")
+    view = home.view
+    view.start_import(home.shoot)
+    qtbot.waitUntil(lambda: view.import_thread is None, timeout=30000)
+    ids = _ids(view)
+    view.select([ids["DSC_0000"], ids["DSC_0003"]])
+    qtbot.keyClick(view.grid, Qt.Key.Key_P)  # P before any analysis: no moment yet
+    dialog = MediaExportDialog(view.media_event, view)
+    qtbot.addWidget(dialog)
+    out = tmp_path / "Giao khách"
+    dialog.dest.setText(str(out))
+    assert not dialog.copy_button.isEnabled()  # nothing is copied before the preview
+    plan = dialog.preview()
+    assert plan is not None and "2 ảnh P → 2 tệp" in dialog.summary.text() and mx.NO_MOMENT in dialog.summary.text()
+    assert not out.exists() or not any(out.rglob("*.jpg"))
+    dialog.start_copy()
+    qtbot.waitUntil(lambda: dialog.thread is None, timeout=30000)
+    assert "Đã sao chép 2 tệp" in dialog.summary.text()
+    assert sorted(p.name for p in (out / mx.NO_MOMENT).iterdir()) == ["DSC_0000.jpg", "DSC_0003.jpg"]
+    assert hashes(home.shoot) == before

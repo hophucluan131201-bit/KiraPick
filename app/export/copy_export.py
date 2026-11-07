@@ -311,10 +311,14 @@ def plan_export(
     confirmations: dict[tuple[int, str], Path] | None = None,
     hashes: HashCache | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    folders_of: Callable[[Photo], list[str]] | None = None,
 ) -> ExportPlan:
     """What an export would copy, and what it cannot (Part 3 spec §3.5). Disk access: ``stat`` of the sources and of
     existing targets, the quick fingerprint of a target that may already hold the file; in External mode also the
-    content proof (full SHA-256, through ``hashes``) and the capture time of the other folder's candidates."""
+    content proof (full SHA-256, through ``hashes``) and the capture time of the other folder's candidates.
+
+    ``folders_of`` (Media: one folder per moment or shot size) names the sub-folder(s) of each photo, with
+    ``Layout.SINGLE``; names are made safe and collision-free exactly as for the subject layout."""
     source = source or SourceSpec()
     dest = _validate_destination(project, destination)
     external = source.mode == "external"
@@ -351,7 +355,9 @@ def plan_export(
     for photo in photos:
         plan.photos[photo.photo_id] = photo
         folders = [""]
-        if plan.layout_stats is not None:
+        if folders_of is not None and layout is Layout.SINGLE:
+            folders = folders_of(photo) or [""]
+        elif plan.layout_stats is not None:
             folders = _subject_folders_of(conn, plan.layout_stats, photo, members, names)
             for folder in folders:
                 assigned = plan.layout_stats.assigned_per_folder
