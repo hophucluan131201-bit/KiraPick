@@ -18,6 +18,24 @@ CREATE TABLE media_event (
     created_at  TEXT NOT NULL
 );
 """),
+    (2, """
+-- M2: camera sources (spec §9): sub-folder + make / model by default, never the serial number (UX-3);
+-- the user can rename, split, merge and assign photos by hand (manual = 1 is never changed automatically)
+CREATE TABLE camera_sources (
+    id            INTEGER PRIMARY KEY,
+    auto_key      TEXT UNIQUE,              -- '<source id>|<sub-folder>|<make>|<model>'; NULL for one made by hand
+    make          TEXT,
+    model         TEXT,
+    display_name  TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
+CREATE TABLE asset_source (
+    asset_id   INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    camera_id  INTEGER NOT NULL REFERENCES camera_sources(id),
+    manual     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX asset_source_camera ON asset_source (camera_id);
+"""),
 ]
 MEDIA_SCHEMA_VERSION = MEDIA_MIGRATIONS[-1][0]
 
