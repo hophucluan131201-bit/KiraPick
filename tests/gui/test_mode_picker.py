@@ -261,7 +261,7 @@ def test_media_page_and_back(qtbot, shell, how) -> None:  # noqa: ANN001
     page = shell.media
     assert isinstance(page, MediaHome)
     qtbot.waitExposed(page)
-    assert "đang được phát triển" in page.status.text() and page.focusWidget() is page.back_button
+    assert "không bao giờ xoá ảnh" in page.status.text() and page.focusWidget() is page.back_button
     if how == "button":
         qtbot.mouseClick(page.back_button, Qt.MouseButton.LeftButton)
     else:

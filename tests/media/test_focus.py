@@ -160,6 +160,10 @@ def test_analysis_writes_focus_warnings_and_keeps_a_removed_one(tmp_path: Path) 
     assert [v for v, st, _ in lb.labels_of(e.conn, ids[0])["focus"]] == ["trat_net"]
     assert "focus" not in lb.labels_of(e.conn, ids[1])  # analysed, no warning (not ⏳: media_analysis has it)
     assert analysis.progress_of(e.conn)["done"] == 2
+    from app.media.browse import MediaFilter, matching_ids
+
+    assert matching_ids(e.conn, MediaFilter(focus="none")) == [ids[1]]
+    assert matching_ids(e.conn, MediaFilter(focus="trat_net")) == [ids[0]]
     lb.remove(e, [ids[0]], "focus", "trat_net")  # the user says the focus is fine
     e.conn.execute("DELETE FROM media_analysis")  # re-analysis
     analysis.analyse_event(e, detect=detect, load_full=lambda p: by_path[p])
