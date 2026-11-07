@@ -72,6 +72,32 @@ CREATE TABLE drift_warnings (
     camera_id   INTEGER NOT NULL           -- the source whose clock change raised it
 );
 """),
+    (5, """
+-- M5: labels (spec §2-§6) with their state (spec §3). grp: 'shot' (one value per photo: toan / trung / can, or
+-- '?' = Chưa xác định), 'content' (several: san_khau, booth, decor, san_pham, merch), 'focus' (out_net,
+-- trat_net). No row for a group = Đang phân tích. 'removed' = the user took an AI label away: never suggested again.
+CREATE TABLE labels (
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    grp         TEXT NOT NULL CHECK (grp IN ('shot', 'content', 'focus')),
+    value       TEXT NOT NULL,
+    state       TEXT NOT NULL CHECK (state IN ('unknown', 'suggested', 'confirmed', 'removed')),
+    confidence  REAL,
+    run_id      INTEGER REFERENCES analysis_runs(id),
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (asset_id, grp, value)
+);
+CREATE INDEX labels_group ON labels (grp, value, state);
+-- booth / sponsor names: set by the user (always confirmed); suggested for photos of the same moment only
+CREATE TABLE booth_names (
+    id    INTEGER PRIMARY KEY,
+    name  TEXT NOT NULL UNIQUE
+);
+CREATE TABLE asset_booth (
+    asset_id  INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    booth_id  INTEGER NOT NULL REFERENCES booth_names(id) ON DELETE CASCADE,
+    state     TEXT NOT NULL CHECK (state IN ('suggested', 'confirmed'))
+);
+"""),
 ]
 MEDIA_SCHEMA_VERSION = MEDIA_MIGRATIONS[-1][0]
 
