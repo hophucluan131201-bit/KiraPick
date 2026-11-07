@@ -1,6 +1,9 @@
-# Media sự kiện — Kế hoạch triển khai Mốc 1 (bản trình 1, 2026-11-07)
+# Media sự kiện — Kế hoạch triển khai Mốc 1 (bản 2, 2026-11-07)
 
-**Trạng thái:** kế hoạch, chờ review và chủ dự án duyệt **trước khi viết mã Mốc 1**.
+**Trạng thái:**
+- Chủ dự án **duyệt M1-OK và MED-EXP** (2026-11-07).
+- Review: làm theo **hai đợt**. **Đợt 1 (M1–M5) đã xong**, kết quả ở mục 6. **Đợt 2 (M6–M11)** bắt đầu sau vòng review đợt 1.
+- Đặc tả đã lên **bản 6** (`docs/design/media-su-kien.md` mục 0).
 
 **Căn cứ:**
 - Đặc tả Media v5 (`docs/design/media-su-kien.md`, đã duyệt 2026-11-06).
@@ -148,11 +151,11 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 | **M4** | Khoảnh khắc: chia theo khoảng nghỉ, 📌, quy tắc ⚠, hoàn tác (logic thuần, không giao diện) | **MED-03 S0–S4, 03b, 03c, 03d** bằng ảnh tổng hợp; MT-F1; phân tích lại giữ 📌 |
 | **M5** | Trạng thái nhãn + nhãn tay (cỡ cảnh, nội dung nhiều nhãn, tên booth), gợi ý tên booth theo khoảnh khắc | Không ghi đè "Đã xác nhận" / "Đã bỏ"; CT-F1, CT-F2, BT-F1 |
 | **M6** | Phân tích sự kiện: cỡ cảnh (YOLOX + YuNet qua `MediaRegistry`), ghi nguồn | SZ-01a…05 bằng ảnh tổng hợp có khung người / mặt dựng sẵn (logic); bản ảnh thật = [Ảnh mẫu]; báo cáo A chỉ có YOLOX / YuNet |
-| **M7** | Cảnh báo nét: Out nét / Trật nét, loại LED / đèn, rung = Out nét | FC-01…05 bằng ảnh tổng hợp (mờ Gauss, nhòe chuyển động, vùng LED sáng); ảnh thật = [Ảnh mẫu] |
-| **M8** | Cửa sổ Media: danh sách sự kiện, lưới, lọc, P/X / sao / ❤, phím T / U / C / 1–5, dải khoảnh khắc, 🕒, 🧠 | GUI offscreen: nhập → phân tích → lọc → sửa → hoàn tác; đổi chế độ giữ dữ liệu cả hai bên |
+| **M7** | Cảnh báo nét: Out nét / Trật nét, loại LED / đèn, rung = Out nét | FC-01…07 bằng ảnh tổng hợp (mờ Gauss, nhòe chuyển động, vùng LED sáng, **FC-06 màn LED sắc nét chưa bão hoà**, **FC-07 trang phục trắng sáng còn chi tiết**). Báo **riêng**: kết quả quy tắc trên ảnh tổng hợp (CI) và phần cần kiểm trên ảnh thật |
+| **M8** | Cửa sổ Media: danh sách sự kiện, lưới, lọc **3 nhóm Mốc 1** (cỡ cảnh, nội dung, lỗi nét) + nguồn + khoảnh khắc + trạng thái, P/X / sao / ❤, phím T / U / C / 1–5, dải khoảnh khắc, 🕒, 🧠; nhãn AI kèm "(thử nghiệm)" | GUI offscreen: nhập → phân tích → lọc → sửa → hoàn tác; đổi chế độ giữ dữ liệu cả hai bên |
 | **M9** | Dán nhãn mẫu + `--media-score` | Chấm trên bộ nhãn tổng hợp cho số đúng; chia tập theo khoảnh khắc; dưới 15 mẫu → "chưa đủ mẫu"; đầu ra không có tên file |
 | **M10** | `--self-test` bước Media; mở rộng test chặn mạng, đổi chế độ, quét mã import | Báo cáo A Media trên ảnh tổng hợp; chặn mạng (socket + tường lửa trên CI Windows) |
-| **M11** (nếu MED-EXP = có) | Xuất ảnh P theo khoảnh khắc / cỡ cảnh, dùng bộ xuất sao chép hiện có | Không đè file; ảnh gốc không đổi; ảnh ⏳ vẫn xuất được theo P/X |
+| **M11** (MED-EXP **đã duyệt**) | Xuất ảnh P theo khoảnh khắc / cỡ cảnh, dùng bộ xuất sao chép hiện có | Không đè file; ảnh gốc không đổi (SHA-256); ảnh ⏳ vẫn xuất được theo P/X; **ảnh đã P nhưng chưa có khoảnh khắc** (chưa phân tích) xuất vào thư mục "Chưa chia khoảnh khắc"; **hai máy có file trùng tên** ra hai file khác tên, không đè nhau |
 
 **Hồi quy:**
 - Sau mỗi commit: bộ test Chụp cá nhân giữ nguyên (1284 Linux).
@@ -169,6 +172,34 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 | Ngưỡng và tỉ lệ đạt (§11) | **Cần 100–150 ảnh sự kiện thật có nhãn** | Chủ dự án dán nhãn bằng chế độ Dán nhãn mẫu trên bản build cuối. Trước đó nhãn AI hiện "(thử nghiệm)" |
 | MED-02, SZ / FC trên ảnh thật | [Ảnh mẫu] | Cùng đợt trên |
 | Thời gian 1.000 / 5.000 ảnh, GPU | **Chờ bản build cuối** | Máy chủ dự án |
+| Bản CUDA cài mới và nâng cấp từ 3.0.0a | **Chờ bản build cuối** | Ghi: provider thực tế của từng mô hình (báo cáo A), **đường dẫn `cudnn64_9.dll` được nạp** (`--self-test` → `cuda.cudnn_dll`), lý do chạy CPU nếu có (`cuda.setup_error`, thanh trạng thái). Hai ca: máy chưa cài cuDNN (phải chạy CPU, ghi lý do) và máy đã cài cuDNN 9. Nâng cấp từ 3.0.0a: theo CLEAN-2 (chờ chủ dự án) |
+
+### 4a. Ảnh mẫu (MED-SAMPLE)
+
+- **Nguồn:**
+  - **Chính:** album **VNNIC Internet Conference 2026**, ngày 19/6.
+  - **Bổ sung:** album **tổng kết IPv6, trao bằng khen**, ngày 18/6.
+  - **Đường dẫn album: chờ chủ dự án gửi.** Hai album là album công khai trên mạng.
+- **Trước khi lập tập mẫu**, kiểm và ghi lại:
+  - số ảnh truy cập được;
+  - độ phân giải;
+  - EXIF giờ chụp: có / không, và có giữ hãng / dòng máy không.
+- **Dùng ảnh album để thử:**
+  - cỡ cảnh;
+  - nhãn nội dung;
+  - luồng lọc – chọn – xuất.
+- **Lỗi nét và chỉnh giờ nhiều máy:** ưu tiên **ảnh gốc** có metadata đầy đủ (ảnh album thường bị nén lại, cắt EXIF, giảm
+  độ phân giải). Nếu album thiếu EXIF / độ phân giải thì ghi rõ "không dùng được cho lỗi nét / chỉnh giờ", và đề nghị
+  chủ dự án cung cấp ảnh gốc của cùng sự kiện, chạy trên máy chủ dự án.
+- **Báo cáo đủ mẫu:** ghi nhóm nhãn nào đủ ≥ 15 mẫu (cỡ cảnh từng giá trị, từng nhãn nội dung, Out nét, Trật nét),
+  nhóm nào cần bổ sung.
+- **Nguồn từng ảnh:** ghi **URL nguồn** cho từng ảnh trong danh sách mẫu (file danh sách chỉ có URL, mã ảnh, nhãn).
+- **Quyền sử dụng:**
+  - Kiểm điều khoản của nơi đăng album và quyền của ảnh **trước khi** đưa bất kỳ ảnh nào vào repo, CI hoặc gói test
+    chia sẻ.
+  - Mặc định ảnh **không vào repo, không vào CI**. Chủ dự án dán nhãn trên máy mình bằng bản build cuối; repo chỉ giữ
+    danh sách URL và nhãn (không có ảnh), nếu điều khoản cho phép.
+- **Trên `beta`:** tiếp tục kiểm bằng mã nguồn và ảnh tổng hợp trong CI.
 
 ---
 
@@ -176,8 +207,24 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 
 | Mã | Câu hỏi | Đề xuất |
 |---|---|---|
-| **M1-OK** | Duyệt kế hoạch Mốc 1 (mục 1–3) | Đồng ý |
-| **MED-EXP** | Có đưa xuất ảnh cơ bản vào Mốc 1 không (v5 để ở Mốc 3) | **Có**, nếu không thì bản cập nhật chưa xuất được ảnh sự kiện |
-| **MED-SAMPLE** | Bộ ảnh sự kiện để dán nhãn mẫu (100–150 ảnh), dán trên bản build cuối, ảnh không rời máy | Chủ dự án chọn sự kiện |
-| **CLEAN-2** | Giữ hay xoá 10 DLL cuDNN do bản 3.0.0a đã cài khi nâng cấp | (a) giữ |
-| Đặc tả v6 | Ghi các chỉnh sửa kỹ thuật ở mục 0 vào đặc tả | Đồng ý |
+| **M1-OK** | Duyệt kế hoạch Mốc 1 (mục 1–3) | **Đã duyệt** 2026-11-07 |
+| **MED-EXP** | Đưa xuất ảnh cơ bản vào Mốc 1 | **Đã duyệt** 2026-11-07 (M11) |
+| **MED-SAMPLE** | Hai album VNNIC (19/6, chính; 18/6, bổ sung), mục 4a | **Đã chọn**; chờ đường dẫn album |
+| **CLEAN-2** | Giữ hay xoá 10 DLL cuDNN do bản 3.0.0a đã cài khi nâng cấp | **Chờ chủ dự án** (hiện giữ) |
+| Đặc tả v6 | Ghi các chỉnh sửa kỹ thuật ở mục 0 vào đặc tả | **Đã làm** |
+| **Đợt 2** | Bắt đầu M6–M11 sau vòng review đợt 1 | Chờ review |
+
+---
+
+## 6. Kết quả đợt 1 (M1–M5)
+
+| Commit | Nội dung | Ca kiểm thử | Kết quả |
+|---|---|---|---|
+| `d0f73f7` M1 | Kho dữ liệu riêng cho từng sự kiện | **Cùng thư mục ảnh mở ở hai chế độ, P/X khác nhau → tách riêng**; phiên cá nhân không có bảng Media; nhập / mở / xoá không đổi ảnh gốc (SHA-256); mã sự kiện lạ, thư mục không phải sự kiện bị từ chối | Đạt |
+| `4fcb613` M2 | Nhiều thư mục, nguồn máy, gán tay | CAM-01, CAM-02 (gán tay giữ qua nhập lại), CAM-03 (trùng tên ở hai thư mục, ảnh gốc không đổi), CAM-05, đổi tên / gộp nguồn | Đạt |
+| `1f2daff` M3 | Chỉnh giờ theo nguồn, hoàn tác | Lệch từ cặp ảnh + hoàn tác (ảnh, EXIF, `capture_time`, P/X không đổi); hai lần chỉnh hoàn tác từng bước; ảnh không có giờ; lịch sử giữ 50 bước, còn sau khi mở lại | Đạt |
+| `f26d0c2` M4 | Khoảnh khắc, 📌, ⚠ lệch giờ | **MED-03 S0–S4** đúng bảng đặc tả; 03b (vùng chồng), 03c (không có khoảng đối chiếu), 03d (A-6 không bị kéo theo); Giữ + hoàn tác; MT-F1; **khoảnh khắc 📌 giữ nguyên qua phân tích lại**; gộp / chuyển / đổi tên hoàn tác được | Đạt |
+| `e52a67b` M5 | Trạng thái nhãn, nhãn tay, tên booth | **AI không ghi đè nhãn đã xác nhận / đã bỏ**; CT-F1 / F2 / F3; BT-F1; **CAM-04** (chỉnh giờ giữ P/X, sao, nhãn, booth, khoảnh khắc 📌); "đủ cỡ cảnh" theo khoảnh khắc | Đạt |
+
+**Tổng:** 1307 test Linux đạt (23 test Media mới). CI Windows ở chế độ kiểm tra: run `lic1-checks` và `perf` (kết quả ở
+gói review). Job build / đóng gói: `skipped`.

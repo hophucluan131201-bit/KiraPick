@@ -1,14 +1,24 @@
-# Media sự kiện — Đặc tả bản 5 (đã duyệt, 2026-11-06)
+# Media sự kiện — Đặc tả bản 6 (2026-11-07)
 
-- **Phạm vi:** nhánh `beta`. Chỉ là tài liệu; **chưa có mã Media nào**.
-- **Thời điểm sửa mã:** chỉ sau khi chủ dự án duyệt bản này.
+- **Phạm vi:** nhánh `beta`. Mốc 1 đang được viết mã (đợt 1: M1–M5 đã có; kế hoạch ở `docs/design/media-moc1-ke-hoach.md`).
+- **Bản 5** đã được chủ dự án duyệt ngày 2026-11-06. **Bản 6** chỉ sửa phần kỹ thuật theo LIC-1 và các quyết định
+  ngày 2026-11-07 (mục 0). Không đổi quyết định nào của chủ dự án ngoài những quyết định ghi ở mục 0.
 - **Phát hành:** merge vào `main`, gắn tag và phát hành đều cần duyệt riêng.
 - **Màn hình chọn chế độ:** giữ nguyên, đã có trên `beta`.
 
-**Thay đổi:**
-- Bản 4 so với bản 3: theo 6 mục rà soát; bảng đối chiếu ở **phụ lục A**.
-- Bản 5 so với bản 4: (1) quy tắc cảnh báo lệch giờ trong MED-03; (2) các chức năng phụ thuộc CLIP và phương án dự
-  phòng, cùng quy tắc chặn build theo trọng số. Bảng đối chiếu ở **phụ lục B**.
+## 0. Thay đổi của bản 6
+
+| # | Thay đổi | Lý do / quyết định |
+|---|---|---|
+| 0.1 | **Mốc 1 có ba nhóm lọc:** cỡ cảnh, nội dung ảnh, lỗi nét. **Người & vai trò thuộc Mốc 2** | Review 2026-11-07 |
+| 0.2 | **CLIP `pending`** ở Media (MED-CLIP): MOD-1 là hồ sơ chấp nhận rủi ro, **không phải căn cứ quyền**. Mốc 1 chạy **phương án dự phòng §12a**: nội dung ảnh chỉ gán tay (CT-F1, CT-F2), "Gợi ý lại" nội dung tắt (CT-F3), khoảnh khắc chỉ chia theo khoảng nghỉ (MT-F1), tên booth gợi ý trong cùng khoảnh khắc (BT-F1) | LIC-1, MED-CLIP |
+| 0.3 | **SFace `pending`**: Mốc 2 gom người **chỉ gán tay**, trừ khi có căn cứ (R1). Danh sách cho phép là `configs/model-policy.json` dùng chung (thay `configs/media-models.json`); trạng thái chỉ còn verified / pending / never | LIC-1 |
+| 0.4 | **Mọi nhãn AI** (cỡ cảnh, lỗi nét) hiện kèm **"(thử nghiệm)"** cho tới khi có kết quả chấm trên ảnh thật đạt ngưỡng §11 | Review 2026-11-07 |
+| 0.5 | **Dữ liệu:** mỗi sự kiện một thư mục và một cơ sở dữ liệu ở `%LOCALAPPDATA%\KiraPick\media\<mã>\`. CSDL sự kiện dùng chung cấu trúc bảng ảnh với phiên Chụp cá nhân (nay là v8, có ghi nguồn kết quả), cộng các bảng Media riêng (`app/media/schema.py`) chỉ áp cho sự kiện. Cùng một thư mục ảnh mở ở hai chế độ là hai CSDL: P/X, sao, nhãn tách riêng | Kế hoạch M1 |
+| 0.6 | **Xuất ảnh cơ bản** chuyển từ Mốc 3 vào **Mốc 1** (commit M11) | Chủ dự án duyệt MED-EXP 2026-11-07 |
+| 0.7 | **Hai ca lỗi nét mới:** FC-06 (màn LED sắc nét nhưng chưa bão hoà) và FC-07 (trang phục trắng sáng còn chi tiết), mục 6 | Review 2026-11-07 |
+| 0.8 | **Ảnh mẫu (MED-SAMPLE):** album VNNIC Internet Conference 2026 (19/6) là nguồn hội nghị chính; album tổng kết IPv6, trao bằng khen (18/6) là nguồn bổ sung. Quy tắc dùng: kế hoạch Mốc 1 §4a | Review 2026-11-07, chủ dự án |
+| 0.9 | Hồi quy Chụp cá nhân: bộ test Linux nay là **1307** (gồm test Media), không phải 1209 | Thực tế repo |
 
 **Quy ước trong tài liệu:**
 - **[Repo]**: đã xác minh trong mã nguồn hiện tại.
@@ -145,6 +155,8 @@ cảnh báo nét (mục 6).
 
 | Mã | Ảnh | Kết quả mong đợi |
 |---|---|---|
+| FC-06 (v6) | Mặt diễn giả mờ, phía sau là **màn LED sắc nét nhưng chưa bão hoà** (nội dung trình chiếu có chi tiết) | **Out nét**, không Trật nét: màn LED phải bị nhận ra theo vùng phát sáng phẳng, viền thẳng, độ tương phản cao, không chỉ theo độ bão hoà |
+| FC-07 (v6) | Diễn giả nét, mặc **trang phục trắng sáng còn chi tiết** (vải, nếp gấp) | Không cảnh báo; vùng trắng sáng của chủ thể **không** bị coi là đèn / LED và không bị loại khỏi phép đo nét |
 | FC-01 | Lia máy: chủ thể nét, nền nhòe ngang | Không cảnh báo |
 | FC-02a | Mặt diễn giả mờ, **phông vải / bục** ngay sau nét rõ | **Trật nét** |
 | FC-02b | Mặt diễn giả mờ, **chỉ màn LED** phía sau nét | **Out nét**, không Trật nét |
