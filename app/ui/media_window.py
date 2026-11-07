@@ -51,6 +51,10 @@ from app.ui.viewer import ImageViewer
 log = logging.getLogger(__name__)
 
 CELL = 200
+SAMPLE_KEYS = {"N": ("focus", "net"), "O": ("focus", "out_net"), "R": ("focus", "trat_net"),
+               "B": ("boundary", "start"), "0": ("skip", "1")}
+SAMPLE_HELP = ("Dán nhãn mẫu (để chấm AI, không đổi nhãn làm việc): T/U/C cỡ cảnh · 1–5 nội dung · N nét · O out nét · "
+               "R trật nét · B ảnh này bắt đầu khoảnh khắc mới · 0 chưa đánh giá. Bấm lại cùng phím để bỏ.")
 KEY_HELP = ("P chọn · X loại · Backspace bỏ · F ❤ · Alt+0…5 sao · T/U/C cỡ cảnh · 1–5 nội dung · Space ảnh lớn · "
             "Ctrl+Z hoàn tác")
 
@@ -248,11 +252,15 @@ class EventView(QWidget):
         self.analyse_button = QPushButton("🧠 Phân tích sự kiện")
         self.export_button = QPushButton("⤴ Xuất ảnh")
         self.undo_button = QPushButton("↶ Hoàn tác")
+        self.sample_button = QPushButton("🏷 Dán nhãn mẫu")
+        self.sample_button.setCheckable(True)
+        self.sample_button.setToolTip(SAMPLE_HELP)
         top = QHBoxLayout()
         for w in (self.back_button, self.title):
             top.addWidget(w)
         top.addStretch(1)
-        for w in (self.import_button, self.clock_button, self.analyse_button, self.export_button, self.undo_button):
+        for w in (self.import_button, self.clock_button, self.analyse_button, self.sample_button, self.export_button,
+                  self.undo_button):
             top.addWidget(w)
 
         # filters
@@ -329,6 +337,7 @@ class EventView(QWidget):
         self.analyse_button.clicked.connect(self.toggle_analysis)
         self.export_button.clicked.connect(self.open_export)
         self.undo_button.clicked.connect(self.undo_last)
+        self.sample_button.toggled.connect(self._sample_mode)
         self.split_button.clicked.connect(self.split_here)
         self.merge_button.clicked.connect(self.merge_with_previous)
         self.rename_button.clicked.connect(self.rename_moment)
@@ -361,9 +370,12 @@ class EventView(QWidget):
         for n in range(6):
             sc(f"Alt+{n}", lambda n=n: self.set_rating(n))
         for key, value in lb.SHOT_KEYS.items():
-            sc(key, lambda v=value: self.set_shot(v))
+            sc(key, lambda v=value: self.sample("shot", v) if self.sampling else self.set_shot(v))
         for key in lb.CONTENT_KEYS:
-            sc(key, lambda k=key: self.toggle_content(k))
+            sc(key, lambda k=key: self.sample("content", lb.CONTENT_KEYS[k]) if self.sampling
+               else self.toggle_content(k))
+        for key, (grp, value) in SAMPLE_KEYS.items():
+            sc(key, lambda g=grp, v=value: self.sampling and self.sample(g, v))
         sc("Space", self.toggle_large)
         sc("Right", lambda: self.step(1))
         sc("Left", lambda: self.step(-1))
@@ -504,6 +516,40 @@ class EventView(QWidget):
         self.details.setText("<br>".join(lines))
         if self.stack.currentWidget() is self.viewer and rec is not None:
             self.viewer.show_photo(rec.path)
+        if self.sampling:
+            from app.media import samples as sm
+
+            self.details.setText(self.details.text() + "<br><b>" + sm.sample_text(conn, a) + "</b>")
+
+    # ------------------------------------------------------------------ Dán nhãn mẫu
+    @property
+    def sampling(self) -> bool:
+        return self.sample_button.isChecked()
+
+    def _sample_mode(self, on: bool) -> None:
+        self.say(SAMPLE_HELP if on else "Đã tắt Dán nhãn mẫu.")
+        self._show_details()
+
+    def sample(self, grp: str, value: str) -> None:
+        """A reference answer (sample_labels): never a working label, never in Ctrl+Z (the same key takes it away)."""
+        from app.media import samples as sm
+
+        ids = self.selected_ids()
+        if not ids:
+            return
+        conn = self.media_event.conn
+        if grp in ("shot", "focus"):
+            if all(sm.samples_of(conn, a).get(grp) == [value] for a in ids):
+                with conn:
+                    conn.executemany("DELETE FROM sample_labels WHERE asset_id = ? AND grp = ?",
+                                     [(a, grp) for a in ids])
+            else:
+                sm.set_sample(conn, ids, grp, value)
+        else:
+            sm.toggle_sample(conn, ids, grp, value)
+        self._show_details()
+        n = conn.execute("SELECT COUNT(DISTINCT asset_id) FROM sample_labels").fetchone()[0]
+        self.say(f"Nhãn mẫu: {n} ảnh đã dán. " + SAMPLE_HELP)
 
     def _update_undo(self) -> None:
         label = self.undo.next_label()

@@ -202,3 +202,27 @@ def test_export_dialog_previews_then_copies_p_photos(qtbot, home, tmp_path: Path
     assert "Đã sao chép 2 tệp" in dialog.summary.text()
     assert sorted(p.name for p in (out / mx.NO_MOMENT).iterdir()) == ["DSC_0000.jpg", "DSC_0003.jpg"]
     assert hashes(home.shoot) == before
+
+
+def test_sample_labelling_mode_writes_reference_answers_only(qtbot, home) -> None:  # noqa: ANN001
+    from app.media import samples as sm
+
+    home.create("Mẫu")
+    view = _import_and_analyse(qtbot, home)
+    ids = _ids(view)
+    conn = view.media_event.conn
+    working = list(conn.execute("SELECT * FROM labels ORDER BY asset_id, grp, value"))
+    view.sample_button.setChecked(True)
+    view.select([ids["DSC_0001"]])
+    for key in (Qt.Key.Key_C, Qt.Key.Key_O, Qt.Key.Key_3, Qt.Key.Key_B):
+        qtbot.keyClick(view.grid, key)
+    assert sm.samples_of(conn, ids["DSC_0001"]) == {"boundary": ["start"], "content": ["decor"], "focus": ["out_net"],
+                                                   "shot": ["can"]}
+    assert "Mẫu: Cận, Out nét, Decor" in view.details.text()
+    qtbot.keyClick(view.grid, Qt.Key.Key_C)  # the same key takes it away
+    assert "shot" not in sm.samples_of(conn, ids["DSC_0001"])
+    assert list(conn.execute("SELECT * FROM labels ORDER BY asset_id, grp, value")) == working
+    assert not view.undo.can_undo()  # reference answers are not in Ctrl+Z
+    view.sample_button.setChecked(False)
+    qtbot.keyClick(view.grid, Qt.Key.Key_C)  # back to working labels
+    assert lb.labels_of(conn, ids["DSC_0001"])["shot"] == [("can", "confirmed", None)]

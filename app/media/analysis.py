@@ -168,7 +168,8 @@ def _one(event: Project, asset_id: int, detect: Detect, rules: ShotRules, run_id
     persons, faces = detect(bgr)
     subjects = subjects_from(persons, faces)
     shot = classify(subjects, w, h, rules)
-    measures: dict = {"shot": shot.measures, "shot_path": shot.path}
+    # the AI's own answers are kept here too: the sample scorer (M9) compares them even after the user changed a label
+    measures: dict = {"shot": shot.measures, "shot_path": shot.path, "shot_ai": shot.value}
     focus_values: dict[str, float | None] | None = None
     unmeasurable = False
     if focus_v is not None:
@@ -177,6 +178,7 @@ def _one(event: Project, asset_id: int, detect: Detect, rules: ShotRules, run_id
         result = focus.analyse(path, shot.subject, (w, h), iso=_iso(event, asset_id), load_full=load_full)
         focus_values, unmeasurable = result.warnings, result.unmeasurable
         measures["focus"] = result.measures
+        measures["focus_ai"] = "?" if unmeasurable else sorted(focus_values)
     with event.transaction() as conn:
         lb.write_ai(conn, asset_id, "shot", {} if shot.value == "?" else {shot.value: shot.confidence}, run_id)
         if focus_values is not None:

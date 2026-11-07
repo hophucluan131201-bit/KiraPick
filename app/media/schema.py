@@ -116,6 +116,18 @@ CREATE TABLE media_analysis (
 -- it saw, so undoing a moment edit made before a re-analysis can say it also brings back the earlier split.
 ALTER TABLE media_journal ADD COLUMN resplit_seq INTEGER NOT NULL DEFAULT 0;
 """),
+    (8, """
+-- M9: 'Dán nhãn mẫu' (spec §11). Kept apart from labels so scoring never mixes the user's working labels with the
+-- reference answers. grp: 'shot' (toan / trung / can), 'content' (several), 'focus' (net / out_net / trat_net),
+-- 'boundary' ('start': this photo starts a new moment), 'skip' ('1': Chưa đánh giá, left out of every rate).
+CREATE TABLE sample_labels (
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    grp         TEXT NOT NULL CHECK (grp IN ('shot', 'content', 'focus', 'boundary', 'skip')),
+    value       TEXT NOT NULL,
+    labelled_at TEXT NOT NULL,
+    PRIMARY KEY (asset_id, grp, value)
+);
+"""),
 ]
 MEDIA_SCHEMA_VERSION = MEDIA_MIGRATIONS[-1][0]
 
