@@ -8,7 +8,7 @@ import time
 import pytest
 
 from app.storage.workflow import StepState, steps
-from tests.unit.test_workflow_steps import DETECT, EMBED, QUALITY, _photos, _stage, conn  # noqa: F401 - fixture
+from tests.unit.test_workflow_steps import DETECT, QUALITY, _photos, _stage, conn  # noqa: F401 - fixture
 
 pytestmark = pytest.mark.perf
 
@@ -16,7 +16,6 @@ pytestmark = pytest.mark.perf
 def test_steps_are_fast_on_10000_photos(conn: sqlite3.Connection) -> None:  # noqa: F811
     ids = _photos(conn, 10_000)
     _stage(conn, ids, *DETECT)
-    _stage(conn, ids, *EMBED)
     _stage(conn, ids[:6000], *QUALITY)
     t = time.perf_counter()
     s = steps(conn, importing=None)
