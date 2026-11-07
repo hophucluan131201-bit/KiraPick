@@ -174,7 +174,7 @@ def _one(event: Project, asset_id: int, detect: Detect, rules: ShotRules, run_id
     if focus_v is not None:
         from app.media import focus
 
-        result = focus.analyse(path, shot.subject, (w, h), load_full=load_full)
+        result = focus.analyse(path, shot.subject, (w, h), iso=_iso(event, asset_id), load_full=load_full)
         focus_values, unmeasurable = result.warnings, result.unmeasurable
         measures["focus"] = result.measures
     with event.transaction() as conn:
@@ -183,6 +183,15 @@ def _one(event: Project, asset_id: int, detect: Detect, rules: ShotRules, run_id
             lb.write_ai(conn, asset_id, "focus", focus_values, run_id, unmeasurable=unmeasurable)
         _mark(conn, asset_id, "done", run_id, measures, focus_v)
     return measures
+
+
+def _iso(event: Project, asset_id: int) -> int | None:
+    row = event.conn.execute("SELECT exif_json FROM assets WHERE id = ?", (asset_id,)).fetchone()
+    try:
+        iso = json.loads(row[0] or "{}").get("iso") if row else None
+    except ValueError:
+        return None
+    return int(iso) if isinstance(iso, (int, float)) else None
 
 
 def progress_of(conn) -> dict[str, int]:  # noqa: ANN001
