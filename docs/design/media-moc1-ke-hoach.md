@@ -227,5 +227,6 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 | `f26d0c2` M4 | Khoảnh khắc, 📌, ⚠ lệch giờ | **MED-03 S0–S4** đúng bảng đặc tả; 03b (vùng chồng), 03c (không có khoảng đối chiếu), 03d (A-6 không bị kéo theo); Giữ + hoàn tác; MT-F1; **khoảnh khắc 📌 giữ nguyên qua phân tích lại**; gộp / chuyển / đổi tên hoàn tác được | Đạt |
 | `e52a67b` M5 | Trạng thái nhãn, nhãn tay, tên booth | **AI không ghi đè nhãn đã xác nhận / đã bỏ**; CT-F1 / F2 / F3; BT-F1; **CAM-04** (chỉnh giờ giữ P/X, sao, nhãn, booth, khoảnh khắc 📌); "đủ cỡ cảnh" theo khoảnh khắc | Đạt |
 
-**Tổng:** 1307 test Linux đạt (23 test Media mới). CI Windows ở chế độ kiểm tra: run `lic1-checks` và `perf` (kết quả ở
-gói review). Job build / đóng gói: `skipped`.
+**Tổng:** 1307 test Linux đạt (23 test Media mới). CI Windows ở chế độ kiểm tra: `lic1-checks` run 42335541698 đạt
+(gồm `tests/media`, chặn mạng); `perf` run 42336859220 đạt (1088 đạt / 220 bỏ qua; perf 27 đạt) sau khi sửa test hiệu
+năng còn gọi bước embed (`9865ef2`). Job build / đóng gói: `skipped`.
