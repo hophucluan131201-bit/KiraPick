@@ -19,6 +19,10 @@
 | 0.7 | **Hai ca lỗi nét mới:** FC-06 (màn LED sắc nét nhưng chưa bão hoà) và FC-07 (trang phục trắng sáng còn chi tiết), mục 6 | Review 2026-11-07 |
 | 0.8 | **Ảnh mẫu (MED-SAMPLE):** album VNNIC Internet Conference 2026 (19/6) là nguồn hội nghị chính; album tổng kết IPv6, trao bằng khen (18/6) là nguồn bổ sung. Quy tắc dùng: kế hoạch Mốc 1 §4a | Review 2026-11-07, chủ dự án |
 | 0.9 | Hồi quy Chụp cá nhân: bộ test Linux nay là **1307** (gồm test Media), không phải 1209 | Thực tế repo |
+| 0.10 | **Phím ở cửa sổ Media:** P / K chọn, X loại, **Backspace** bỏ P/X, F ❤, **Alt+0…5** sao (vì 1–5 là nội dung), **T / U / C** cỡ cảnh, 1–5 nội dung, Space ảnh lớn, Ctrl+Z. Chế độ 🏷 Dán nhãn mẫu: thêm N nét, O out nét, R trật nét, B bắt đầu khoảnh khắc, 0 chưa đánh giá | Đợt 2 (M8, M9) |
+| 0.11 | **Cảnh báo nét có thêm "Không đo được"** (ảnh phẳng, quá tối): khác với "Không cảnh báo"; không bao giờ đoán thành Out nét | Đợt 2 (M7) |
+| 0.12 | **R1-UNDO-AI giữ cho Mốc 1:** hoàn tác một thao tác khoảnh khắc làm trước "Phân tích lại" trả cả cách chia trước đó; cửa sổ báo rõ điều này | Review 2026-11-07 |
+| 0.13 | **Xuất ảnh cơ bản:** ảnh P sao chép vào thư mục theo khoảnh khắc ("01 …", ảnh chưa có khoảnh khắc vào "Chưa chia khoảnh khắc") hoặc theo cỡ cảnh; dùng bộ xuất của Chụp cá nhân (không đè, kiểm SHA-256, tên trùng được đặt khác) | MED-EXP, M11 |
 
 **Quy ước trong tài liệu:**
 - **[Repo]**: đã xác minh trong mã nguồn hiện tại.

@@ -1,8 +1,9 @@
-# Media sự kiện — Kế hoạch triển khai Mốc 1 (bản 2, 2026-11-07)
+# Media sự kiện — Kế hoạch triển khai Mốc 1 (bản 3, 2026-11-07)
 
 **Trạng thái:**
 - Chủ dự án **duyệt M1-OK và MED-EXP** (2026-11-07).
-- Review: làm theo **hai đợt**. **Đợt 1 (M1–M5) đã xong**, kết quả ở mục 6. **Đợt 2 (M6–M11)** bắt đầu sau vòng review đợt 1.
+- Review: làm theo **hai đợt**. **Đợt 1 (M1–M5)** đã review xong, kết quả ở mục 6. **Đợt 2 (M6–M11)** đã làm sau vòng
+  review đợt 1 ("đủ điều kiện chuyển sang M6–M11"), kết quả ở mục 7.
 - Đặc tả đã lên **bản 6** (`docs/design/media-su-kien.md` mục 0).
 
 **Căn cứ:**
@@ -179,7 +180,16 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 - **Nguồn:**
   - **Chính:** album **VNNIC Internet Conference 2026**, ngày 19/6.
   - **Bổ sung:** album **tổng kết IPv6, trao bằng khen**, ngày 18/6.
-  - **Đường dẫn album: chờ chủ dự án gửi.** Hai album là album công khai trên mạng.
+  - **Đường dẫn album** (chủ dự án gửi, 2026-11-07), album công khai trên mạng:
+    - 19/6: https://internet-conference.vn/vi/photo-of-vnnic-internet-conference-2026
+    - 18/6: https://internet-conference.vn/vi/photo-of-ipv6-transition-program-deployment-review-conference
+- **Còn cần kiểm** (chưa kiểm: máy phát triển không được phép truy cập trang này; không tải ảnh nào):
+  - số ảnh truy cập được của mỗi album;
+  - độ phân giải ảnh tải về được (ảnh gốc hay ảnh đã thu nhỏ);
+  - EXIF: còn giờ chụp không, còn hãng / dòng máy không;
+  - **quyền sử dụng**: điều khoản của trang, ai giữ bản quyền ảnh, có cho phép dùng để thử nghiệm phần mềm không.
+- **Tách khỏi test logic:** kiểm chứng trên ảnh album / ảnh thật làm riêng, trên máy chủ dự án, bằng 🏷 Dán nhãn mẫu và
+  `KiraPick.exe --media-score`. CI và repo chỉ dùng ảnh tổng hợp; không ảnh album nào vào repo hay CI.
 - **Trước khi lập tập mẫu**, kiểm và ghi lại:
   - số ảnh truy cập được;
   - độ phân giải;
@@ -209,11 +219,11 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 |---|---|---|
 | **M1-OK** | Duyệt kế hoạch Mốc 1 (mục 1–3) | **Đã duyệt** 2026-11-07 |
 | **MED-EXP** | Đưa xuất ảnh cơ bản vào Mốc 1 | **Đã duyệt** 2026-11-07 (M11) |
-| **MED-SAMPLE** | Hai album VNNIC (19/6, chính; 18/6, bổ sung), mục 4a | **Đã chọn**; chờ đường dẫn album |
+| **MED-SAMPLE** | Hai album VNNIC (19/6, chính; 18/6, bổ sung), mục 4a | **Đã có đường dẫn**; còn kiểm số ảnh, độ phân giải, EXIF, quyền sử dụng |
 | **CLEAN-2** | Giữ hay xoá 10 DLL cuDNN do bản 3.0.0a đã cài khi nâng cấp | **Chờ chủ dự án** (hiện giữ) |
 | Đặc tả v6 | Ghi các chỉnh sửa kỹ thuật ở mục 0 vào đặc tả | **Đã làm** |
-| **Đợt 2** | Bắt đầu M6–M11 sau vòng review đợt 1 | Chờ review |
-| **R1-UNDO-AI** | Hoàn tác một thao tác khoảnh khắc làm trước lần "Phân tích lại" thì trả cả bảng khoảnh khắc về ảnh chụp trước thao tác đó, nên phần AI chia lại cũng bị trả về (khoảnh khắc 📌 và P/X không bị ảnh hưởng). Giữ cách này, hay chỉ trả các khoảnh khắc 📌 liên quan? | Đề xuất: **giữ**, vì đơn giản và dễ đoán; chạy "Phân tích lại" sẽ chia lại phần AI. Chờ review |
+| **Đợt 2** | Bắt đầu M6–M11 sau vòng review đợt 1 | **Đã làm** (mục 7), chờ review |
+| **R1-UNDO-AI** | Hoàn tác một thao tác khoảnh khắc làm trước lần "Phân tích lại" thì trả cả bảng khoảnh khắc về ảnh chụp trước thao tác đó, nên phần AI chia lại cũng bị trả về (khoảnh khắc 📌 và P/X không bị ảnh hưởng). Giữ cách này, hay chỉ trả các khoảnh khắc 📌 liên quan? | **Giữ cho Mốc 1** (review 2026-11-07). Cửa sổ báo rõ khi hoàn tác khôi phục cả cách chia trước đó; ca kiểm thử ở mục 7 |
 
 ---
 
@@ -230,3 +240,23 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 **Tổng:** 1307 test Linux đạt (23 test Media mới). CI Windows ở chế độ kiểm tra: `lic1-checks` run 42335541698 đạt
 (gồm `tests/media`, chặn mạng); `perf` run 42336859220 đạt (1088 đạt / 220 bỏ qua; perf 27 đạt) sau khi sửa test hiệu
 năng còn gọi bước embed (`9865ef2`). Job build / đóng gói: `skipped`.
+
+---
+
+## 7. Kết quả đợt 2 (M6–M11)
+
+Mọi kết quả AI ở đây là **trên ảnh tổng hợp** (kiểm quy tắc), không phải độ chính xác trên ảnh thật.
+
+| Commit | Nội dung | Ca kiểm thử | Kết quả |
+|---|---|---|---|
+| `c10147f` M6 | Cỡ cảnh qua MediaRegistry, ghi nguồn | SZ-01a/01b/02/03/04/05, người quay lưng / bị cắt; job (run_id, chạy tiếp, hủy, ảnh lỗi, không có mô hình); mô hình thật chỉ mở YOLOX-S + YuNet | Đạt (tổng hợp); ảnh thật: chờ |
+| `ec3325a` M7 | Out nét / Trật nét | FC-01, 02a, 02b, 03, 04, 05, **06, 07**, ca đối chứng LED, ISO cao mặt mờ, không đo được | Đạt (tổng hợp); ảnh thật: chờ |
+| `90c82f8` M8a | Ctrl+Z chung Media + P/X | **Tách → Phân tích lại → Ctrl+Z**; **xen kẽ P/X**, kiểm sau từng lần hoàn tác | Đạt |
+| `26f2b64` M8 | Cửa sổ Media | Lọc 3 nhóm + nguồn / khoảnh khắc / trạng thái / P-X; GUI nhập → phân tích → lọc → phím → hoàn tác; rời / mở lại / xoá | Đạt (offscreen) |
+| `81e1595` M11 | Xuất ảnh cơ bản | **Ảnh P chưa có khoảnh khắc**; **hai máy trùng tên file**; **SHA-256 ảnh gốc**; không đè file có sẵn; tên thư mục an toàn | Đạt |
+| `5828e82` M9 | Dán nhãn mẫu + `--media-score` | Số khớp đáp án tổng hợp; chia tập theo khoảnh khắc; < 15 mẫu; chỉ số; chỉ đọc; chặn mạng | Đạt |
+| `5205fc9` M10 | Self-test Media, chặn mạng, đổi chế độ | Bước Media trong `--self-test`; Media chạy khi chặn mạng; cùng thư mục P / X qua đổi chế độ thật; quét import | Đạt |
+
+**Tổng:** 1352 test Linux đạt. CI Windows ở chế độ kiểm tra: `lic1-checks` run 42352868649 đạt (174 đạt; 35 đạt
+dưới tường lửa; self-test `ok True`, `network_attempts []`); `perf` run 42352873974 (kết quả ở gói review). Job build /
+đóng gói: `skipped`.
