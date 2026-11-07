@@ -1,4 +1,5 @@
-"""Media sự kiện: the list of events (create / open / delete) and, once one is open, its window (app.ui.media_event_window.EventWindow, the 3.0.0 window).
+"""Media sự kiện: the list of events (create / open / delete); an open event shows in its own window
+(app.ui.media_event_window.EventWindow, the Chụp cá nhân 3.0.0 window).
 
 Each event has its own folder and database under %LOCALAPPDATA%\\KiraPick\\media\\ (app.media.event); deleting an
 event removes only that folder, never a photo. ⟵ Quay lại chọn chế độ closes the open event first.

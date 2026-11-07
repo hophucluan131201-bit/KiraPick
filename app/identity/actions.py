@@ -19,12 +19,22 @@ def subject_label(conn: sqlite3.Connection, subject_id: int) -> str:
     return row["display_name"] or f"Chủ thể {subject_id}"
 
 
+class NoPeopleFound(ValueError):
+    """Manual grouping needs a person the app found in the photo; none of the photos has one."""
+
+
 def create_subject(conn: sqlite3.Connection, asset_ids: list[int], name: str | None = None,
                    from_subject: int | None = None) -> int:
     """'This is someone else, not any subject so far': a new subject holding these photos (manually).
 
     ``from_subject``: the subject the photos are taken out of (the one being viewed), if any.
+    Raises NoPeopleFound (nothing is created) when none of the photos has a person the app found: a subject is
+    made of occurrences, so it would be empty.
     """
+    if not asset_ids or conn.execute(
+            f"SELECT 1 FROM occurrences WHERE asset_id IN ({','.join('?' * len(asset_ids))}) LIMIT 1",
+            list(asset_ids)).fetchone() is None:
+        raise NoPeopleFound("none of these photos has a detected person")
     if from_subject is not None:
         remove_photos_from_subject(conn, from_subject, asset_ids)
     subject_id = int(conn.execute("INSERT INTO subjects (created_at) VALUES (?)", (utc_now(),)).lastrowid)

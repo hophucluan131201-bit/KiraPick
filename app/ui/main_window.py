@@ -1676,15 +1676,12 @@ class MainWindow(QMainWindow):
             note = f"{skipped} ảnh chưa có người được dò sẽ được bỏ qua"
             new_subject.setToolTip(new_subject.toolTip() + f" ({note})")
             assign_menu.setToolTip(note)
-        requested, assets = len(assets), with_people or assets
+        requested, assets = assets, with_people or assets
         chosen = self._run_menu(menu, global_pos)
         if chosen is None:
             return
-        if chosen is new_subject:
-            if self.create_subject_from(assets, target if flt is Filter.SUBJECT else None) is not None \
-                    and requested > len(assets):
-                self.status.setText(self.status.text()
-                                    + f" {requested - len(assets)} ảnh chưa có người được dò nên chưa gom được.")
+        if chosen is new_subject:  # it skips (and counts) the photos without a person itself
+            self.create_subject_from(requested, target if flt is Filter.SUBJECT else None)
             return
         n = f"{len(assets)} ảnh" if len(assets) > 1 else "1 ảnh"
 
@@ -1709,6 +1706,10 @@ class MainWindow(QMainWindow):
         the subject being viewed, which the photos leave."""
         if self.project is None or not assets:
             return None
+        requested, assets = len(assets), self.photos_with_people(assets)
+        if not assets:  # a subject is made of the people found: never report a new subject that holds nothing
+            self.status.setText(NO_PEOPLE_FOUND)
+            return None
         name, ok = QInputDialog.getText(self, "Tạo chủ thể mới",
                                         f"Tên chủ thể mới cho {len(assets)} ảnh (để trống = tự đặt số):")
         if not ok:
@@ -1728,7 +1729,7 @@ class MainWindow(QMainWindow):
         self._after_people_change()
         placed = self.project.conn.execute(
             "SELECT COUNT(DISTINCT asset_id) FROM occurrences WHERE subject_id = ?", (subject_id,)).fetchone()[0]
-        skipped = len(assets) - placed
+        skipped = requested - placed
         self.status.setText(f"Đã tạo {actions.subject_label(self.project.conn, subject_id)} với {placed} ảnh."
                             + (f" {skipped} ảnh chưa có người được dò nên chưa gom được." if skipped else ""))
         return subject_id

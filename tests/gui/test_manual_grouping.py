@@ -83,3 +83,22 @@ def test_grouping_action_log_line_names_no_person(qtbot, env: dict, monkeypatch,
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("people action")]
     assert lines == ["people action: kind=create"]
     assert "Nguyễn" not in caplog.text and str(env["photos"]) not in caplog.text
+
+
+def test_a_new_subject_is_never_made_from_photos_without_a_found_person(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
+    """REG-1: the direct path (not only the locked menu item) refuses, asks nothing and makes no empty subject; the
+    rule also holds in app.identity.actions."""
+    import pytest
+
+    from app.identity import actions
+
+    w = _window(qtbot, env)
+    _import(qtbot, w, env["photos"])
+    ids = [r.id for r in w.model.records() if r.status == "ok"]
+    asked: list = []
+    monkeypatch.setattr(mw.QInputDialog, "getText", staticmethod(lambda *a, **k: asked.append(1) or ("X", True)))
+    assert w.create_subject_from(ids[:2]) is None
+    assert asked == [] and w.status.text() == mw.NO_PEOPLE_FOUND
+    with pytest.raises(actions.NoPeopleFound), w.project.transaction() as conn:
+        actions.create_subject(conn, ids[:2], "X")
+    assert w.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0] == 0
