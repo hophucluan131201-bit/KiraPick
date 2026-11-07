@@ -36,6 +36,20 @@ CREATE TABLE asset_source (
 );
 CREATE INDEX asset_source_camera ON asset_source (camera_id);
 """),
+    (3, """
+-- M3: clock offsets per camera source (spec §9). The corrected time is always capture_time + offset, computed:
+-- EXIF and assets.capture_time are never changed. Undo history of Media actions: media_journal (newest kept).
+CREATE TABLE clock_offsets (
+    camera_id  INTEGER PRIMARY KEY REFERENCES camera_sources(id),
+    seconds    REAL NOT NULL
+);
+CREATE TABLE media_journal (
+    id          INTEGER PRIMARY KEY,
+    label       TEXT NOT NULL,
+    before_json TEXT NOT NULL,   -- {table: {"where": sql, "params": [...], "rows": [...]}} taken before the action
+    created_at  TEXT NOT NULL
+);
+"""),
 ]
 MEDIA_SCHEMA_VERSION = MEDIA_MIGRATIONS[-1][0]
 
