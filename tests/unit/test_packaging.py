@@ -151,7 +151,11 @@ def test_cudnn_in_a_package_is_a_failure(tmp_path: Path) -> None:
 def test_cuda_edition_ships_no_cudnn_and_carries_the_guide(tmp_path: Path) -> None:
     """LIC-7 b (owner, 2026-11-07): cuDNN is not distributed; the CUDA package carries the install guide."""
     folder, policy = _package(tmp_path, "cuda")
-    (folder / "docs" / "licenses" / "NVIDIA-nvidia-cublas-cu12-12.9-License.txt").write_text("x", encoding="utf-8")
+    licences = folder / "docs" / "licenses"
+    (licences / "NVIDIA-nvidia-cublas-cu12-12.9-License.txt").write_text("x", encoding="utf-8")
+    for name in ("onnxruntime-LICENSE.txt", "onnxruntime-ThirdPartyNotices.txt"):
+        if not (licences / name).is_file():  # CI has onnxruntime-directml, not onnxruntime-gpu: stand-in text
+            (licences / name).write_text("x", encoding="utf-8")
     report = check_package.check(folder, "cuda", policy)
     assert any("HUONG_DAN_CUDNN.txt missing" in f for f in report["failures"])
     (folder / "docs" / "HUONG_DAN_CUDNN.txt").write_text("cài cuDNN", encoding="utf-8")

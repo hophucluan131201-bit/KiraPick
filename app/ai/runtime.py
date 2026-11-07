@@ -82,6 +82,7 @@ class RuntimeInfo:
 
 CUDNN_DLL = "cudnn64_9.dll"
 _dll_dirs: list = []
+cudnn_dir: Path | None = None  # where the cuDNN that was loaded comes from (report A of the CUDA edition)
 CUDNN_MISSING = ("Bản CUDA cần cuDNN 9 do bạn tự cài (xem docs\\HUONG_DAN_CUDNN.txt); "
                  "chưa tìm thấy nên đang chạy bằng CPU")
 
@@ -121,7 +122,9 @@ def _load_user_cudnn() -> Path | None:
     except OSError as exc:
         log.warning("cuDNN found but could not be loaded: %s", type(exc).__name__)
         return None
-    log.info("cuDNN 9 loaded from the user's installation")
+    global cudnn_dir
+    cudnn_dir = folder
+    log.info("cuDNN 9 loaded from %s", folder)
     return folder
 
 

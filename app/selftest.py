@@ -112,6 +112,11 @@ def run(report_path: Path, photos: Path | None = None) -> int:
         report["identity_plus"] = registry.ready("identity_plus")  # ArcFace + YoutuReID
         info = configure()
         report["onnxruntime"] = {"version": info.ort_version, "providers": list(info.available)}
+        from app.ai import runtime as _rt
+
+        # CUDA edition: the cuDNN DLL folder really loaded (user-installed, LIC-7 b) and why the CPU is used if so
+        report["cuda"] = {"cudnn_dll": str(_rt.cudnn_dir / _rt.CUDNN_DLL) if _rt.cudnn_dir else None,
+                          "setup_error": info.preload_error}
         step("onnxruntime loaded")
 
         # Graphics card: informative only (a PC without a usable GPU is fine, it uses the CPU).
