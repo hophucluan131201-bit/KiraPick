@@ -54,3 +54,23 @@ def test_photo_folder_argument_is_cleaned() -> None:
     assert str(_folder_arg('G:\\DCIM\\125NCZ_5 ')) == str(Path('G:\\DCIM\\125NCZ_5'))
     assert str(_folder_arg('G:\\DCIM\\125NCZ_5"')) == str(Path('G:\\DCIM\\125NCZ_5'))
     assert _folder_arg("  ") is None
+
+
+def test_self_test_leaves_the_user_data_folder_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """BUILD-1 run 42376018586: the installed self-test changed %LOCALAPPDATA%\\KiraPick (the analysis children write
+    their logs there). The self-test now sends child logs to a temporary folder."""
+    from app import selftest
+
+    for name in ("connect", "connect_ex"):
+        monkeypatch.setattr(socket.socket, name, getattr(socket.socket, name))
+    monkeypatch.setattr(socket, "create_connection", socket.create_connection)
+    monkeypatch.setattr(socket, "getaddrinfo", socket.getaddrinfo)
+    data_home = tmp_path / "data-home"
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))  # children (spawned) resolve %LOCALAPPDATA% from this
+    monkeypatch.delenv("KIRAPICK_LOG_DIR", raising=False)
+    assert selftest.run(tmp_path / "r.json") == 0
+    written = [p for p in data_home.rglob("*") if p.is_file()] if data_home.exists() else []
+    assert written == [], written
+    import os
+
+    assert "KIRAPICK_LOG_DIR" not in os.environ

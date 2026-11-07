@@ -79,6 +79,13 @@ def run(report_path: Path, photos: Path | None = None) -> int:
             pass
 
     _block_network(report["network_attempts"])
+    import os
+
+    # Child processes (analysis) log into %LOCALAPPDATA%\KiraPick\logs in normal use; the self-test must not change
+    # the user's data folder (the installer checks compare it byte for byte), so their logs go to a temporary folder.
+    log_tmp = tempfile.mkdtemp(prefix="kirapick-selftest-logs-")
+    previous_log_dir = os.environ.get("KIRAPICK_LOG_DIR")
+    os.environ["KIRAPICK_LOG_DIR"] = log_tmp
     started = time.time()
     try:
         from app import __version__
@@ -235,6 +242,13 @@ def run(report_path: Path, photos: Path | None = None) -> int:
     except Exception as exc:  # noqa: BLE001 - the report must always be written
         report["error"] = f"{type(exc).__name__}: {exc}"
         report["traceback"] = traceback.format_exc()[-4000:]
+    if previous_log_dir is None:
+        os.environ.pop("KIRAPICK_LOG_DIR", None)
+    else:
+        os.environ["KIRAPICK_LOG_DIR"] = previous_log_dir
+    import shutil
+
+    shutil.rmtree(log_tmp, ignore_errors=True)
     report["seconds"] = round(time.time() - started, 1)
     _write_report(report_path, report)
     return 0 if report["ok"] else 1

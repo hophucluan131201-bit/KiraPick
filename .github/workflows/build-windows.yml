@@ -208,6 +208,9 @@ jobs:
           Check ($p.ExitCode -eq 0 -and $r.ok -eq $true -and $r.version -eq $intVer -and $r.edition -eq $env:EDITION -and @($r.network_attempts).Count -eq 0) "installed self-test ok=$($r.ok) version=$($r.version) edition=$($r.edition) network_attempts=$(@($r.network_attempts).Count) providers=$($r.onnxruntime.providers -join '/') gpu=$($r.gpu.device)"
           if ($cuda) { Check (@($r.onnxruntime.providers) -contains "CUDAExecutionProvider") "CUDA provider present in the installed build (this runner has no NVIDIA card: the run itself uses the CPU)" }
           Check ((DataState) -eq $dataBefore) "user data unchanged after the self-test"
+          if ((DataState) -ne $dataBefore) {  # name what changed (paths and hashes only, no content)
+            $diff = Compare-Object ($dataBefore -split ";") ((DataState) -split ";") | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }
+            Write-Host "::notice title=user data changed by the self-test::$($diff -join '%0A')" }
           python scripts/package_inventory.py --dist dist --edition $env:EDITION --commit "${{ github.sha }}" --installed (Split-Path $intExe) --out installed-inventory.json *>&1 | Out-Null
           Check ($LASTEXITCODE -eq 0) "package check on the installed folder (fresh install): see installed-inventory.md"
           # Grouping diagnostic (F3): packaged, offline, read-only; a folder without a session gives the fixed error
@@ -320,6 +323,9 @@ jobs:
           Check ($p.ExitCode -eq 0 -and $r.ok -eq $true -and $r.version -eq $newVer -and $r.edition -eq $env:EDITION -and @($r.network_attempts).Count -eq 0) "installed self-test ok=$($r.ok) version=$($r.version) edition=$($r.edition) network_attempts=$(@($r.network_attempts).Count) providers=$($r.onnxruntime.providers -join '/')"
           if ($cuda) { Check (@($r.onnxruntime.providers) -contains "CUDAExecutionProvider") "CUDA provider present in the installed build" }
           Check ((DataState) -eq $dataBefore) "user data unchanged after the self-test"
+          if ((DataState) -ne $dataBefore) {  # name what changed (paths and hashes only, no content)
+            $diff = Compare-Object ($dataBefore -split ";") ((DataState) -split ";") | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }
+            Write-Host "::notice title=user data changed by the self-test::$($diff -join '%0A')" }
           python scripts/package_inventory.py --dist dist --edition $env:EDITION --commit "${{ github.sha }}" --installed (Split-Path $exe) --upgrade-from $offVer --out upgraded-inventory.json *>&1 | Out-Null
           Check ($LASTEXITCODE -eq 0) "package check on the upgraded folder (from $offVer)"
           $left = @(Get-ChildItem (Split-Path $exe) -Recurse -Filter "cudnn*64_9.dll" -ErrorAction SilentlyContinue | ForEach-Object Name)

@@ -27,7 +27,10 @@ def _child(folder: str, mode: str, learning_dir: str | None, prefer_gpu: bool,
 
         from app.branding import data_dir
 
-        log_dir = data_dir() / "logs"
+        import os
+
+        # the self-test sends this to a temporary folder: it must leave the user's data folder byte-identical
+        log_dir = Path(os.environ["KIRAPICK_LOG_DIR"]) if os.environ.get("KIRAPICK_LOG_DIR") else data_dir() / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         handler = RotatingFileHandler(log_dir / "kirapick-ai.log", maxBytes=2_000_000, backupCount=2, encoding="utf-8")
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))

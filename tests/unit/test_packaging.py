@@ -195,3 +195,18 @@ def test_every_config_the_app_reads_is_bundled_by_the_spec() -> None:
     for path in (ROOT / "app").rglob("*.py"):
         used |= set(re.findall(r'"configs" / "([^"]+)"', path.read_text(encoding="utf-8")))
     assert used and used <= bundled, f"configs read by the app but not bundled: {sorted(used - bundled)}"
+
+
+def test_exe_version_resource_and_pyproject_follow_the_app_version() -> None:
+    """BUILD-1 run 42376018586: the version-only commit changed app/__init__.py but not packaging/version_info.txt,
+    so the installed KiraPick.exe said 3.0.0 / 3.0.0a while the app reported 3.0.1b1 / 3.0.1b1a."""
+    import re
+
+    from app import __version__
+
+    info = (ROOT / "packaging" / "version_info.txt").read_text(encoding="utf-8")
+    assert re.findall(r"StringStruct\('(?:FileVersion|ProductVersion)', '([^']+)'\)", info) == [__version__] * 2
+    numbers = tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", __version__).groups()) + (0,)
+    assert f"filevers={numbers}" in info and f"prodvers={numbers}" in info
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert re.search(r'^version = "([^"]+)"', pyproject, re.M).group(1) == __version__
