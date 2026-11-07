@@ -182,3 +182,16 @@ def test_user_installed_cudnn_is_found(tmp_path: Path) -> None:
     (custom / runtime.CUDNN_DLL).write_bytes(b"x")
     assert runtime.find_cudnn({"ProgramFiles": str(pf), "CUDNN_PATH": str(custom), "PATH": ""}) == custom
     assert runtime.find_cudnn({"ProgramFiles": str(tmp_path / "none"), "PATH": ""}) is None
+
+
+def test_every_config_the_app_reads_is_bundled_by_the_spec() -> None:
+    """BUILD-1 (run 42374964980) failed: configs/model-policy.json (LIC-1) was read by the app but not bundled, and
+    the source-tree tests could not see it. Any ``configs/<file>`` named in app code must be in the spec's datas."""
+    import re
+
+    spec = (ROOT / "packaging" / "kirapick.spec").read_text(encoding="utf-8")
+    bundled = set(re.findall(r'ROOT / "configs" / "([^"]+)"', spec))
+    used = set()
+    for path in (ROOT / "app").rglob("*.py"):
+        used |= set(re.findall(r'"configs" / "([^"]+)"', path.read_text(encoding="utf-8")))
+    assert used and used <= bundled, f"configs read by the app but not bundled: {sorted(used - bundled)}"
