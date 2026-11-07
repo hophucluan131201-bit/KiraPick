@@ -107,6 +107,13 @@ jobs:
             $r = Get-Content dist/selftest.json -Raw | ConvertFrom-Json
             Write-Host ("::notice title=self-test (${{ matrix.edition }})::ok=" + $r.ok + " version=" + $r.version + " edition=" + $r.edition + " steps=" + ($r.steps -join " | ") + " gpu=" + ($r.gpu | ConvertTo-Json -Compress -Depth 3))
           }
+      - name: Package inventory (checklist G1-G4) — version, commit, SHA-256 of each package, package check
+        shell: pwsh
+        run: |
+          python scripts/package_inventory.py --dist dist --edition ${{ matrix.edition }} --commit ${{ github.sha }} --run ${{ github.run_id }} --out dist/package-inventory.json *>&1 | Tee-Object -Variable inv | Out-Null
+          $code = $LASTEXITCODE
+          Write-Host "::notice title=package inventory (${{ matrix.edition }})::$(($inv | Select-Object -First 30) -join '%0A')"
+          if ($code -ne 0) { exit $code }
       - name: Internal test / beta build — installation safety check (official release first, then this build)
         if: github.event_name == 'workflow_dispatch' && (matrix.edition == 'directml' || matrix.edition == 'cuda')
         shell: pwsh
@@ -122,7 +129,7 @@ jobs:
           function Check($ok, $what) { if ($ok) { $script:lines += "PASS $what" } else { $script:lines += "FAIL $what"; $script:failed += $what }; Write-Host ("{0} {1}" -f $(if ($ok) { "PASS" } else { "FAIL" }), $what) }
           $cuda = $env:EDITION -eq "cuda"
           # The official release the owner has for this edition, and this build's own identity
-          $offTag = if ($cuda) { "v2.2.0a" } else { "v2.2.1" }
+          $offTag = if ($cuda) { "v3.0.0a" } else { "v3.0.0" }  # the official releases users have now
           $offVer = $offTag.Substring(1)
           # Every isolated identity: GUID, folder, name (packaging/installer.iss)
           $ids = @{
@@ -201,6 +208,8 @@ jobs:
           Check ($p.ExitCode -eq 0 -and $r.ok -eq $true -and $r.version -eq $intVer -and $r.edition -eq $env:EDITION -and @($r.network_attempts).Count -eq 0) "installed self-test ok=$($r.ok) version=$($r.version) edition=$($r.edition) network_attempts=$(@($r.network_attempts).Count) providers=$($r.onnxruntime.providers -join '/') gpu=$($r.gpu.device)"
           if ($cuda) { Check (@($r.onnxruntime.providers) -contains "CUDAExecutionProvider") "CUDA provider present in the installed build (this runner has no NVIDIA card: the run itself uses the CPU)" }
           Check ((DataState) -eq $dataBefore) "user data unchanged after the self-test"
+          python scripts/package_inventory.py --dist dist --edition $env:EDITION --commit "${{ github.sha }}" --installed (Split-Path $intExe) --out installed-inventory.json *>&1 | Out-Null
+          Check ($LASTEXITCODE -eq 0) "package check on the installed folder (fresh install): see installed-inventory.md"
           # Grouping diagnostic (F3): packaged, offline, read-only; a folder without a session gives the fixed error
           $diag = Join-Path $PWD "installed-diagnose.json"
           $nosession = Join-Path $env:RUNNER_TEMP "no-session-folder"
@@ -245,7 +254,7 @@ jobs:
           if (-not $setup) { Write-Host "::notice title=upgrade check::not an official build: skipped"; exit 0 }
           $failed = @(); $lines = @()
           function Check($ok, $what) { if ($ok) { $script:lines += "PASS $what" } else { $script:lines += "FAIL $what"; $script:failed += $what }; Write-Host ("{0} {1}" -f $(if ($ok) { "PASS" } else { "FAIL" }), $what) }
-          $offTag = if ($cuda) { "v2.2.0a" } else { "v2.2.1" }
+          $offTag = if ($cuda) { "v3.0.0a" } else { "v3.0.0" }  # the official releases users have now
           $offVer = $offTag.Substring(1)
           $progs = Join-Path $env:LOCALAPPDATA "Programs"
           $uninst = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -311,6 +320,10 @@ jobs:
           Check ($p.ExitCode -eq 0 -and $r.ok -eq $true -and $r.version -eq $newVer -and $r.edition -eq $env:EDITION -and @($r.network_attempts).Count -eq 0) "installed self-test ok=$($r.ok) version=$($r.version) edition=$($r.edition) network_attempts=$(@($r.network_attempts).Count) providers=$($r.onnxruntime.providers -join '/')"
           if ($cuda) { Check (@($r.onnxruntime.providers) -contains "CUDAExecutionProvider") "CUDA provider present in the installed build" }
           Check ((DataState) -eq $dataBefore) "user data unchanged after the self-test"
+          python scripts/package_inventory.py --dist dist --edition $env:EDITION --commit "${{ github.sha }}" --installed (Split-Path $exe) --upgrade-from $offVer --out upgraded-inventory.json *>&1 | Out-Null
+          Check ($LASTEXITCODE -eq 0) "package check on the upgraded folder (from $offVer)"
+          $left = @(Get-ChildItem (Split-Path $exe) -Recurse -Filter "cudnn*64_9.dll" -ErrorAction SilentlyContinue | ForEach-Object Name)
+          Write-Host "::notice title=CLEAN-2 (open decision) — cuDNN DLLs left after upgrading from $offVer::$($left.Count): $($left -join ', ')"
           # 5. Uninstall: the program goes, the data stays
           Start-Process (Join-Path $progs "KiraPick\unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           for ($i = 0; $i -lt 60 -and (Test-Path $exe); $i++) { Start-Sleep -Seconds 1 }
@@ -326,8 +339,11 @@ jobs:
           path: |
             dist/installer/*
             dist/selftest.json
+            dist/package-inventory.*
             installed-selftest.json
             installed-diagnose.json
+            installed-inventory.*
+            upgraded-inventory.*
           retention-days: 30
       - name: Publish release
         if: github.event_name == 'push'
@@ -476,7 +492,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          $tests = "tests/unit/test_model_policy.py tests/unit/test_load_log.py tests/unit/test_provenance.py tests/unit/test_old_cache.py tests/unit/test_user_edits.py tests/unit/test_fallback_paths.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_network_blocked.py tests/unit/test_selftest.py tests/unit/test_media_models.py tests/gui/test_manual_grouping.py tests/gui/test_mode_picker.py tests/gui/test_media_window.py tests/unit/test_packaging.py tests/unit/test_grp1_counts.py tests/media".Split(" ")
+          $tests = "tests/unit/test_model_policy.py tests/unit/test_load_log.py tests/unit/test_provenance.py tests/unit/test_old_cache.py tests/unit/test_user_edits.py tests/unit/test_fallback_paths.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_network_blocked.py tests/unit/test_selftest.py tests/unit/test_media_models.py tests/gui/test_manual_grouping.py tests/gui/test_mode_picker.py tests/gui/test_media_window.py tests/unit/test_packaging.py tests/unit/test_package_inventory.py tests/unit/test_grp1_counts.py tests/media".Split(" ")
           python -m pytest -q -p no:cacheprovider -rs @tests *>&1 | Tee-Object -FilePath lic1.log
           Write-Host "::notice title=LIC-1 tests (network open)::$((Get-Content lic1.log -Tail 3) -join ' | ')"
           if ($LASTEXITCODE -ne 0) { exit 1 }
