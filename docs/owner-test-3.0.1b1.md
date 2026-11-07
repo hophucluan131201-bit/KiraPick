@@ -110,11 +110,12 @@ Phải thấy `Da giai nen vao …`. Nếu thấy `KHONG THAY …`: file tải v
 Dán cả khối. **Phải thấy đúng 3 dòng, đều bắt đầu bằng `KHOP`.** Có dòng `SAI` hoặc `THIEU` thì **dừng**, gửi lại màn
 hình.
 ```powershell
-foreach ($ten in $MONG.Keys) {
-  $f = Get-ChildItem "D:\BetaTest\Goi\$GOI" -Recurse -File -Filter $ten | Select-Object -First 1
-  if (-not $f) { "THIEU  $ten" }
-  elseif ((Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower() -eq $MONG[$ten]) { "KHOP   $ten" }
-  else { "SAI    $ten" }
+# (biến vòng lặp là $tep: PowerShell không phân biệt hoa thường, $ten sẽ ghi đè $TEN của bước A0)
+foreach ($tep in $MONG.Keys) {
+  $f = Get-ChildItem "D:\BetaTest\Goi\$GOI" -Recurse -File -Filter $tep | Select-Object -First 1
+  if (-not $f) { "THIEU  $tep" }
+  elseif ((Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower() -eq $MONG[$tep]) { "KHOP   $tep" }
+  else { "SAI    $tep" }
 }
 ```
 
