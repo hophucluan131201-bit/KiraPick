@@ -63,3 +63,20 @@ def test_cudnn_left_by_an_upgrade_from_3_0_0a_is_reported_not_failed(tmp_path: P
     assert "CLEAN-2" in inv_mod.markdown(upgraded)
     fresh = inv_mod.inventory(dist, "cuda", "abc", installed=installed, policy=policy)
     assert not fresh["ok"]  # a fresh install never has cuDNN
+
+
+def test_main_prints_on_a_cp1252_console(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    """BUILD-1 run 42375394390: printing the Vietnamese table on the Windows runner's cp1252 console raised
+    UnicodeEncodeError and failed the step after the files were written."""
+    import io
+    import sys
+
+    dist, policy = _dist(tmp_path, "directml")
+    raw = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="cp1252"))
+    monkeypatch.setattr(inv_mod.check_package, "load_model_policy", lambda: policy)
+    out = tmp_path / "inv.json"
+    code = inv_mod.main(["--dist", str(dist), "--edition", "directml", "--commit", "abc", "--out", str(out)])
+    sys.stdout.flush()
+    assert code == 0 and out.is_file() and out.with_suffix(".md").is_file()
+    assert "Kiểm gói" in raw.getvalue().decode("utf-8")

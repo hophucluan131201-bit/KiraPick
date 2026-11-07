@@ -89,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--upgrade-from")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):  # a Windows console (cp1252) cannot print the Vietnamese report
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     inv = inventory(args.dist, args.edition, args.commit, args.run, args.installed, args.upgrade_from)
     args.out.write_text(json.dumps(inv, indent=1, ensure_ascii=False), encoding="utf-8")
     args.out.with_suffix(".md").write_text(markdown(inv), encoding="utf-8")
