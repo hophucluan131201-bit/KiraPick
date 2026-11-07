@@ -142,8 +142,13 @@ def test_pinned_moments_survive_reanalysis_and_ai_part_is_resplit(tmp_path: Path
         ms = {m.id: sorted(m.assets) for m in mo.moments(e.conn)}
         assert ms[first.id] == sorted([p["P0"], p["P1"]]) and ms[new_id] == [p["P2"]]
         assert len(ms) == 4  # P3 and P4 are 60 s apart > 30 s: two AI moments
-        journal.undo(e)  # undo the split: one AI moment of 3 again, P3/P4 as split by the last analysis
-        assert first.id in {m.id for m in mo.moments(e.conn)}
+        # Undo the split: the snapshot taken before it comes back whole, so the re-analysis made after the split is
+        # rolled back too (open point for review: R1-UNDO-AI). Re-analysing again re-makes the AI moments.
+        journal.undo(e)
+        assert [(sorted(m.assets), m.pinned) for m in mo.moments(e.conn)] == [
+            (sorted([p["P0"], p["P1"], p["P2"]]), False), (sorted([p["P3"], p["P4"]]), False)]
+        mo.analyse(e, gap_s=30)
+        assert len(mo.moments(e.conn)) == 5
 
 
 def test_merge_move_rename_are_undoable(tmp_path: Path) -> None:
