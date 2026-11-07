@@ -35,20 +35,21 @@
 - **Ảnh gốc:** không sửa, xoá, đổi tên hay di chuyển ảnh gốc, và không sửa EXIF. Xuất ảnh chỉ là sao chép. [Repo: phần
   xuất ảnh hiện có đã đáp ứng.]
 - **Dữ liệu tách riêng:** Media có thư mục dữ liệu riêng `%LOCALAPPDATA%\KiraPick\media\` và cơ sở dữ liệu riêng. Cấu
-  trúc dữ liệu của Chụp cá nhân (phiên bản 7) **không đổi**, và không cần chuyển đổi dữ liệu.
+  trúc bảng ảnh dùng chung với Chụp cá nhân (v8, ghi nguồn kết quả, LIC-1); các bảng Media chỉ áp cho CSDL sự kiện
+  (`app/media/schema.py`), phiên Chụp cá nhân không bao giờ có chúng.
 - **Hồi quy Chụp cá nhân:**
-  - bộ test hiện có (1209 test Linux, 1001 test Windows, hiệu năng, sức chịu) phải đạt nguyên vẹn;
+  - bộ test hiện có (1307 test Linux gồm test Media, bộ Windows đầy đủ, hiệu năng, sức chịu) phải đạt nguyên vẹn;
   - bảng 11 bước của bản RC chạy lại trên Windows/CUDA trước bản thử cuối.
 - **Thẻ AI là gợi ý:** quyết định cuối cùng thuộc về người dùng (mục 3).
 
-## 2. Bốn nhóm lọc (đã thống nhất)
+## 2. Nhóm lọc: ba nhóm ở Mốc 1, nhóm Người ở Mốc 2
 
 | Nhóm | Giá trị | Số nhãn mỗi ảnh |
 |---|---|---|
-| **Cỡ cảnh** | Toàn / Trung / Cận (thêm trạng thái Chưa xác định) | một |
-| **Nội dung ảnh** | Sân khấu / Booth / Gian hàng / Decor / Sản phẩm / Merch | nhiều |
-| **Người và vai trò** | Diễn giả / Celeb / Talent / Đại biểu; gom và đặt tên từng người **nếu khả thi** (mục 7) | nhiều người mỗi ảnh |
-| **Độ nét** | Out nét / Trật nét (cảnh báo) | không, một hoặc cả hai |
+| **Cỡ cảnh** (Mốc 1) | Toàn / Trung / Cận (thêm trạng thái Chưa xác định) | một |
+| **Nội dung ảnh** (Mốc 1) | Sân khấu / Booth / Gian hàng / Decor / Sản phẩm / Merch | nhiều |
+| **Người và vai trò** (Mốc 2) | Diễn giả / Celeb / Talent / Đại biểu; gom và đặt tên từng người **nếu khả thi** (mục 7) | nhiều người mỗi ảnh |
+| **Độ nét** (Mốc 1) | Out nét / Trật nét (cảnh báo) | không, một hoặc cả hai |
 
 - Tên hiển thị là **tên làm việc**; đổi tên không ảnh hưởng dữ liệu.
 - **Booth / Gian hàng** là **một** nhãn.
@@ -500,7 +501,7 @@ ghi trong báo cáo A.
 
 **Có trong Beta:**
 - nhập nhiều máy, nguồn máy, chỉnh giờ;
-- 4 nhóm lọc;
+- 3 nhóm lọc ở Mốc 1 (cỡ cảnh, nội dung, lỗi nét); nhóm Người & vai trò ở Mốc 2;
 - trạng thái nhãn;
 - khoảnh khắc (📌, ⚠ lệch giờ);
 - lọc, P/X, Ctrl+Z, so sánh;

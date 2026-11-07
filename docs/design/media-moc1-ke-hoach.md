@@ -28,7 +28,7 @@
 | §12 | `configs/media-models.json`, trạng thái "đã duyệt có rủi ro" | Thay bằng `configs/model-policy.json` dùng chung, chỉ có verified / pending / never | Media nạp YOLOX-S/M và YuNet (verified, chế độ media); **không** nạp CLIP, SFace |
 | §13 MOD-1 | CLIP được dùng trong Media | **MED-CLIP:** CLIP `pending` (chấp nhận rủi ro không phải căn cứ quyền) | Mốc 1 chạy **phương án dự phòng §12a**: không gợi ý nội dung bằng AI, khoảnh khắc chia theo khoảng nghỉ, gợi ý tên booth theo giờ |
 | §7, §12 | SFace để gom người ở Mốc 2 | SFace `pending` | Mốc 1 không dùng. Mốc 2 gom người chỉ thủ công, trừ khi có căn cứ (R1) |
-| §1 | 1209 test Linux | 1284 test Linux | Hồi quy Chụp cá nhân phải giữ nguyên 1284 |
+| §1 | 1209 test Linux | 1307 test Linux (gồm 23 test Media) | Hồi quy Chụp cá nhân phải giữ nguyên các test hiện có |
 
 Các chỉnh sửa này sẽ ghi vào đặc tả thành **bản 6** (chỉ phần kỹ thuật, không đổi quyết định của chủ dự án).
 
@@ -46,7 +46,7 @@ Các chỉnh sửa này sẽ ghi vào đặc tả thành **bản 6** (chỉ ph�
 | **Cảnh báo nét** Out nét / Trật nét (đo trên ảnh gốc; LED / đèn bị loại; rung = Out nét) | Cảnh báo "Nhòe chuyển động" riêng |
 | **Nội dung ảnh** gán tay, nhiều nhãn, phím **1–5**, gán cho nhiều ảnh / cả khoảnh khắc; **tên booth** tự đặt, gợi ý theo khoảnh khắc | |
 | **5 trạng thái nhãn** (đang phân tích / chưa xác định / AI gợi ý / đã xác nhận / đã bỏ) | |
-| Lưới, ảnh lớn, **P / X / sao / ❤**, lọc theo 4 nhóm + nguồn + khoảnh khắc + trạng thái, Ctrl+Z | |
+| Lưới, ảnh lớn, **P / X / sao / ❤**, lọc theo 3 nhóm (cỡ cảnh, nội dung, lỗi nét) + nguồn + khoảnh khắc + trạng thái, Ctrl+Z | |
 | **Chế độ "Dán nhãn mẫu"** và **lệnh chấm offline** (chỉ số liệu) | |
 | `--self-test` có bước Media, báo cáo A | |
 
@@ -120,7 +120,7 @@ cá nhân (an toàn, không đè file). Ảnh P được chia thư mục theo kh
   - **📂 Nhập ảnh** (nhiều thư mục);
   - **🕒 Máy ảnh & giờ** (hiện khi có từ 2 nguồn);
   - **🧠 Phân tích sự kiện**;
-  - thanh lọc 4 nhóm + nguồn + khoảnh khắc + trạng thái;
+  - thanh lọc 3 nhóm (cỡ cảnh, nội dung, lỗi nét) + nguồn + khoảnh khắc + trạng thái;
   - dải khoảnh khắc (📌, ⚠, Tách tại đây, gộp, đổi tên);
   - phím **T / U / C** (cỡ cảnh), **1–5** (nội dung);
   - chế độ **Dán nhãn mẫu**.
@@ -213,6 +213,7 @@ Mỗi commit kèm test. CI Linux + Windows ở chế độ kiểm tra (`lic1-che
 | **CLEAN-2** | Giữ hay xoá 10 DLL cuDNN do bản 3.0.0a đã cài khi nâng cấp | **Chờ chủ dự án** (hiện giữ) |
 | Đặc tả v6 | Ghi các chỉnh sửa kỹ thuật ở mục 0 vào đặc tả | **Đã làm** |
 | **Đợt 2** | Bắt đầu M6–M11 sau vòng review đợt 1 | Chờ review |
+| **R1-UNDO-AI** | Hoàn tác một thao tác khoảnh khắc làm trước lần "Phân tích lại" thì trả cả bảng khoảnh khắc về ảnh chụp trước thao tác đó, nên phần AI chia lại cũng bị trả về (khoảnh khắc 📌 và P/X không bị ảnh hưởng). Giữ cách này, hay chỉ trả các khoảnh khắc 📌 liên quan? | Đề xuất: **giữ**, vì đơn giản và dễ đoán; chạy "Phân tích lại" sẽ chia lại phần AI. Chờ review |
 
 ---
 
