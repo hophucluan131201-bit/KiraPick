@@ -111,6 +111,11 @@ CREATE TABLE media_analysis (
     updated_at     TEXT NOT NULL
 );
 """),
+    (7, """
+-- M8 (R1-UNDO-AI): each 'Phân tích lại' of the moments bumps media_meta 'resplit_seq'; a journal entry keeps the value
+-- it saw, so undoing a moment edit made before a re-analysis can say it also brings back the earlier split.
+ALTER TABLE media_journal ADD COLUMN resplit_seq INTEGER NOT NULL DEFAULT 0;
+"""),
 ]
 MEDIA_SCHEMA_VERSION = MEDIA_MIGRATIONS[-1][0]
 

@@ -106,6 +106,7 @@ def analyse(event: Project, gap_s: float = DEFAULT_GAP_S) -> None:
     """Split (or re-split) the moments; part of 'Phân tích sự kiện'. Not undoable: it changes no user decision."""
     with event.transaction() as conn:
         resplit(conn, gap_s)
+        journal.bump_resplit(conn)  # R1-UNDO-AI: an older moment edit undone after this says so
 
 
 # ----------------------------------------------------------------------------------------------- user edits (📌)
