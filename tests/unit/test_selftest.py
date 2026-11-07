@@ -56,6 +56,7 @@ def test_photo_folder_argument_is_cleaned() -> None:
     assert _folder_arg("  ") is None
 
 
+@pytest.mark.skipif(not HAVE, reason="AI models not fetched")
 def test_self_test_leaves_the_user_data_folder_untouched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """BUILD-1 run 42376018586: the installed self-test changed %LOCALAPPDATA%\\KiraPick (the analysis children write
     their logs there). The self-test now sends child logs to a temporary folder."""
