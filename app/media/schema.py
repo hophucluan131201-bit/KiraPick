@@ -50,6 +50,28 @@ CREATE TABLE media_journal (
     created_at  TEXT NOT NULL
 );
 """),
+    (4, """
+-- M4: moments (spec §8). Every readable photo is in exactly one moment. AI moments are re-made on every split;
+-- a pinned moment (📌: split / merged / moved / renamed by the user) keeps its photo list through re-analysis and
+-- clock changes. drift_warnings: ⚠ 'lệch giờ' of the photos of the source whose clock was just changed.
+CREATE TABLE moments (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    pinned      INTEGER NOT NULL DEFAULT 0,
+    no_time     INTEGER NOT NULL DEFAULT 0,   -- the 'Không rõ giờ' moment
+    created_at  TEXT NOT NULL
+);
+CREATE TABLE moment_assets (
+    asset_id   INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    moment_id  INTEGER NOT NULL REFERENCES moments(id) ON DELETE CASCADE
+);
+CREATE INDEX moment_assets_moment ON moment_assets (moment_id);
+CREATE TABLE drift_warnings (
+    asset_id    INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    suggested   INTEGER NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
+    camera_id   INTEGER NOT NULL           -- the source whose clock change raised it
+);
+"""),
 ]
 MEDIA_SCHEMA_VERSION = MEDIA_MIGRATIONS[-1][0]
 
