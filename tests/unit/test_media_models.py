@@ -135,7 +135,9 @@ FORBIDDEN_IMPORTS = {"app.ai.identity_plus", "app.ai.aesthetic", "app.ai.iqa", "
 
 def test_media_code_never_imports_the_shared_pipelines() -> None:
     """Media must not reach ArcFace / TOPIQ / LAION through the personal-mode pipelines (design §12, item 2)."""
-    for path in sorted((ROOT / "app" / "media").rglob("*.py")):
+    media_ui = sorted((ROOT / "app" / "ui").glob("media_*.py"))  # M10: the Media window too
+    assert media_ui
+    for path in sorted((ROOT / "app" / "media").rglob("*.py")) + media_ui:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.ImportFrom) and node.module:
                 names = {node.module} | {f"{node.module}.{a.name}" for a in node.names}
@@ -147,7 +149,7 @@ def test_media_code_never_imports_the_shared_pipelines() -> None:
 
 
 def test_media_code_loads_models_only_through_the_media_registry() -> None:
-    for path in sorted((ROOT / "app" / "media").rglob("*.py")):
+    for path in sorted((ROOT / "app" / "media").rglob("*.py")) + sorted((ROOT / "app" / "ui").glob("media_*.py")):
         if path.name == "models.py":
             continue
         text = path.read_text(encoding="utf-8")

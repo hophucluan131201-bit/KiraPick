@@ -314,3 +314,52 @@ def test_switching_modes_many_times_opens_only_verified_weights(qtbot, shell, en
     assert all(registry.policy.verified(m) for m in report["opened"]), report["opened"]
     assert not any(k.startswith("?") for k in report["skipped"])
     LOAD_LOG.clear()
+
+
+def test_switching_modes_keeps_each_side_s_marks_on_the_same_folder(qtbot, shell, env, tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """M10: the same photo folder in Chụp cá nhân and in a Media event, through the real mode switch."""
+    from app.media import event as events
+    from app.storage import decisions
+
+    monkeypatch.setattr(events, "media_root", lambda: tmp_path / "media")
+    folder = env["photos"]
+    # 1. Chụp cá nhân: P on the first photo
+    qtbot.keyClick(shell.picker, Qt.Key.Key_1)
+    w = shell.made[0]
+    qtbot.waitExposed(w)
+    w.start_import(folder)
+    qtbot.waitUntil(lambda: w.import_thread is None and w.project is not None, timeout=30000)
+    first = w.project.conn.execute("SELECT MIN(id) FROM assets WHERE status = 'ok'").fetchone()[0]
+    decisions.set_flag(w.project.conn, first, "keep")
+    w._ask_leave_mode = lambda: True
+    assert w.request_mode_change()
+    qtbot.waitUntil(lambda: shell.picker.isVisible() and not w.isVisible(), timeout=15000)
+    # 2. Media: the same folder in an event, X on the same photo
+    qtbot.keyClick(shell.picker, Qt.Key.Key_2)
+    page = shell.media
+    page.create("Cùng thư mục")
+    view = page.view
+    view.start_import(folder)
+    qtbot.waitUntil(lambda: view.import_thread is None, timeout=30000)
+    conn = view.media_event.conn
+    same = conn.execute("SELECT id FROM assets WHERE relative_path = (SELECT relative_path FROM assets "
+                        "WHERE status = 'ok' ORDER BY id LIMIT 1)").fetchone()[0]
+    assert decisions.get(conn, same).flag is None  # the personal P is not here
+    view.select([same])
+    qtbot.keyClick(view.grid, Qt.Key.Key_X)
+    view.back_button.click()  # leave the event (closed), then the Media page
+    qtbot.mouseClick(page.back_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: shell.picker.isVisible(), timeout=15000)
+    # 3. back in Chụp cá nhân: still P; and in the event: still X
+    qtbot.keyClick(shell.picker, Qt.Key.Key_1)
+    w2 = shell.made[-1]
+    qtbot.waitExposed(w2)
+    w2.start_import(folder)
+    qtbot.waitUntil(lambda: w2.import_thread is None and w2.project is not None, timeout=30000)
+    assert decisions.get(w2.project.conn, first).flag == "keep"
+    (info,) = events.list_events()
+    with events.open_event(info.id) as event:
+        assert decisions.get(event.conn, same).flag == "reject"
+    w2._ask_leave_mode = lambda: True
+    assert w2.request_mode_change()
+    qtbot.waitUntil(lambda: shell.picker.isVisible(), timeout=15000)

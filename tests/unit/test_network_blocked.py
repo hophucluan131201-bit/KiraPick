@@ -58,4 +58,21 @@ def test_analysis_scoring_and_media_with_the_network_blocked(tmp_path: Path, blo
         select.select_per_person(project.conn, 3)
     media = MediaRegistry(REG)
     media.report_unavailable()
+    # Media (M10): an event imported, analysed (YOLOX / YuNet through MediaRegistry), scored and exported
+    from app.media import cameras, samples
+    from app.media import event as events
+    from app.media import export as media_export
+    from app.media.analysis import analyse_event
+    from app.storage import decisions
+
+    with events.create_event("offline", tmp_path / "media") as event:
+        cameras.import_folder(event, shoot)
+        summary = analyse_event(event, registry=media, prefer_gpu=False)
+        assert summary.analysed == 2 and summary.failed == 0 and summary.unavailable is None
+        first = event.conn.execute("SELECT MIN(id) FROM assets").fetchone()[0]
+        decisions.set_flag(event.conn, first, "keep")
+        samples.set_sample(event.conn, [first], "shot", "toan")
+        assert samples.score(event)["kind"] == "kirapick-media-score"
+        result = media_export.run(event, media_export.plan(event, tmp_path / "out"))
+        assert len(result.copied) == 1 and not result.failed
     assert blocked == []  # nothing tried to connect
