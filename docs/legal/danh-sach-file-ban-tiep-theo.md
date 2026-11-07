@@ -1,9 +1,13 @@
-# Danh sách file được bật, cấu hình bộ cài, file cũ dọn khi nâng cấp (bản trình 2, 2026-11-06)
+# Danh sách file được bật, cấu hình bộ cài, file cũ dọn khi nâng cấp (bản 3, 2026-11-07)
+
+> **Bản 3, đã duyệt:** chủ dự án **duyệt LIST-1, PKG-1, CLEAN-1** (2026-11-07) và chọn **LIC-7 = (b)**: bản CUDA
+> **không kèm cuDNN**; người dùng tự cài cuDNN 9 (`docs\HUONG_DAN_CUDNN.txt`), app tự tìm, thiếu thì chạy CPU và ghi lý
+> do. Đã làm trên `beta` (mục 2.2). Câu hỏi mới **CLEAN-2** ở mục 4.
 
 > **Bản trình 2:** đã triển khai trên `beta` (C1, C12), theo kết luận review: CLEAN-1 là **danh sách file do bộ cài cũ quản lý** (không xoá cả thư mục), YoutuReID để `pending`, YOLOX-M chỉ ghim bản float16 (không có nhu cầu tương thích nào cần bản fp32). LIST-1, PKG-1, CLEAN-1 vẫn chờ chủ dự án duyệt riêng.
 
-**Trạng thái:** đề xuất, trình riêng theo kết luận review "TRÌNH DUYỆT TRIỂN KHAI PHẦN NỀN TRÊN `beta`".
-- **Chưa** có `configs/model-policy.json`, chưa sửa script build hay bộ cài.
+**Trạng thái:** đã duyệt và đã triển khai (`configs/model-policy.json`, `packaging/kirapick.spec`,
+`scripts/build_windows.ps1`, `packaging/installer.iss`, `scripts/check_package.py`).
 - Số phiên bản: **chờ chốt** (VER-1).
 - Căn cứ của từng file: `docs/legal/phuong-an-3.0.1.md`, Phụ lục B.
 
@@ -79,7 +83,7 @@ YoutuReID (`body_reid`) để **`pending`** theo kết luận review (không đ�
 | `opencv_videoio_ffmpeg4140_64.dll` | **bỏ** | **bỏ** | **bỏ** | thêm vào `_UNUSED` trong `packaging/kirapick.spec` |
 | `onnxruntime_providers_tensorrt.dll` | — | **bỏ** | — | như trên |
 | Bản sao DLL NVIDIA trong `_internal\nvidia\…\bin\` | — | **bỏ** | — | lọc `a.binaries` theo tên; giữ một bản ở `_internal\` |
-| `cudnn*64_9.dll` (10 file) | — | **theo LIC-7** | — | (a) không đăng gói CUDA; (b) bỏ khỏi gói, người dùng tự cài |
+| `cudnn*64_9.dll` (10 file) | — | **bỏ** (LIC-7 b) | — | `requirements-cuda.txt` không cài cuDNN; spec lọc mọi `cudnn*`; `check_package.py` lỗi nếu còn; gói CUDA kèm `docs\HUONG_DAN_CUDNN.txt`; `app/ai/runtime.py` tìm cuDNN 9 người dùng cài (`CUDNN_PATH`, `C:\Program Files\NVIDIA\CUDNN\v9.*\bin\12.*`, `PATH`) |
 | `DirectML.dll` | giữ | — | giữ | — |
 | Qt, ONNX Runtime, OpenCV, rawpy, Python | giữ | giữ | giữ | — |
 
@@ -122,10 +126,12 @@ file lạ còn nguyên (`tests/unit/test_packaging.py`). Ca nâng cấp **trên 
 
 App vẫn chặn các file đó theo danh sách cho phép.
 
-## 4. Cần duyệt
+## 4. Quyết định
 
-| Mã | Nội dung |
-|---|---|
-| LIST-1 | Danh sách 1.1–1.3 |
-| PKG-1 | Cấu hình bộ cài 2.1–2.3 |
-| CLEAN-1 | Dọn `{app}\models` và `{app}\_internal` khi nâng cấp (mục 3) |
+| Mã | Nội dung | Trạng thái |
+|---|---|---|
+| LIST-1 | Danh sách 1.1–1.3 | **Đã duyệt** 2026-11-07 |
+| PKG-1 | Cấu hình bộ cài 2.1–2.3 | **Đã duyệt** 2026-11-07 |
+| CLEAN-1 | Dọn đúng 26 file cũ khi nâng cấp (mục 3) | **Đã duyệt** 2026-11-07 |
+| LIC-7 | Bản CUDA không kèm cuDNN, người dùng tự cài | **(b)** 2026-11-07 |
+| **CLEAN-2** (mới) | Bản 3.0.0a đã cài 10 file `cudnn*64_9.dll` vào `{app}\_internal\`. Khi nâng cấp lên bản CUDA mới: **(a)** giữ các file đó (máy đã nâng cấp tiếp tục chạy GPU mà không phải cài gì; app vẫn nạp chúng vì nằm cạnh chương trình); **(b)** xoá chúng (mọi máy CUDA phải tự cài cuDNN 9, nếu không thì chạy CPU) | **Chờ chủ dự án**. Hiện tại: (a), vì CLEAN-1 đã duyệt không gồm các file này |

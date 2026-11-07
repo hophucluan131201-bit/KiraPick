@@ -1,8 +1,9 @@
 # CUDA edition (beta 2.2.0a): like requirements-directml.txt, but ONNX Runtime for NVIDIA cards.
 numpy==2.5.4
 opencv-python-headless==4.14.0.94
-onnxruntime-gpu[cuda,cudnn]==1.24.4  # CUDA 12 + cuDNN 9 from NVIDIA's pip wheels (ranges ~=12 / ~=9 set by
-# onnxruntime-gpu's extras); needs an NVIDIA driver >= 528 (Windows)
+onnxruntime-gpu[cuda]==1.24.4  # CUDA 12 runtime from NVIDIA's pip wheels (range ~=12 set by onnxruntime-gpu's
+# extras); needs an NVIDIA driver >= 528 (Windows). cuDNN 9 is NOT bundled (LIC-7 b, owner 2026-11-07: NVIDIA's
+# cuDNN licence text names only cudnn64_7.dll as distributable): the user installs it (docs\HUONG_DAN_CUDNN.txt)
 PySide6-Essentials==6.12.0
 shiboken6==6.12.0
 pillow==13.0.0

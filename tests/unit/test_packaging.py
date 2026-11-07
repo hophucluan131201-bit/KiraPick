@@ -141,9 +141,40 @@ def test_package_check_fails_each_kind_of_problem(tmp_path: Path, damage, code: 
     assert not report["ok"] and any(f.startswith(code) for f in report["failures"]), report["failures"]
 
 
-def test_cudnn_is_reported_for_the_cuda_edition(tmp_path: Path) -> None:
+def test_cudnn_in_a_package_is_a_failure(tmp_path: Path) -> None:
     folder, policy = _package(tmp_path, "cuda")
     (folder / "_internal").mkdir()
     (folder / "_internal" / "cudnn64_9.dll").write_bytes(b"x")
     report = check_package.check(folder, "cuda", policy)
-    assert report["cudnn"] == ["cudnn64_9.dll"] and any("LIC-7" in n for n in report["notes"])
+    assert any("cudnn64_9.dll: cuDNN must not be shipped" in f for f in report["failures"])
+
+def test_cuda_edition_ships_no_cudnn_and_carries_the_guide(tmp_path: Path) -> None:
+    """LIC-7 b (owner, 2026-11-07): cuDNN is not distributed; the CUDA package carries the install guide."""
+    folder, policy = _package(tmp_path, "cuda")
+    (folder / "docs" / "licenses" / "NVIDIA-nvidia-cublas-cu12-12.9-License.txt").write_text("x", encoding="utf-8")
+    report = check_package.check(folder, "cuda", policy)
+    assert any("HUONG_DAN_CUDNN.txt missing" in f for f in report["failures"])
+    (folder / "docs" / "HUONG_DAN_CUDNN.txt").write_text("cài cuDNN", encoding="utf-8")
+    assert check_package.check(folder, "cuda", policy)["ok"]
+    spec = (ROOT / "packaging" / "kirapick.spec").read_text(encoding="utf-8")
+    req = (ROOT / "packaging" / "requirements-cuda.txt").read_text(encoding="utf-8")
+    assert 'startswith("cudnn")' in spec and "onnxruntime-gpu[cuda]==" in req and "cudnn]" not in req
+    guide = (ROOT / "packaging" / "notes" / "HUONG_DAN_CUDNN.txt").read_text(encoding="utf-8-sig")
+    assert "developer.nvidia.com/cudnn-downloads" in guide and "CUDNN_PATH" in guide
+
+
+def test_user_installed_cudnn_is_found(tmp_path: Path) -> None:
+    from app.ai import runtime
+
+    pf = tmp_path / "Program Files"
+    old = pf / "NVIDIA" / "CUDNN" / "v9.1" / "bin" / "12.4"
+    new = pf / "NVIDIA" / "CUDNN" / "v9.8" / "bin" / "12.9"
+    for d in (old, new):
+        d.mkdir(parents=True)
+        (d / runtime.CUDNN_DLL).write_bytes(b"x")
+    assert runtime.find_cudnn({"ProgramFiles": str(pf), "PATH": ""}) == new  # newest first
+    custom = tmp_path / "my" / "cudnn"
+    custom.mkdir(parents=True)
+    (custom / runtime.CUDNN_DLL).write_bytes(b"x")
+    assert runtime.find_cudnn({"ProgramFiles": str(pf), "CUDNN_PATH": str(custom), "PATH": ""}) == custom
+    assert runtime.find_cudnn({"ProgramFiles": str(tmp_path / "none"), "PATH": ""}) is None

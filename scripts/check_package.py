@@ -5,10 +5,10 @@
 <folder> is a built dist\\KiraPick folder, an installed folder, or an unzipped portable package. Checks:
   P1  models\\ holds exactly the verified weights of configs/model-policy.json, each with a pinned SHA-256;
   P2  no other weight file (.onnx .pth .pt .npz .task .tflite .safetensors .bin in models\\) anywhere;
-  P3  no FFmpeg, no TensorRT provider, no NVIDIA DLL twice; cuDNN 9 reported for the CUDA edition (LIC-7);
+  P3  no FFmpeg, no TensorRT provider, no NVIDIA DLL twice, no cuDNN (LIC-7 b: the user installs it);
   P4  docs\\licenses\\ holds every licence text scripts/collect_licenses.py collects for the edition, and the shipped
       notices name no weight that is not in the package.
-Exit 0: all pass; 1: a check failed. Exit 3 (CUDA only): everything passes but cuDNN 9 DLLs are present (LIC-7).
+Exit 0: all pass; 1: a check failed (a cuDNN DLL in the package is a failure: LIC-7 b).
 """
 
 from __future__ import annotations
@@ -81,8 +81,10 @@ def check(folder: Path, edition: str, policy=None) -> dict:  # noqa: ANN001 - a 
         if len(copies) > 1:
             fail(f"P3 {name} shipped {len(copies)} times: " + ", ".join(str(c.relative_to(folder)) for c in copies))
     cudnn = sorted({p.name for p in dlls if p.name.lower().startswith("cudnn")})
-    if cudnn:
-        out["notes"].append(f"P3 cuDNN 9 DLLs present ({len(cudnn)}): distribution basis pending (LIC-7)")
+    for name in cudnn:  # LIC-7 b (owner, 2026-11-07): cuDNN is not distributed, the user installs it
+        fail(f"P3 {name}: cuDNN must not be shipped (LIC-7 b)")
+    if edition == "cuda" and not (folder / "docs" / "HUONG_DAN_CUDNN.txt").is_file():
+        fail("P4 docs\\HUONG_DAN_CUDNN.txt missing (CUDA edition: how to install cuDNN 9)")
     licences = folder / "docs" / "licenses"
     need = list(REQUIRED_STATIC) + EDITION_STATIC.get(edition, []) + [
         "onnxruntime-LICENSE.txt", "onnxruntime-ThirdPartyNotices.txt", "opencv-python-LICENSE.txt",
@@ -119,9 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     for n in report["notes"]:
         print("NOTE " + n)
     print(f"{'PASS' if report['ok'] else 'FAIL'}: {len(report['models'])} weights, {len(report['failures'])} failures")
-    if not report["ok"]:
-        return 1
-    return 3 if report["cudnn"] else 0
+    return 0 if report["ok"] else 1
 
 
 if __name__ == "__main__":

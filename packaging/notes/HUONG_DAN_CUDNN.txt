@@ -1,0 +1,18 @@
+﻿KIRAPICK BẢN CUDA - CÀI cuDNN 9 (bắt buộc để dùng card NVIDIA)
+
+Bản CUDA của KiraPick KHÔNG kèm thư viện cuDNN của NVIDIA (điều khoản của NVIDIA
+chưa cho phép đi kèm bản cuDNN 9). Bạn tự cài một lần, miễn phí:
+
+1. Mở trang https://developer.nvidia.com/cudnn-downloads
+2. Chọn: Windows -> x86_64 -> 10 hoặc 11 -> exe (local) -> bản cho CUDA 12.
+   (Trang NVIDIA có thể yêu cầu đăng nhập và đồng ý điều khoản của NVIDIA.)
+3. Chạy file cài, giữ đường dẫn mặc định
+   (C:\Program Files\NVIDIA\CUDNN\v9.x\bin\12.x).
+4. Mở lại KiraPick. Thanh trạng thái ghi "GPU NVIDIA (CUDA)" là đã dùng được card.
+
+Nếu cài vào chỗ khác: đặt biến môi trường CUDNN_PATH trỏ tới thư mục có file
+cudnn64_9.dll, rồi mở lại KiraPick.
+
+Chưa cài cuDNN: KiraPick vẫn chạy đầy đủ, nhưng bằng CPU (chậm hơn) và ghi rõ lý do
+ở thanh trạng thái. Máy có card NVIDIA cũng có thể dùng bản DirectML của KiraPick
+(không cần cài gì thêm).

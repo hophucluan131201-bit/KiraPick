@@ -32,7 +32,8 @@ if EDITION == "cuda" and sys.platform == "win32":
     import importlib.util
 
     nvidia = Path(importlib.util.find_spec("nvidia").submodule_search_locations[0])
-    edition_bins += [(str(f), ".") for f in nvidia.glob("*/bin/*.dll")]
+    # cuDNN is never bundled (LIC-7 b): the user installs cuDNN 9 (app/ai/runtime.py finds it)
+    edition_bins += [(str(f), ".") for f in nvidia.glob("*/bin/*.dll") if not f.name.lower().startswith("cudnn")]
 
 a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
@@ -67,6 +68,7 @@ a.binaries = [b for b in a.binaries if Path(b[0]).name.lower() not in _UNUSED]
 _top = {Path(b[0]).name.lower() for b in a.binaries if "/" not in b[0].replace("\\", "/")}
 a.binaries = [b for b in a.binaries
               if not (b[0].replace("\\", "/").startswith("nvidia/") and Path(b[0]).name.lower() in _top)]
+a.binaries = [b for b in a.binaries if not Path(b[0]).name.lower().startswith("cudnn")]  # LIC-7 b
 
 pyz = PYZ(a.pure)
 exe = EXE(

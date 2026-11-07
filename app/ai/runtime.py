@@ -5,8 +5,9 @@
   (Intel CPU; the OpenVINO edition) and CPU. ONNX Runtime also ships an Azure
   (cloud) execution provider; it is never requested.
 - Telemetry events (Windows ETW) are disabled before any session is created.
-- On Windows the CUDA/cuDNN DLLs come from pip packages inside the venv and
-  are loaded with ``onnxruntime.preload_dlls()``.
+- On Windows the CUDA runtime DLLs ship with the CUDA edition and are loaded with
+  ``onnxruntime.preload_dlls()``; cuDNN 9 is not bundled (LIC-7 b) and is loaded from the user's
+  installation (``find_cudnn``), else the CUDA edition runs on the CPU and says why.
 - A provider being *listed* does not prove it works, so the device actually
   used is read back from the created session.
 """
@@ -79,6 +80,51 @@ class RuntimeInfo:
     notes: list[str] = field(default_factory=list)
 
 
+CUDNN_DLL = "cudnn64_9.dll"
+_dll_dirs: list = []
+CUDNN_MISSING = ("Bản CUDA cần cuDNN 9 do bạn tự cài (xem docs\\HUONG_DAN_CUDNN.txt); "
+                 "chưa tìm thấy nên đang chạy bằng CPU")
+
+
+def cudnn_candidates(env: dict[str, str] | None = None) -> list[Path]:
+    """Folders where cuDNN 9 may be, best first: the program's own folder (packaged app), CUDNN_PATH (or its bin\\...), then NVIDIA's
+    default installer folders C:\\Program Files\\NVIDIA\\CUDNN\\v9.*\\bin\\12.* (newest first), then PATH."""
+    env = dict(os.environ) if env is None else env
+    out: list[Path] = []
+    if getattr(sys, "frozen", False):  # next to the program: a copy an older KiraPick installed (CLEAN-2)
+        out += [Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)), Path(sys.executable).parent]
+    if env.get("CUDNN_PATH"):
+        root = Path(env["CUDNN_PATH"])
+        out += [root, *sorted(root.glob("bin/12*"), reverse=True), root / "bin"]
+    program_files = Path(env.get("ProgramFiles", r"C:\Program Files"))
+    for version in sorted((program_files / "NVIDIA" / "CUDNN").glob("v9*"), reverse=True):
+        out += sorted(version.glob("bin/12*"), reverse=True) + [version / "bin"]
+    out += [Path(p) for p in env.get("PATH", "").split(os.pathsep) if p]
+    return out
+
+
+def find_cudnn(env: dict[str, str] | None = None) -> Path | None:
+    return next((d for d in cudnn_candidates(env) if (d / CUDNN_DLL).is_file()), None)
+
+
+def _load_user_cudnn() -> Path | None:
+    """Make a user-installed cuDNN 9 loadable by the CUDA provider (Windows); None if not installed."""
+    folder = find_cudnn()
+    if folder is None:
+        return None
+    try:
+        import ctypes
+
+        _dll_dirs.append(os.add_dll_directory(str(folder)))  # the handle must stay alive
+        os.environ["PATH"] = str(folder) + os.pathsep + os.environ.get("PATH", "")
+        ctypes.WinDLL(str(folder / CUDNN_DLL))
+    except OSError as exc:
+        log.warning("cuDNN found but could not be loaded: %s", type(exc).__name__)
+        return None
+    log.info("cuDNN 9 loaded from the user's installation")
+    return folder
+
+
 def configure() -> RuntimeInfo:
     """Idempotent process-wide setup. Call before creating sessions."""
     global _configured, _preload_error
@@ -86,12 +132,20 @@ def configure() -> RuntimeInfo:
         if hasattr(ort, "disable_telemetry_events"):
             ort.disable_telemetry_events()
         ort.set_default_logger_severity(3)  # errors only; some zoo models emit harmless warnings
-        if "CUDAExecutionProvider" in ort.get_available_providers() and hasattr(ort, "preload_dlls"):
-            try:
-                ort.preload_dlls()
-            except Exception as exc:  # noqa: BLE001 - reported, CPU still works
-                _preload_error = f"{type(exc).__name__}: {exc}"
-                log.warning("CUDA DLL preload failed: %s", _preload_error)
+        if "CUDAExecutionProvider" in ort.get_available_providers():
+            if sys.platform == "win32":  # cuDNN is not bundled (LIC-7 b): load the one the user installed
+                found = _load_user_cudnn()
+                if found is None:
+                    _preload_error = CUDNN_MISSING
+                    log.warning("cuDNN 9 not found; the CUDA edition runs on the CPU")
+            if hasattr(ort, "preload_dlls"):
+                try:
+                    ort.preload_dlls(cudnn=False)  # the CUDA runtime DLLs shipped with the app
+                except TypeError:  # an older ONNX Runtime without the keyword
+                    ort.preload_dlls()
+                except Exception as exc:  # noqa: BLE001 - reported, CPU still works
+                    _preload_error = _preload_error or f"{type(exc).__name__}: {exc}"
+                    log.warning("CUDA DLL preload failed: %s", exc)
         if "OpenVINOExecutionProvider" in ort.get_available_providers():
             try:  # Windows: the OpenVINO DLLs come from the openvino pip package
                 from onnxruntime.tools import add_openvino_win_libs
@@ -275,7 +329,8 @@ def create_session(model: Path, *, prefer_gpu: bool = True, gpu_mem_limit_mb: in
     if prefer_gpu:
         short = "; ".join(e.split(":")[0] + (f": {e.split(':')[1].strip()}" if e.count(":") > 1 else "")
                           for e in errors)
-        reason = (f"Không dùng được card đồ hoạ ({short}); dùng CPU" if errors
+        reason = (CUDNN_MISSING if _preload_error == CUDNN_MISSING
+                  else f"Không dùng được card đồ hoạ ({short}); dùng CPU" if errors
                   else "Bản ONNX Runtime đang cài không hỗ trợ card đồ hoạ; dùng CPU")
     return Session(session, "cpu", reason, Path(model), cpu_threads, last_error="; ".join(errors) or None)
 

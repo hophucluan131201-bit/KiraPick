@@ -159,6 +159,7 @@ foreach ($d in @($out, $notes)) {
     New-Item -ItemType Directory -Force -Path $d | Out-Null
 }
 Copy-Item "packaging\notes\*" $notes
+if ($Edition -ne "cuda") { Remove-Item (Join-Path $notes "HUONG_DAN_CUDNN.txt") }  # cuDNN guide: CUDA edition only
 Copy-Item "LICENSE.md", "THIRD_PARTY_NOTICES.md" $notes  # model-licenses.md is development history (LIC-1)
 Copy-Item "packaging\notes\HUONG_DAN_CAI_DAT.txt", "LICENSE.md" $dist
 # LIC-1 S10: the full licence texts, collected from the repository and from the packages of this build
@@ -168,8 +169,7 @@ Copy-Item $notes (Join-Path $dist "docs") -Recurse -Force
 # LIC-1 S8 gate: weights = the allow-list, no weight elsewhere, no FFmpeg / TensorRT / duplicate NVIDIA DLL, licences
 $gate = Join-Path $Root "dist\package-check-$Edition.json"
 & $bpy "scripts\check_package.py" $dist "--edition" $Edition "--json" $gate
-if ($LASTEXITCODE -eq 3) { Write-Host "Lưu ý: bản CUDA có DLL cuDNN 9 (căn cứ phân phối chờ xác minh, LIC-7)" }
-elseif ($LASTEXITCODE -ne 0) { throw "Kiểm tra gói thất bại (xem $gate)" }
+if ($LASTEXITCODE -ne 0) { throw "Kiểm tra gói thất bại (xem $gate)" }
 
 $guide = Join-Path $Root "packaging\notes\HUONG_DAN_CAI_DAT.txt"
 # An internal test (".dev") or a beta (pre-release) build: its own installer identity (packaging\installer.iss),
