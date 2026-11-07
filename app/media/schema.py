@@ -98,6 +98,19 @@ CREATE TABLE asset_booth (
     state     TEXT NOT NULL CHECK (state IN ('suggested', 'confirmed'))
 );
 """),
+    (6, """
+-- M6: per-photo progress of 'Phân tích sự kiện' (no row = ⏳). Numbers only (sizes, sharpness): they let the sample
+-- scorer (M9) report how the thresholds do, without running the models again. status: 'done' | 'failed'.
+CREATE TABLE media_analysis (
+    asset_id       INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    shot_version   TEXT,
+    focus_version  TEXT,
+    status         TEXT NOT NULL CHECK (status IN ('done', 'failed')),
+    run_id         INTEGER REFERENCES analysis_runs(id),
+    measures_json  TEXT,
+    updated_at     TEXT NOT NULL
+);
+"""),
 ]
 MEDIA_SCHEMA_VERSION = MEDIA_MIGRATIONS[-1][0]
 

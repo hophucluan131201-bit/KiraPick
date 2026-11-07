@@ -52,9 +52,12 @@ def _check(grp: str, value: str) -> None:
 
 # ------------------------------------------------------------------------------------------------ AI side
 def write_ai(conn: sqlite3.Connection, asset_id: int, grp: str, values: dict[str, float | None],
-             run_id: int | None) -> None:
-    """The analysis' result for one photo and group: ``values`` value -> confidence; empty = Chưa xác định.
+             run_id: int | None, *, unmeasurable: bool = False) -> None:
+    """The analysis' result for one photo and group: ``values`` value -> confidence.
 
+    Empty ``values``: shot size / content = Chưa xác định ('?'); focus = no warning (no row), or '?' when the photo
+    could not be measured (``unmeasurable``: flat, too dark). Whether a photo was analysed at all is in
+    ``media_analysis`` (no row there = ⏳).
     Replaces earlier AI rows of that group, never a 'confirmed' or 'removed' one. For shot size, a confirmed value
     means the AI result is not stored at all (one value per photo)."""
     for v in values:
@@ -67,8 +70,9 @@ def write_ai(conn: sqlite3.Connection, asset_id: int, grp: str, values: dict[str
                  (asset_id, grp))
     if grp == "shot" and "confirmed" in kept.values():
         return
-    rows = [(v, "suggested", c) for v, c in values.items() if v not in kept] or \
-        ([] if any(s == "confirmed" for s in kept.values()) else [(UNKNOWN, "unknown", None)])
+    rows = [(v, "suggested", c) for v, c in values.items() if v not in kept]
+    if not values and (grp != "focus" or unmeasurable) and not any(s == "confirmed" for s in kept.values()):
+        rows = [(UNKNOWN, "unknown", None)]
     conn.executemany("""INSERT INTO labels (asset_id, grp, value, state, confidence, run_id, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?)""",
                      [(asset_id, grp, v, st, c, run_id, now) for v, st, c in rows])

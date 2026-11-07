@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.ai.models import ModelRegistry, ModelState
+from app.ai.models import ModelRegistry, ModelState, ModelStatus
 from app.ai.policy import ModelPolicy, load_model_policy
 
 MODE = "media"
@@ -85,6 +85,14 @@ class MediaRegistry:
         path = self.registry.require(model_id)
         self.loaded[model_id] = self.registry.file_sha256(model_id, path)
         return path
+
+    def status(self, model_id: str) -> ModelStatus:
+        """As ModelRegistry.status, but BLOCKED for any weight Media may not load (so detector loaders that probe an
+        optional model, like YOLOX-M, never see one that is not cleared for Media)."""
+        status = self.registry.status(model_id)
+        if not self.allowed(model_id) and status.state is ModelState.READY:
+            return ModelStatus(status.spec, ModelState.BLOCKED, status.path)
+        return status
 
     def available(self, model_id: str) -> bool:
         """Allowed and present with a pinned SHA-256: a feature with a fallback asks this before using a weight."""
