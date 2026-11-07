@@ -30,6 +30,7 @@ class TopBar(QWidget):
         row.setSpacing(4)
         self.buttons: dict[str, QToolButton] = {}
         self._actions: dict[str, QAction] = {}
+        self.step_labels = dict(STEP_LABELS)  # a window may rename a step (Media: 🧠 Phân tích sự kiện)
         for key in STEPS:
             b = QToolButton()
             b.setObjectName("step")
@@ -76,7 +77,7 @@ class TopBar(QWidget):
             self._sync(key)
 
     def _sync(self, key: str) -> None:
-        icon, name = STEP_LABELS[key]
+        icon, name = self.step_labels[key]
         state = self._states.get(key, StepState(False, None))
         mark = "✓ " if state.done else "◐ " if state.partial else ""
         extra = f" {state.partial}" if state.partial and not self._compact else ""

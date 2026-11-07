@@ -1,4 +1,4 @@
-"""Media sự kiện: the list of events (create / open / delete) and, once one is open, its view (app.ui.media_window).
+"""Media sự kiện: the list of events (create / open / delete) and, once one is open, its window (app.ui.media_event_window.EventWindow, the 3.0.0 window).
 
 Each event has its own folder and database under %LOCALAPPDATA%\\KiraPick\\media\\ (app.media.event); deleting an
 event removes only that folder, never a photo. ⟵ Quay lại chọn chế độ closes the open event first.
@@ -36,14 +36,16 @@ STATUS_TEXT = ("Mỗi sự kiện có dữ liệu riêng: P/X, nhãn và khoản
 class MediaHome(QWidget):
     back = Signal()
 
-    def __init__(self, parent: QWidget | None = None, *, root: Path | None = None, analysis_runner=None) -> None:  # noqa: ANN001
+    def __init__(self, parent: QWidget | None = None, *, root: Path | None = None, analysis_runner=None,  # noqa: ANN001
+                 settings=None) -> None:  # noqa: ANN001
         super().__init__(parent)
         self.root = root
+        self._settings = settings
+        self.event_window = None
         self._analysis_runner = analysis_runner
         self.setWindowTitle(f"{APP_NAME} — Media sự kiện")
         self.setMinimumSize(720, 480)
         self.setAutoFillBackground(True)
-        self.media_event: ev.MediaEvent | None = None
         self.view = None
 
         title = QLabel("Media sự kiện")
@@ -152,31 +154,50 @@ class MediaHome(QWidget):
         self.reload()
         return True
 
-    # ------------------------------------------------------------------ event view
+    # ------------------------------------------------------------------ event window
     def show_event(self, event: ev.MediaEvent) -> None:
-        from app.ui.media_window import EventView
+        """Open the event in its window (the Chụp cá nhân 3.0.0 window on the event); this list comes back when the
+        user leaves the event (⟵ Danh sách sự kiện). Closing the event window with × closes the app, as in 3.0.0."""
+        from PySide6.QtCore import QSettings
+
+        from app.ui.media_event_window import EventWindow
 
         self.close_event()
-        self.media_event = event
-        self.view = EventView(event, self, analysis_runner=self._analysis_runner)
-        self.view.leave.connect(self.close_event)
-        self.pages.addWidget(self.view)
-        self.pages.setCurrentWidget(self.view)
-        self.setWindowTitle(f"{APP_NAME} — {event.event_name}")
-        self.view.grid.setFocus()
+        settings = self._settings if self._settings is not None else QSettings()
+        window = EventWindow(event, settings, analysis_runner=self._analysis_runner)
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        window.mode_change_ready.connect(self._event_left)
+        if self.isMaximized():
+            window.setWindowState(window.windowState() | Qt.WindowState.WindowMaximized)
+        elif self.isVisible():
+            window._maximize_on_show = False
+            window.setGeometry(self.geometry())
+        self.event_window = window
+        self.view = window  # (tests and older callers)
+        window.show()
+        self.hide()
 
-    def close_event(self) -> None:
-        if self.view is not None:
-            self.view.stop_all()
-            self.pages.removeWidget(self.view)
-            self.view.deleteLater()
-            self.view = None
-        if self.media_event is not None:
-            self.media_event.close()
-            self.media_event = None
+    def _event_left(self) -> None:
+        """⟵ Danh sách sự kiện: the event window released the event and is closing; the list shows again."""
+        window, self.event_window, self.view = self.event_window, None, None
+        if window is not None:
+            self.setGeometry(window.geometry())
         self.pages.setCurrentWidget(self.list_page)
         self.setWindowTitle(f"{APP_NAME} — Media sự kiện")
         self.reload()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def close_event(self) -> None:
+        """Close the open event window, if any (its own closeEvent releases the event)."""
+        window = getattr(self, "event_window", None)
+        if window is not None:
+            window._switching_mode = True  # leaving the event, not quitting the app
+            window.close()
+        self.event_window = self.view = None
+        self.pages.setCurrentWidget(self.list_page)
+        self.setWindowTitle(f"{APP_NAME} — Media sự kiện")
 
     # ------------------------------------------------------------------ Qt
     def showEvent(self, event: object) -> None:  # noqa: N802 - Qt override
@@ -193,14 +214,12 @@ class MediaHome(QWidget):
         super().keyPressEvent(event)
 
     def closeEvent(self, event: object) -> None:  # noqa: N802 - Qt override
-        self.close_event()
+        if self.event_window is None:
+            self.close_event()
         super().closeEvent(event)
 
     def _back(self) -> None:
         if self._left or not self.isVisible():
-            return
-        if self.view is not None and self.view.busy():
-            self.view.say("Đang nhập hoặc phân tích: bấm ⏸ Tạm dừng và chờ dừng hẳn rồi đổi chế độ.")
             return
         self._left = True
         self.close_event()

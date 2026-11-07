@@ -345,9 +345,12 @@ def test_switching_modes_keeps_each_side_s_marks_on_the_same_folder(qtbot, shell
     same = conn.execute("SELECT id FROM assets WHERE relative_path = (SELECT relative_path FROM assets "
                         "WHERE status = 'ok' ORDER BY id LIMIT 1)").fetchone()[0]
     assert decisions.get(conn, same).flag is None  # the personal P is not here
-    view.select([same])
+    view.grid.setCurrentIndex(view.model.index_of(same))
+    view.grid.setFocus()
     qtbot.keyClick(view.grid, Qt.Key.Key_X)
-    view.back_button.click()  # leave the event (closed), then the Media page
+    view._ask_leave_mode = lambda: True
+    view.events_button.click()  # ⟵ Danh sách sự kiện: the event closes, the Media list shows again
+    qtbot.waitUntil(lambda: page.isVisible() and page.event_window is None, timeout=15000)
     qtbot.mouseClick(page.back_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: shell.picker.isVisible(), timeout=15000)
     # 3. back in Chụp cá nhân: still P; and in the event: still X

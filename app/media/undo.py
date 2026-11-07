@@ -24,6 +24,10 @@ class Undone:
     notice: str | None
     assets: tuple[int, ...] = ()
 
+    @property
+    def asset_ids(self) -> tuple[int, ...]:  # the name app.ui.main_window.MainWindow.undo_last reads
+        return self.assets
+
 
 class EventUndo:
     def __init__(self, event: Project) -> None:

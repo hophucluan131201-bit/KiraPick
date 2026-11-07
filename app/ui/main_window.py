@@ -194,7 +194,7 @@ class MainWindow(QMainWindow):
         self._paused_job: str | None = None  # "import" | "people" | "quality"
         self._registry: ModelRegistry | None = None
         self._last_import_root: Path | None = None
-        self.model = AssetListModel(self)
+        self.model = self._make_model()
         self.teacher = Teacher(self._open_learning())
         self.taste = TasteService()
         self._decisions_since_training = 0
@@ -244,6 +244,10 @@ class MainWindow(QMainWindow):
         except OSError:
             log.exception("session purge failed")
         self._update_empty_state()
+
+    def _make_model(self) -> AssetListModel:
+        """The grid's list model (the Media event window uses a subclass with event filters)."""
+        return AssetListModel(self)
 
     # ------------------------------------------------------------ layout
     def _restore_geometry(self) -> None:
@@ -870,23 +874,8 @@ class MainWindow(QMainWindow):
         self._stop_analysis()
         self._paused_job = None
         root = root.resolve()
-        if self.project is None or self._session_root != root:
-            # One session per photo folder: switching folders closes the current one.
-            if not self._close_session():
-                return None
-            try:
-                project, restored = open_session(sessions_dir(), root)
-            except SchemaTooNewError:
-                QMessageBox.warning(self, "Mở thư mục ảnh", session_too_new_text())
-                return None
-            except (OSError, sqlite3.Error) as exc:
-                log.warning("session open failed: %s", type(exc).__name__)
-                QMessageBox.warning(self, "Mở thư mục ảnh", session_open_failed_text(exc))
-                return None
-            self._set_project(project, root)
-            self._restored_note = (
-                f"Đã nhớ từ lần trước: {self._remembered_summary()}." if restored else ""
-            )
+        if not self._open_session_for(root):
+            return None
         assert self.project is not None
         self._last_import_root = root
         thread = ImportThread(self.project.folder, root)
@@ -905,6 +894,29 @@ class MainWindow(QMainWindow):
         thread.start()
         self._update_steps()
         return thread
+
+    def _open_session_for(self, root: Path) -> bool:
+        """Make the session of this photo folder the open one (Chụp cá nhân: one session per folder; the Media event
+        window keeps its event open and adds the folder to it). False: nothing to import into."""
+        if self.project is not None and self._session_root == root:
+            return True
+        # One session per photo folder: switching folders closes the current one.
+        if not self._close_session():
+            return False
+        try:
+            project, restored = open_session(sessions_dir(), root)
+        except SchemaTooNewError:
+            QMessageBox.warning(self, "Mở thư mục ảnh", session_too_new_text())
+            return False
+        except (OSError, sqlite3.Error) as exc:
+            log.warning("session open failed: %s", type(exc).__name__)
+            QMessageBox.warning(self, "Mở thư mục ảnh", session_open_failed_text(exc))
+            return False
+        self._set_project(project, root)
+        self._restored_note = (
+            f"Đã nhớ từ lần trước: {self._remembered_summary()}." if restored else ""
+        )
+        return True
 
     def _on_import_progress(self, phase: str, done: int, total: int) -> None:
         label = {"scan": "Đang quét thư mục…", "register": "Đang ghi nhận file…",
