@@ -36,7 +36,7 @@ Phạm vi: phần nền LIC-1 (chỉ dùng mô hình có căn cứ quyền) + ch
 - Mọi bản KiraPick trên máy (3.0.0, 3.0.0a, Beta, Beta CUDA) dùng **chung** thư mục `%LOCALAPPDATA%\KiraPick`.
 - Mở một buổi chụp **Chụp cá nhân** cũ bằng bản Beta sẽ **nâng cấp** dữ liệu của buổi đó (app tự giữ một bản sao
   `.v7.bak`). Sau đó KiraPick 3.0.0 **không mở lại được** buổi đó (báo "phiên bản mới hơn").
-  → Vì vậy **phải sao lưu ở bước A1**, và nên dùng một **bản sao** thư mục ảnh mới cho đợt thử.
+  → Vì vậy **phải sao lưu ở bước A4**, và nên dùng một **bản sao** thư mục ảnh mới cho đợt thử.
 - Sự kiện Media là dữ liệu mới, nằm ở `%LOCALAPPDATA%\KiraPick\media\`; bản 3.0.0 không dùng tới.
 
 **Cách dán lệnh PowerShell:** bấm **Start**, gõ `PowerShell`, Enter. Chép **cả khối** lệnh (Ctrl+C), bấm vào cửa sổ
@@ -50,9 +50,13 @@ PowerShell, **nhấp chuột phải** để dán, rồi **Enter**. Máy không c
 
 ---
 
-## A. Sao lưu, tải, kiểm mã, cài
+## A. Tải, kiểm mã, sao lưu, cài
 
-### A0. Chọn bản sẽ cài (chạy lại khối này nếu đóng cửa sổ PowerShell)
+**Nếu một lệnh báo lỗi và PowerShell hiện thêm dòng "Windows PowerShell … Copyright (C) Microsoft Corporation":** đó
+là một cửa sổ PowerShell **lồng** bên trong, không còn các biến của bước A0. Gõ `exit` rồi Enter để quay về, hoặc đóng
+hẳn PowerShell, mở lại và chạy lại khối A0.
+
+### A0. Chọn bản sẽ cài (chạy lại khối này mỗi khi mở PowerShell mới)
 
 Dán **một** trong hai khối:
 
@@ -60,7 +64,8 @@ Dán **một** trong hai khối:
 # Bản CUDA (máy có card NVIDIA)
 $GOI = "kirapick-windows-cuda"; $TEN = "KiraPick-Beta-CUDA-3.0.1b1a"; $THUMUC = "KiraPick-Beta-CUDA"
 $MONG = @{ "$TEN-Setup.exe" = "9baaae76598dc722f122a500e44646d8043492750c846027f4f541ad8acfa7b7";
-           "$TEN-Setup-1.bin" = "4e0e7a8c298146ec0fc49c101432bd22732bd719277a17e3b45129f29718802d" }
+           "$TEN-Setup-1.bin" = "4e0e7a8c298146ec0fc49c101432bd22732bd719277a17e3b45129f29718802d";
+           "owner_backup.ps1" = "67dc1097627ff515d0c03f2a957e851ecd388157eb8b34754057e21afd854f51" }
 "Da chon ban CUDA"
 ```
 
@@ -68,30 +73,14 @@ $MONG = @{ "$TEN-Setup.exe" = "9baaae76598dc722f122a500e44646d8043492750c846027f
 # Bản DirectML (mọi máy)
 $GOI = "kirapick-windows-directml"; $TEN = "KiraPick-Beta-3.0.1b1"; $THUMUC = "KiraPick-Beta"
 $MONG = @{ "$TEN-Setup.exe" = "b819a20fd06aa2bfcc1ef2167ce85456d136faddc6b26c083fee80dad7e2a5f4";
-           "$TEN-Setup-1.bin" = "faf387f6f7695bd61619015f2b8e53808a6f5984b96d882455572d69871ddd2d" }
+           "$TEN-Setup-1.bin" = "faf387f6f7695bd61619015f2b8e53808a6f5984b96d882455572d69871ddd2d";
+           "owner_backup.ps1" = "67dc1097627ff515d0c03f2a957e851ecd388157eb8b34754057e21afd854f51" }
 "Da chon ban DirectML"
 ```
 
 Phải thấy dòng `Da chon ban CUDA` (hoặc `Da chon ban DirectML`).
 
-### A1. Sao lưu dữ liệu KiraPick
-
-1. **Đóng mọi cửa sổ KiraPick** (kể cả bản 3.0.0).
-2. Dán:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File D:\KiraPick-SaoLuu\owner_backup.ps1 -Destination D:\KiraPick-SaoLuu
-   ```
-3. **Phải thấy** ở cuối một dòng **xanh** có chữ `SHA-256: khớp`. Ghi lại tên thư mục sao lưu vừa tạo (dạng
-   `D:\KiraPick-SaoLuu\20261107-...`).
-4. Nếu báo không tìm thấy `owner_backup.ps1`: làm bước A2–A3 trước (gói CUDA có sẵn file này), rồi dán:
-   ```powershell
-   $s = Get-ChildItem D:\BetaTest\Goi -Recurse -File -Filter owner_backup.ps1 | Select-Object -First 1
-   New-Item -ItemType Directory -Force D:\KiraPick-SaoLuu | Out-Null; Copy-Item $s.FullName D:\KiraPick-SaoLuu\
-   "Da chep owner_backup.ps1"
-   ```
-   rồi làm lại bước 2.
-
-### A2. Tải gói
+### A1. Tải gói
 
 | Bản | Link tải (bấm, đăng nhập GitHub nếu được hỏi) | Kích thước |
 |---|---|---|
@@ -100,19 +89,26 @@ Phải thấy dòng `Da chon ban CUDA` (hoặc `Da chon ban DirectML`).
 
 Trình duyệt lưu file `kirapick-windows-cuda.zip` (hoặc `kirapick-windows-directml.zip`) vào thư mục **Downloads**.
 
-### A3. Giải nén
+### A2. Giải nén
 
 Dán (cần đã chạy khối A0):
 ```powershell
-Expand-Archive "$env:USERPROFILE\Downloads\$GOI.zip" "D:\BetaTest\Goi\$GOI" -Force; "Da giai nen vao D:\BetaTest\Goi\$GOI"
+$zip = "$env:USERPROFILE\Downloads\$GOI.zip"
+if (-not (Test-Path $zip)) { "KHONG THAY $zip - kiem tra thu muc Downloads" } else {
+  Expand-Archive $zip "D:\BetaTest\Goi\$GOI" -Force
+  # Bản DirectML: bộ cài và owner_backup.ps1 nằm trong file BoCai.zip bên trong gói
+  Get-ChildItem "D:\BetaTest\Goi\$GOI" -Recurse -File -Filter "*-BoCai.zip" | ForEach-Object {
+    Expand-Archive $_.FullName "D:\BetaTest\Goi\$GOI\BoCai" -Force }
+  "Da giai nen vao D:\BetaTest\Goi\$GOI"
+}
 ```
-Phải thấy dòng `Da giai nen vao ...`. Báo lỗi "cannot find path": file tải về nằm chỗ khác hoặc tên khác; kiểm thư mục
-Downloads.
+Phải thấy `Da giai nen vao …`. Nếu thấy `KHONG THAY …`: file tải về nằm chỗ khác hoặc có tên khác (ví dụ thêm ` (1)`);
+đổi tên cho đúng `kirapick-windows-cuda.zip` / `kirapick-windows-directml.zip` rồi dán lại.
 
-### A4. Kiểm mã SHA-256
+### A3. Kiểm mã SHA-256
 
-Dán cả khối. **Phải thấy đúng 2 dòng, đều bắt đầu bằng `KHOP`.** Có dòng `SAI` hoặc `THIEU` thì **không cài**, gửi lại
-màn hình.
+Dán cả khối. **Phải thấy đúng 3 dòng, đều bắt đầu bằng `KHOP`.** Có dòng `SAI` hoặc `THIEU` thì **dừng**, gửi lại màn
+hình.
 ```powershell
 foreach ($ten in $MONG.Keys) {
   $f = Get-ChildItem "D:\BetaTest\Goi\$GOI" -Recurse -File -Filter $ten | Select-Object -First 1
@@ -122,13 +118,32 @@ foreach ($ten in $MONG.Keys) {
 }
 ```
 
+### A4. Sao lưu dữ liệu KiraPick (dùng `owner_backup.ps1` vừa kiểm mã)
+
+1. **Đóng mọi cửa sổ KiraPick** (kể cả bản 3.0.0).
+2. Dán cả khối:
+   ```powershell
+   $bk = Get-ChildItem "D:\BetaTest\Goi\$GOI" -Recurse -File -Filter owner_backup.ps1 | Select-Object -First 1
+   if (-not $bk) { "THIEU owner_backup.ps1 - dung lai, gui man hinh" } else {
+     New-Item -ItemType Directory -Force D:\KiraPick-SaoLuu | Out-Null
+     Copy-Item $bk.FullName D:\KiraPick-SaoLuu\owner_backup.ps1 -Force
+     powershell -NoProfile -ExecutionPolicy Bypass -File D:\KiraPick-SaoLuu\owner_backup.ps1 -Destination D:\KiraPick-SaoLuu
+   }
+   ```
+3. **Phải thấy** ở cuối một dòng **xanh** có chữ `SHA-256: khớp`. **Ghi lại** tên thư mục sao lưu vừa tạo (dạng
+   `D:\KiraPick-SaoLuu\20261107-...`): cần nó nếu muốn khôi phục (phần H).
+4. Máy chưa từng dùng KiraPick: script ghi thêm dòng "Chưa có … (KiraPick chưa từng chạy trên máy này)". Vẫn bình
+   thường, đi tiếp.
+5. Thấy chữ **đỏ** "KiraPick đang chạy": đóng hết KiraPick (kể cả biểu tượng ở khay đồng hồ) rồi dán lại khối ở bước 2.
+
 ### A5. Cài
 
 1. Dán:
    ```powershell
-   Start-Process (Get-ChildItem "D:\BetaTest\Goi\$GOI" -Recurse -File -Filter "$TEN-Setup.exe" | Select-Object -First 1).FullName
+   $setup = Get-ChildItem "D:\BetaTest\Goi\$GOI" -Recurse -File -Filter "$TEN-Setup.exe" | Select-Object -First 1
+   if (-not $setup) { "THIEU $TEN-Setup.exe" } else { Start-Process $setup.FullName; "Da mo trinh cai dat" }
    ```
-2. Nếu **SmartScreen** hiện ("Windows protected your PC"): chỉ khi bước A4 ra 2 dòng `KHOP` **và** màn hình ghi
+2. Nếu **SmartScreen** hiện ("Windows protected your PC"): chỉ khi bước A3 ra 3 dòng `KHOP` **và** màn hình ghi
    "Unknown publisher" → bấm **More info** → **Run anyway**.
 3. Trình cài đặt: bấm **Next / Install** như bình thường, giữ thư mục mặc định. Cuối cùng bấm **Finish**.
 
@@ -308,7 +323,7 @@ Ghi chú: lệnh chấm tự chia ảnh thành **tập chỉnh ngưỡng** (~40 
 - Gỡ: Start → **Gỡ cài đặt KiraPick Beta CUDA** (hoặc **KiraPick Beta**). KiraPick 3.0.0 / 3.0.0a vẫn còn nguyên.
 - Gỡ **không** xoá ảnh, không xoá dữ liệu `%LOCALAPPDATA%\KiraPick`.
 - Muốn trả dữ liệu về như trước khi thử (ví dụ để bản 3.0.0 mở lại buổi chụp đã mở bằng Beta): đóng mọi KiraPick, rồi
-  dán (thay `TEN_BAN_SAO_LUU` bằng tên thư mục ghi ở bước A1):
+  dán (thay `TEN_BAN_SAO_LUU` bằng tên thư mục ghi ở bước A4):
   ```powershell
   powershell -ExecutionPolicy Bypass -File D:\KiraPick-SaoLuu\owner_backup.ps1 -Restore D:\KiraPick-SaoLuu\TEN_BAN_SAO_LUU
   ```
