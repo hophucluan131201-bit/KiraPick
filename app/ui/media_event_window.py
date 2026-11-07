@@ -18,7 +18,7 @@ from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
-    QHBoxLayout,
+    QGridLayout,
     QInputDialog,
     QLabel,
     QListWidget,
@@ -37,8 +37,9 @@ from app.media.browse import MediaFilter
 from app.media.event import MediaEvent
 from app.media.undo import EventUndo
 from app.storage.workflow import StepState, steps
-from app.ui.asset_model import AssetRecord
+from app.ui.asset_model import AssetRecord, Filter
 from app.ui.collapsible import CollapsibleSection
+from app.ui.detail_panel import TABS
 from app.ui.main_window import MainWindow, typing_in
 from app.ui.media_window import (
     SAMPLE_HELP,
@@ -101,10 +102,10 @@ class EventWindow(MainWindow):
         self.act_analyze.setToolTip("Cỡ cảnh, cảnh báo nét, khoảnh khắc (nhãn AI là thử nghiệm). Tạm dừng / chạy tiếp được.")
         for key in ("quality", "pick"):
             self.top_bar.buttons[key].setVisible(False)
-        for act in (self.act_quality, self.act_select, self.act_client_list, self.act_merge, self.act_learning,
-                    self.act_taste_weight, self.act_reset):
+        # 📋 Khách chọn (Ctrl+L) stays: a client's list works on an event as on a folder (REG-1)
+        for act in (self.act_quality, self.act_select, self.act_merge, self.act_learning, self.act_taste_weight,
+                    self.act_reset):
             act.setVisible(False)
-        self.client_list_button.setVisible(False)
         self.act_switch_mode.setText("⟵ Danh sách sự kiện / Đổi chế độ…")
         # Sidebar: P/X filters and folders as 3.0.0; people → event, cameras, event filters, moments
         self.sections["people"].setVisible(False)
@@ -126,9 +127,8 @@ class EventWindow(MainWindow):
         self.media_info.setTextFormat(Qt.TextFormat.RichText)
         self.detail.layout().insertWidget(0, self.media_info)
         tabs = self.detail.tabs
-        for i in range(tabs.count()):
-            if tabs.tabText(i) == "Phân tích AI":
-                tabs.setTabVisible(i, False)
+        for name in ("Phân tích AI", "Chủ thể"):  # by position: a narrow panel shortens the titles; people: not Mốc 1
+            tabs.setTabVisible(TABS.index(name), False)
         self._media_shortcuts()
 
     def _event_box(self) -> QWidget:
@@ -137,7 +137,7 @@ class EventWindow(MainWindow):
         v.setContentsMargins(0, 0, 0, 0)
         self.event_name = QLabel()
         self.event_name.setWordWrap(True)
-        self.clock_button = QPushButton("🕒 Máy ảnh & giờ")
+        self.clock_button = QPushButton("🕒 Máy ảnh && giờ")  # && shows one & (a single & marks a shortcut key)
         self.clock_button.clicked.connect(self.open_clock)
         self.sample_button = QPushButton("🏷 Dán nhãn mẫu")
         self.sample_button.setCheckable(True)
@@ -183,19 +183,23 @@ class EventWindow(MainWindow):
 
     def _moment_tools(self) -> QWidget:
         box = QWidget()
-        h = QHBoxLayout(box)
-        h.setContentsMargins(0, 0, 0, 0)
-        h.setSpacing(2)
-        for text, tip, fn in (("✂", "Tách tại đây (ảnh đang chọn bắt đầu khoảnh khắc mới)", self.split_here),
-                              ("⊕", "Gộp với khoảnh khắc trước", self.merge_with_previous),
-                              ("✎", "Đổi tên khoảnh khắc", lambda: self.rename_moment()),
-                              ("⚠→", "Chuyển ảnh lệch giờ sang khoảnh khắc gợi ý", lambda: self._warning_action(True)),
-                              ("⚠✓", "Giữ ảnh lệch giờ ở khoảnh khắc hiện tại", lambda: self._warning_action(False))):
+        g = QGridLayout(box)
+        g.setContentsMargins(0, 0, 0, 0)
+        g.setSpacing(2)
+        # words, not bare symbols: some Windows fonts draw ⚠ / ⊕ as boxes or triangles
+        for i, (text, tip, fn) in enumerate((
+                ("✂ Tách", "Tách tại đây (ảnh đang chọn bắt đầu khoảnh khắc mới)", self.split_here),
+                ("Gộp", "Gộp với khoảnh khắc trước", self.merge_with_previous),
+                ("Đổi tên", "Đổi tên khoảnh khắc", lambda: self.rename_moment()),
+                ("Lệch giờ: Chuyển", "Chuyển ảnh lệch giờ sang khoảnh khắc gợi ý", lambda: self._warning_action(True)),
+                ("Lệch giờ: Giữ", "Giữ ảnh lệch giờ ở khoảnh khắc hiện tại", lambda: self._warning_action(False)))):
             b = QPushButton(text)
             b.setToolTip(tip)
             b.clicked.connect(fn)
-            h.addWidget(b)
-        h.addStretch(1)
+            if i < 3:
+                g.addWidget(b, 0, i * 2, 1, 2)
+            else:
+                g.addWidget(b, 1, (i - 3) * 3, 1, 3)
         return box
 
     def _media_shortcuts(self) -> None:
@@ -325,10 +329,16 @@ class EventWindow(MainWindow):
                 + f" Nhãn AI là {lb.EXPERIMENTAL}.")
 
     # ------------------------------------------------------------------ export, undo, people menu
+    def _learn_client_picks(self, collection_id: int) -> None:
+        """A client's list in an event never teaches the personal taste (Media data stays in the event)."""
+
     def open_export_dialog(self, client_list: bool = False):  # noqa: ANN201
         from app.ui.media_export import MediaExportDialog
 
-        dialog = MediaExportDialog(self.media_event, self)
+        marked = [r.id for r in self.selected_records()] if len(self.selected_records()) > 1 else []
+        flt, target = self.model.current_filter, self.model.current_target
+        collection = target if flt is Filter.COLLECTION else None
+        dialog = MediaExportDialog(self.media_event, self, marked=marked, collection_id=collection)
         dialog.show()
         return dialog
 
@@ -551,7 +561,7 @@ class EventWindow(MainWindow):
         if booth:
             lines.append(f"Booth: {booth[0]}" + (" (gợi ý)" if booth[1] == "suggested" else ""))
         if moments.warnings(conn).get(a) is not None:
-            lines.append("⚠ lệch giờ: có thể thuộc khoảnh khắc khác (KHOẢNH KHẮC → ⚠→ / ⚠✓)")
+            lines.append("⚠ lệch giờ: có thể thuộc khoảnh khắc khác (KHOẢNH KHẮC → Lệch giờ: Chuyển / Giữ)")
         if self.sampling:
             from app.media import samples as sm
 

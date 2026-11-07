@@ -34,13 +34,26 @@ FORMATS = [("RAW + JPEG (mọi tệp của ảnh)", ExportFormat.RAW_JPEG), ("Ch
 
 
 class MediaExportDialog(QDialog):
-    def __init__(self, event: MediaEvent, parent: QWidget | None = None) -> None:
+    def __init__(self, event: MediaEvent, parent: QWidget | None = None, *, marked: list[int] | None = None,
+                 collection_id: int | None = None) -> None:
+        """``marked``: the photos ticked in the grid; ``collection_id``: preselect that client list (as 3.0.0)."""
         super().__init__(parent)
-        self.setWindowTitle("⤴ Xuất ảnh đã chọn (P)")
+        self.setWindowTitle("⤴ Xuất ảnh")
         self.media_event = event
         self.plan: ExportPlan | None = None
         self.thread: ExportThread | None = None
         self.result = None
+        # Which photos, as in the 3.0.0 export: P, the ticked photos, or a client's list (📋 Khách chọn)
+        self.which_box = QComboBox()
+        self.which_box.addItem("Ảnh đã chọn (P)", None)
+        if marked:
+            self.which_box.addItem(f"Ảnh đang đánh dấu ({len(marked)})", list(marked))
+        for cid, name in event.conn.execute("SELECT id, name FROM collections ORDER BY id DESC").fetchall():
+            ids = [r[0] for r in event.conn.execute(
+                "SELECT asset_id FROM collection_items WHERE collection_id = ? ORDER BY asset_id", (cid,))]
+            self.which_box.addItem(f"Danh sách khách: {name} ({len(ids)})", ids)
+            if cid == collection_id:
+                self.which_box.setCurrentIndex(self.which_box.count() - 1)
         self.layout_box = QComboBox()
         for text, value in LAYOUTS:
             self.layout_box.addItem(text, value)
@@ -55,6 +68,7 @@ class MediaExportDialog(QDialog):
         dest_row.addWidget(self.dest, 1)
         dest_row.addWidget(browse)
         form = QFormLayout()
+        form.addRow("Ảnh", self.which_box)
         form.addRow("Chia thư mục", self.layout_box)
         form.addRow("Định dạng", self.format_box)
         form.addRow("Lưu vào", dest_row)
@@ -67,7 +81,7 @@ class MediaExportDialog(QDialog):
         self.preview_button.clicked.connect(self.preview)
         self.copy_button.clicked.connect(self.start_copy)
         self.close_button.clicked.connect(self._close)
-        for w in (self.layout_box, self.format_box):
+        for w in (self.which_box, self.layout_box, self.format_box):
             w.currentIndexChanged.connect(self._invalidate)
         self.dest.textChanged.connect(self._invalidate)
         buttons = QHBoxLayout()
@@ -98,13 +112,14 @@ class MediaExportDialog(QDialog):
             return None
         try:
             self.plan = mx.plan(self.media_event, Path(text), self.layout_box.currentData(),
-                                ExportFormat(self.format_box.currentData()))
+                                ExportFormat(self.format_box.currentData()), asset_ids=self.which_box.currentData())
         except ExportError as exc:
             self.summary.setText(f"Không xuất được vào thư mục này: {exc}")
             return None
         ops = self.plan.operations
         folders = sorted({op.folder or "(thư mục nhận)" for op in ops})
-        lines = [f"{len(self.plan.photos)} ảnh P → {len(ops)} tệp, {len(folders)} thư mục: "
+        what = "ảnh P" if self.which_box.currentData() is None else "ảnh"
+        lines = [f"{len(self.plan.photos)} {what} → {len(ops)} tệp, {len(folders)} thư mục: "
                  + ", ".join(folders[:8]) + (" …" if len(folders) > 8 else "")]
         present = sum(1 for op in ops if op.maybe_present)
         if present:
@@ -112,7 +127,7 @@ class MediaExportDialog(QDialog):
         if self.plan.issues:
             lines.append(f"{len(self.plan.issues)} vấn đề (ví dụ: {self.plan.issues[0].detail}).")
         if not ops:
-            lines.append("Không có tệp nào để sao chép (đã đánh P ảnh nào chưa?).")
+            lines.append("Không có tệp nào để sao chép (đã đánh P / đánh dấu ảnh nào chưa?).")
         self.summary.setText("\n".join(lines))
         self.copy_button.setEnabled(bool(ops))
         return self.plan
@@ -126,7 +141,7 @@ class MediaExportDialog(QDialog):
         self.thread.progress.connect(lambda done, total: self.summary.setText(f"Đang sao chép {done}/{total}…"))
         self.thread.succeeded.connect(self._done)
         self.thread.failed.connect(lambda msg: self._done(None, msg))
-        for w in (self.copy_button, self.preview_button, self.layout_box, self.format_box, self.dest):
+        for w in (self.copy_button, self.preview_button, self.which_box, self.layout_box, self.format_box, self.dest):
             w.setEnabled(False)
         self.close_button.setText("Dừng")
         self.thread.start()

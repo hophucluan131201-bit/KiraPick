@@ -309,3 +309,25 @@ def test_keys_and_operations_follow_3_0_0(qtbot, home) -> None:  # noqa: ANN001
     assert not w.in_compare()
     w.search.setText("0004")
     qtbot.waitUntil(lambda: _names(w) == ["DSC_0004.jpg"], timeout=3000)
+
+
+def test_client_list_works_in_an_event_as_in_3_0_0(qtbot, home, tmp_path: Path) -> None:  # noqa: ANN001
+    """REG-1: 📋 Khách chọn (Ctrl+L) is not hidden in Media: paste the client's list, the photos are listed and
+    selected, the export dialog offers the list; the photographer's own P/X are untouched."""
+    w = _open(qtbot, home, "Khách chọn")
+    _import(qtbot, w, home.shoot)
+    assert w.act_client_list.isVisible() and w.client_list_button.isVisible()
+    dialog = w.open_client_list_dialog()
+    dialog.text.setPlainText("0001, 0003")
+    dialog.name.setText("Khách sự kiện")
+    dialog.refresh()
+    dialog.create()
+    assert dialog.collection_id is not None
+    assert sorted(_names(w)) == ["DSC_0001.jpg", "DSC_0003.jpg"] and len(w.selected_records()) == 2
+    assert all(r.flag is None for r in w.model.records())
+    export = w.open_export_dialog()  # the list being viewed is preselected, as in 3.0.0
+    qtbot.addWidget(export)
+    assert export.which_box.currentText().startswith("Danh sách khách: Khách sự kiện (2)")
+    export.dest.setText(str(tmp_path / "Giao khách"))
+    plan = export.preview()
+    assert plan is not None and len(plan.photos) == 2

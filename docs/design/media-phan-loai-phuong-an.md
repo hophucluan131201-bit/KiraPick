@@ -1,87 +1,115 @@
-# Media — rà lại thiết kế phân loại: phương án trình chủ dự án (bản nháp, 2026-11-07)
+# Media — đề xuất phân loại theo việc của người chụp (bản trình 2, 2026-11-07)
 
-**Trạng thái:** trình để chủ dự án chốt. **Chưa sửa logic phân loại** cho tới khi có quyết định.
+**Trạng thái:** trình chủ dự án. **Chưa sửa logic phân loại** cho tới khi chủ dự án duyệt.
+Bản 1 (phương án A / B / C) được thay bằng bản này theo kết luận "BETA 3.0.1b1 / b1a CHƯA ĐẠT NGHIỆM THU", mục 3.
 
-**Giới hạn của bản trình này (nói thẳng):** máy phát triển **không có ảnh sự kiện thật**. Trang album VNNIC bị chặn mạng;
-ảnh mẫu trong repo là ảnh cosplay chân dung. Vì vậy bảng "app làm được gì" dưới đây dựa trên **mã hiện tại + test ảnh
-tổng hợp**, chưa phải trên ảnh sự kiện. Mục 5 là cách rà trên ảnh thật **tại máy chủ dự án**, bằng công cụ đã có, trước
-khi chốt.
+**Dữ liệu còn thiếu (nói thẳng):** máy phát triển **không có ảnh sự kiện thật** của chủ dự án. Album VNNIC chưa dùng
+vì chưa kiểm xong quyền sử dụng; ảnh mẫu trong repo là ảnh cosplay chân dung. Vì vậy:
+- mọi con số "Beta hiện tại" ở mục 6 là **chưa đo**;
+- ví dụ ở mục 4 là tình huống mô tả, **không phải** kết quả trên ảnh thật;
+- mục 7 là cách lấy số đo trên ảnh thật **tại máy chủ dự án**; ảnh không rời máy, không vào repo hay CI.
 
 ---
 
-## 1. Hiện trạng (bản 3.0.1b1)
+## 1. Việc người chụp cần làm sau một sự kiện
 
-| Bước | App tự làm | Người dùng làm | Căn cứ |
+1. Từ vài trăm tới vài nghìn ảnh, **chọn ảnh giao khách** cho từng hoạt động (khai mạc, phát biểu, trao giải, booth…).
+2. Mỗi hoạt động cần **đủ cỡ cảnh**: toàn sân khấu, trung cảnh, cận người phát biểu.
+3. Không bỏ sót hoạt động nào, kể cả hoạt động chỉ có **một** ảnh (ảnh đó có cảnh báo nét thì vẫn phải được xem).
+4. Không giao ảnh hỏng nét, trùng lặp gần giống nhau.
+
+Beta hiện tại cho chia khoảnh khắc và gắn nhãn, nhưng người dùng vẫn phải **tự xem từng ảnh** trong mỗi khoảnh khắc để
+chọn. Đề xuất dưới đây chuyển trọng tâm sang **giảm số ảnh phải xem**.
+
+## 2. Luồng đề xuất
+
+```
+Nhập → (1) Gom ảnh giống nhau → (2) Gợi ý ảnh đáng xem trong mỗi nhóm → (3) Người chọn ảnh giao khách → Xuất
+```
+
+**(1) Gom ảnh giống nhau** (app tự làm, không cần mô hình mới)
+- Trong mỗi khoảnh khắc, ảnh liên tiếp được gom thành **một nhóm** khi: cùng máy, cách nhau ≤ 10 giây, **cùng cỡ cảnh**
+  và ảnh thu nhỏ giống nhau (so mã băm hình ảnh trên ảnh thu nhỏ, một quy tắc tính toán, không phải mô hình AI).
+- Đổi cỡ cảnh là đổi nhóm: ảnh toàn sân khấu và ảnh cận người phát biểu **không bao giờ chung nhóm**.
+- Nhóm chỉ là gợi ý xem cho nhanh: không xoá, không ẩn ảnh nào.
+
+**(2) Gợi ý ảnh đáng xem** (app tự làm)
+- Mỗi nhóm hiện **một ảnh đại diện** (nét nhất theo phép đo trên ảnh gốc, không có cảnh báo nét) và số ảnh còn lại
+  ("+7"). Bấm vào nhóm để mở các ảnh còn lại cạnh nhau.
+- Nhóm **chỉ có một ảnh** thì ảnh đó luôn được gợi ý, **kể cả khi có cảnh báo nét**; thẻ ảnh ghi "ảnh duy nhất của nhóm
+  — có cảnh báo nét". Bộ lọc "ẩn ảnh có cảnh báo" không bao giờ ẩn loại ảnh này.
+- Trong một khoảnh khắc, app gợi ý **ít nhất một ảnh cho mỗi cỡ cảnh có mặt** (Toàn / Trung / Cận), để không giao thiếu.
+
+**(3) Người chọn ảnh giao khách** (người xác nhận)
+- P / X như 3.0.0, trên ảnh đại diện hoặc trong nhóm. P một ảnh không tự loại các ảnh khác trong nhóm.
+- Khoảnh khắc chưa có ảnh P nào được đánh dấu "⚠ chưa có ảnh giao" trong danh sách KHOẢNH KHẮC, để không sót hoạt động.
+
+**Ranh giới hoạt động** (app gợi ý, người xác nhận)
+- Giữ cách chia theo khoảng nghỉ ≥ 5 phút. Thêm **gợi ý ranh giới** (không tự tách) khi hai nhóm liền nhau khác hẳn
+  nhau: đổi cỡ cảnh hàng loạt, ảnh thu nhỏ khác hẳn, hoặc đổi máy. Gợi ý hiện ở dải khoảnh khắc: "Có thể là hoạt động
+  mới — ✂ Tách ở đây?". Người bấm ✂ hoặc bỏ qua.
+
+## 3. Bốn nhóm nhãn
+
+| Nhóm nhãn | Giá trị | Mốc 1: app tự gợi ý | Người xác nhận / sửa | Ngoài Mốc 1 |
+|---|---|---|---|---|
+| **Cỡ cảnh** | Toàn / Trung / Cận | Có (dò người + dò khuôn mặt + quy tắc tỉ lệ) | Alt+T / U / C, cho nhiều ảnh một lúc | Chỉnh ngưỡng trên ảnh thật |
+| **Nội dung** | Sân khấu, Booth / Gian hàng, Decor, Sản phẩm, Merch | **Không** (chức năng gợi ý nội dung đang tắt: chờ quyền sử dụng mô hình) | Gán tay Alt+1–5; gán **một lần cho cả khoảnh khắc**, sửa ngoại lệ | Gợi ý nội dung bằng AI khi có mô hình được phép |
+| **Người và vai trò** | Người phát biểu, khách mời, MC, khán giả | **Không** (chưa có mô hình được phép để nhận ra cùng một người) | Không có trong Mốc 1 | Gom người thủ công như Chụp cá nhân; vai trò là việc của Mốc sau |
+| **Lỗi nét** | Out nét / Trật nét | Có (đo trên ảnh gốc) | Q bỏ cảnh báo, W / R đổi loại | Chỉnh ngưỡng trên ảnh thật |
+
+- **Booth / Gian hàng là một nhãn**, không tách hai.
+- Một ảnh có **nhiều nhãn** cùng lúc (ví dụ Sân khấu + Sản phẩm; Toàn + Out nét). Nhóm "Cỡ cảnh" chỉ có một giá trị.
+
+## 4. Ba tình huống người duyệt nêu (cách luồng mới xử lý)
+
+| Tình huống | Beta hiện tại | Đề xuất |
+|---|---|---|
+| Tìm riêng ảnh toàn sân khấu và ảnh cận người phát biểu | Có bộ lọc cỡ cảnh, nhưng ảnh vẫn trộn trong một lưới dài | Nhóm luôn tách theo cỡ cảnh; trong khoảnh khắc, lọc Toàn hoặc Cận chỉ hiện ảnh đại diện của các nhóm đó |
+| Hai hoạt động liền nhau, không nghỉ 5 phút | Thành **một** khoảnh khắc; người phải tự thấy và tách | Gợi ý ranh giới ở chỗ đổi cảnh; người bấm ✂ một lần |
+| Hoạt động chỉ có một ảnh, ảnh đó có cảnh báo nét | Nếu người lọc "không cảnh báo" thì ảnh bị ẩn, dễ sót | Ảnh duy nhất của nhóm luôn hiện và luôn được gợi ý, ghi rõ có cảnh báo nét |
+
+## 5. POSE-DB-01: chỉ tham khảo cách bày
+
+Chỉ lấy **cách bày các góc chụp cạnh nhau** (một hàng ảnh cùng nhóm, so được ngay) cho màn hình mở nhóm ở bước (2).
+**Không** dùng ảnh trong thư viện đó làm dữ liệu, không huấn luyện, không so mẫu. Thử nghiệm gom theo dáng người ở Chụp
+cá nhân là việc **sau**, không thuộc đề xuất này.
+
+## 6. So sánh Beta hiện tại với đề xuất
+
+| Số đo | Beta hiện tại | Đề xuất | Trạng thái |
 |---|---|---|---|
-| Chia khoảnh khắc | Theo **khoảng nghỉ ≥ 5 phút** của giờ đã chỉnh (không có CLIP: không biết "đổi cảnh") | Tách / gộp / đổi tên; ⚠ lệch giờ: Chuyển / Giữ | MT-F1 |
-| Cỡ cảnh | Toàn / Trung / Cận từ **tỉ lệ mặt** (có mặt) hoặc **khung người** (không mặt: chỉ Toàn hoặc Chưa xác định) | Sửa sai: Alt+T / U / C | §5, ngưỡng chưa chỉnh trên ảnh thật |
-| Lỗi nét | Out nét / Trật nét trên ảnh gốc | Q / W / R | §6, chưa chấm trên ảnh thật |
-| Nội dung | **Không** (CLIP pending) | Gán tay Alt+1–5, cho nhiều ảnh một lúc | CT-F1/F2 |
-| Tên booth | Gợi ý trong cùng khoảnh khắc | Đặt tên | BT-F1 |
-| Chọn ảnh giao khách | **Không** (UX-2 = chưa) | P / X như 3.0.0 | — |
+| Thời gian từ nhập tới thư mục giao khách | chưa đo | chưa đo | **Cần ảnh thật** (mục 7) |
+| Số ảnh phải mở để chọn | = tổng số ảnh | ≈ số nhóm + số nhóm phải mở ra | Chưa đo |
+| Số thao tác (P/X, nhãn, ✂ ⊕ ✎, Ctrl+Z) | chưa đo | chưa đo | Cần đếm thao tác (mục 8) |
+| Gộp sai (hai hoạt động thành một khoảnh khắc) | chưa đo | chưa đo | Từ nhãn mẫu B (ranh giới) |
+| Tách sai (một hoạt động thành hai) | chưa đo | chưa đo | Từ nhãn mẫu B |
+| Hoạt động bị sót (không có ảnh giao) | chưa đo | chưa đo | Người ghi tay sau khi giao |
 
-**Điểm yếu đoán trước được (cần ảnh thật để xác nhận):**
-- Sự kiện liền mạch (hội nghị nhiều phiên không nghỉ 5 phút) → **một khoảnh khắc rất lớn**; người dùng phải tự tách.
-- Ảnh sân khấu xa: mặt nhỏ < 24 px → không dò được mặt → nhiều ảnh **Chưa xác định** hoặc Toàn.
-- Ảnh đông người (khán phòng): "chủ thể chính" là người lớn nhất, có thể là khán giả gần máy.
-- Màn LED có viền mờ, phản sáng: luật loại LED chỉ thử trên ảnh tổng hợp.
-- Nội dung (sân khấu / booth / sản phẩm) **hoàn toàn gán tay**: nhiều thao tác nhất của luồng Media.
+Chỉ tiêu đề xuất để chủ dự án chốt: thời gian từ nhập tới thư mục giao khách **ngắn hơn ít nhất 30 %** so với cách làm
+3.0.0 trên cùng sự kiện; **không sót** hoạt động nào; số lần sửa nhãn AI ít hơn số thao tác AI tiết kiệm được.
 
-## 2. Ba phương án
+## 7. Lấy số đo trên ảnh sự kiện thật (tại máy chủ dự án)
 
-### A. Giữ thứ tự hiện tại, giảm thao tác (đề xuất)
-1. Nhập → app chia khoảnh khắc + cỡ cảnh + nét (như hiện nay).
-2. **Rà theo khoảnh khắc:** mỗi lần làm việc với **một** khoảnh khắc (dải khoảnh khắc là bước chính, không phải bộ lọc phụ):
-   - đặt tên khoảnh khắc + **nội dung cho cả khoảnh khắc bằng một phím** (ví dụ cả "Khai mạc" là Sân khấu), rồi chỉ sửa
-     ngoại lệ;
-   - cỡ cảnh: xem ba cột Toàn / Trung / Cận của khoảnh khắc đó; sửa ảnh sai bằng kéo hoặc Alt+T/U/C;
-   - cảnh báo nét: một bộ lọc "có cảnh báo" trong khoảnh khắc; Q bỏ cảnh báo, X loại.
-3. P / X như 3.0.0; xuất theo khoảnh khắc.
-- **App tự làm:** chia khoảnh khắc, cỡ cảnh, cảnh báo nét, gợi ý nội dung **kế thừa** từ khoảnh khắc (không cần AI).
-- **Người xác nhận / sửa:** ranh giới khoảnh khắc, nội dung của khoảnh khắc, ảnh sai cỡ cảnh, cảnh báo nét sai.
-- **Thay đổi logic:** thêm "nội dung theo khoảnh khắc" (gán một lần, ảnh trong khoảnh khắc nhận nhãn ở trạng thái
-  "theo khoảnh khắc", sửa riêng được). Không cần mô hình mới.
+1. Chọn **một** sự kiện 300–500 ảnh, tốt nhất 2 máy, có sân khấu + booth + khán phòng + một đoạn hai hoạt động liền nhau.
+2. Làm hai lần trên cùng sự kiện: (a) cách 3.0.0: P / X rồi tự chép ảnh theo hoạt động; (b) Beta Media hiện tại. Bấm
+   giờ từ lúc nhập tới lúc có thư mục giao khách.
+3. 🏷 Dán nhãn mẫu 100–150 ảnh (cỡ cảnh, nét, B ranh giới) → `KiraPick.exe --media-score` → gửi `cham.json` (chỉ số, không
+   có ảnh hay tên file).
+4. Ghi tay: hoạt động nào app gộp sai / tách sai; hoạt động nào suýt sót; bước nào mất thời gian nhất.
+5. Sau khi chủ dự án duyệt đề xuất và có bản làm thử, lặp lại bước 2 với luồng mới để so.
 
-### B. Khoảnh khắc trước, nhãn sau
-Người dùng **dựng dòng thời gian trước** (tách / đặt tên khoảnh khắc trên một màn hình dải thời gian có ảnh thu nhỏ), rồi mới
-lọc. App chỉ gợi ý ranh giới (khoảng nghỉ + đổi nguồn máy + đổi cỡ cảnh đột ngột).
-- Ít sai ranh giới hơn với sự kiện liền mạch; nhưng thêm một bước bắt buộc trước khi lọc.
+## 8. Việc kỹ thuật nếu đề xuất được duyệt (chưa làm)
 
-### C. Tối giản cho bản thử
-Ẩn cỡ cảnh và lỗi nét AI cho tới khi chấm trên ảnh thật đạt §11; chỉ giữ khoảnh khắc theo giờ + nhãn tay + P/X + xuất.
-- Ít rủi ro "AI sai làm chậm người dùng"; nhưng Media gần như chỉ là 3.0.0 có thêm thư mục theo khoảnh khắc.
+1. Mã băm hình ảnh trên ảnh thu nhỏ + gom nhóm trong khoảnh khắc (quy tắc, có test trên ảnh tổng hợp).
+2. Ảnh đại diện + "+N", mở nhóm thành hàng ảnh cạnh nhau (dùng lại lưới và so sánh của 3.0.0).
+3. Gợi ý ranh giới (không tự tách) + "⚠ chưa có ảnh giao" trong danh sách khoảnh khắc.
+4. Nội dung theo khoảnh khắc (gán một lần, sửa ngoại lệ).
+5. Một dòng nhật ký cho mỗi thao tác (`kind` + thời điểm, không tên ảnh) và `--media-counts` để in bảng số mục 6.
 
-## 3. Đo thời gian và số thao tác tiết kiệm
+## 9. Cần chủ dự án quyết định
 
-**Mốc so sánh:** cùng một sự kiện, cùng người, hai cách:
-- **Cách cũ (3.0.0):** P / X trong Chụp cá nhân, rồi tự chép ảnh P vào thư mục theo phần chương trình (Explorer).
-- **Cách mới (Media, phương án được chọn):** tới khi có thư mục giao khách theo khoảnh khắc.
-
-**Số đo** (app tự ghi, chỉ số, không tên ảnh):
-| Số đo | Cách lấy |
-|---|---|
-| Thời gian tới khi lưới thao tác được / nhập xong / phân tích xong | đồng hồ trong app (đã đo trên máy phát triển, xem báo cáo) |
-| Thời gian làm việc thực (từ mở sự kiện tới xuất xong) | dấu thời gian trong nhật ký |
-| Số thao tác theo loại: P/X, sao, nhãn cỡ cảnh, nhãn nội dung, tách / gộp / đổi tên khoảnh khắc, Ctrl+Z | đếm dòng nhật ký `media action: kind=…` (cần thêm, giống GRP-1) |
-| Tỉ lệ AI đúng (cỡ cảnh, nét, ranh giới khoảnh khắc) | 🏷 Dán nhãn mẫu + `--media-score` (đã có) |
-| Số ảnh AI xếp sai mà người phải sửa | = số lần Alt+T/U/C, Q/W/R trên ảnh AI đã gợi ý (từ nhật ký) |
-
-**Chỉ tiêu đề xuất để chủ dự án chốt:** Media đáng dùng khi tổng thời gian từ nhập tới thư mục giao khách **ngắn hơn ít
-nhất 30 %** so với cách cũ trên cùng sự kiện, và số thao tác sửa nhãn AI **ít hơn** số thao tác AI tiết kiệm được.
-
-## 4. Việc kỹ thuật cần cho mục 3 (chưa làm, chờ duyệt cùng phương án)
-- Một dòng nhật ký cho mỗi thao tác Media (`kind` + dấu thời gian, không tên ảnh), và `KiraPick.exe --media-counts`
-  (giống `--grp1-counts`) để in bảng số.
-
-## 5. Rà trên ảnh sự kiện thật (tại máy chủ dự án, trước khi chốt)
-1. Chọn **một** sự kiện thật 300–500 ảnh, tốt nhất từ 2 máy, có sân khấu + booth + khán phòng.
-2. Mở bằng KiraPick Beta → Media → nhập → 🧠 Phân tích. Ghi lại ba mốc thời gian (lưới, nhập xong, phân tích xong).
-3. 🏷 Dán nhãn mẫu 100–150 ảnh (cỡ cảnh, nét, B ranh giới khoảnh khắc, nội dung) → `--media-score` → gửi `cham.json`.
-4. Ghi tay 5 câu: khoảnh khắc nào app chia sai (thừa / thiếu); loại ảnh nào cỡ cảnh hay sai; cảnh báo nét có làm phiền
-   không; nhãn nội dung nào dùng nhiều nhất; bước nào mất thời gian nhất.
-5. Gửi lại: tôi tổng hợp thành bảng "app tự làm được / người phải sửa" thật, rồi chủ dự án chốt A / B / C.
-
-## 6. Cần chủ dự án quyết định
-1. Chọn phương án **A**, **B** hay **C** (hoặc chờ kết quả mục 5 rồi chọn).
-2. Duyệt mục 4 (đếm thao tác trong nhật ký, chỉ số).
-3. Chỉ tiêu ở mục 3 (≥ 30 % thời gian) có hợp lý không.
+1. Duyệt luồng mục 2 (hoặc sửa), trước khi đổi logic phân loại.
+2. Duyệt bảng bốn nhóm nhãn mục 3 (nhất là: "Người và vai trò" ngoài Mốc 1).
+3. Chỉ tiêu mục 6 (≥ 30 % thời gian, không sót hoạt động).
+4. Có thể làm mục 7 trên một sự kiện thật không, và khi nào.

@@ -26,6 +26,10 @@ on:
         description: "LIC-1 checks on Windows: the allow-list tests with the verified weights, then the same with every outbound connection of python.exe blocked by the Windows firewall (editions=none)"
         type: boolean
         default: false
+      run_timing:
+        description: "REG-1 import timing on Windows: 3.0.0, the tested Beta d45548b and this commit, same synthetic folders (editions=none; measurement only)"
+        type: boolean
+        default: false
       inspect_release:
         description: "Rights inventory: JSON list of published release tags, e.g. [\"v3.0.0\",\"v3.0.0a\"] (editions=none). Downloads, installs silently, lists files + SHA-256; never runs the app"
         default: ""
@@ -48,17 +52,19 @@ jobs:
           WANTED: ${{ github.event.inputs.editions }}
           INSPECT: ${{ github.event.inputs.inspect_release }}
           LIC1: ${{ github.event.inputs.lic1_checks }}
+          TIMING: ${{ github.event.inputs.run_timing }}
         run: |
           python3 - <<'EOF'
           import json, os, sys
           msg, event = os.environ.get("MESSAGE", ""), os.environ["EVENT"]
           wanted = (os.environ.get("WANTED") or "").strip()
-          checks_only = (os.environ.get("INSPECT") or "").strip() or os.environ.get("LIC1") == "true"
+          checks_only = ((os.environ.get("INSPECT") or "").strip() or os.environ.get("LIC1") == "true"
+                         or os.environ.get("TIMING") == "true")
           if event != "push" and checks_only:
               # Release inspection / LIC-1 checks never build: an empty editions box means "none" (CI-1);
               # asking for both is an error
               if wanted not in ("", "none"):
-                  print(f"::error::inspect_release / lic1_checks set: editions must be empty or 'none', got '{wanted}' (no build)")
+                  print(f"::error::inspect_release / lic1_checks / run_timing set: editions must be empty or 'none', got '{wanted}' (no build)")
                   sys.exit(1)
               editions = []
           elif event != "push":
@@ -522,6 +528,70 @@ jobs:
           } finally {
             Remove-NetFirewallRule -DisplayName "KiraPick LIC-1 no network"
           }
+
+  timing:
+    # REG-1: the same synthetic folders (300 JPEG; 60 public-domain NASA NEF copies with 20 RAW+JPEG pairs) imported
+    # by 3.0.0, the tested Beta and this commit, 3 rounds in rotating order. Import only (the 3.0.0 analysis needs
+    # weights this branch no longer fetches). Counts and seconds only; the photos never leave the runner.
+    if: github.event.inputs.run_timing == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python packages
+        run: python -m pip install --disable-pip-version-check -q -r packaging/requirements-directml.txt
+      - name: Checkouts and data
+        shell: pwsh
+        run: |
+          git worktree add ..\v300 v3.0.0
+          git worktree add ..\vtested d45548bb35b0dedd3e37fac5c55bf259ee9eb5a6
+          $raw = Join-Path $env:RUNNER_TEMP "nef"; New-Item -ItemType Directory -Force -Path $raw | Out-Null
+          $samples = (Get-Content tests/fixtures/raw_samples.json -Raw | ConvertFrom-Json).samples | Where-Object { $_.file -like "public/iss*.NEF" }
+          foreach ($s in $samples) {
+            $f = Join-Path $raw (Split-Path $s.file -Leaf)
+            Invoke-WebRequest -Uri $s.url -OutFile $f
+            if ((Get-FileHash $f -Algorithm SHA256).Hash.ToLower() -ne $s.sha256) { throw "SHA-256 mismatch: $($s.file)" }
+          }
+          $data = Join-Path $env:RUNNER_TEMP "kp-data"
+          python scripts/measure_import.py make-data $data --raw @((Get-ChildItem $raw).FullName)
+          Write-Host "::notice title=timing machine::$((Get-CimInstance Win32_Processor).Name) | $([math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB)) GB | $((Get-PhysicalDisk | Select-Object -First 1).MediaType) | Defender realtime: $((Get-MpComputerStatus).RealTimeProtectionEnabled)"
+      - name: Import timing (3 rounds)
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP "kp-data"
+          $tool = (Resolve-Path scripts/measure_import.py).Path
+          $names = @("3.0.0", "tested", "fixed")
+          $roots = @{ "3.0.0" = (Resolve-Path ..\v300).Path; "tested" = (Resolve-Path ..\vtested).Path; "fixed" = (Get-Location).Path }
+          New-Item -ItemType Directory -Force -Path timing | Out-Null
+          foreach ($round in 1..3) {
+            foreach ($set in "jpeg300", "raw60") {
+              foreach ($k in 0..2) {
+                $name = $names[($k + $round - 1) % 3]  # rotate the order each round
+                foreach ($mode in "personal", "media") {
+                  if ($name -eq "3.0.0" -and $mode -eq "media") { continue }  # 3.0.0 has no Media
+                  $out = Join-Path (Resolve-Path timing).Path "$name-$mode-$set-r$round.json"
+                  python $tool run $roots[$name] (Join-Path $data $set) $mode $out --reopen | Out-Null
+                  if (Test-Path $out) {
+                    $j = Get-Content $out -Raw | ConvertFrom-Json
+                    Write-Host "::notice title=$name $mode $set r$round::grid $($j.grid_first_s) s | usable while importing $($j.usable_during_import) ($($j.mark_while_importing_ms) ms) | all listed $($j.grid_all_s) s | done $($j.import_done_s) s | reopen $($j.reopen_import_done_s) s | rows $($j.rows) | pairs $($j.pairs)"
+                  } else { Write-Host "::warning title=$name $mode $set r$round::no result" }
+                }
+              }
+            }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kirapick-timing-windows
+          path: timing/
+          retention-days: 30
 
   k2-repeat:
     if: github.event.inputs.k2_repeat == 'true'
