@@ -127,6 +127,7 @@ def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: 
             app.processEvents()
             res[prefix + "usable_during_import"] = True
             res[prefix + "mark_while_importing_ms"] = round((time.perf_counter() - u0) * 1000)
+            res[prefix + "usable_s"] = round(time.perf_counter() - t0, 2)  # a photo opened and marked (P) by then
         elif win.import_thread is None:
             res[prefix + "usable_during_import"] = None  # the import ended before the grid's first refresh (1.5 s)
         else:
@@ -135,6 +136,8 @@ def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: 
         res[prefix + "grid_all_s"] = round(time.perf_counter() - t0, 2)
         wait(lambda: win.import_thread is None)
         res[prefix + "import_done_s"] = round(time.perf_counter() - t0, 2)
+        if prefix + "usable_s" not in res:  # nothing to open before the import ended: usable at 'done'
+            res[prefix + "usable_s"] = res[prefix + "import_done_s"]
         pump(0.3)
         res[prefix + "rows"] = model.rowCount()
         res[prefix + "phases_first_seen_s"] = phases

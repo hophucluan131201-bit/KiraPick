@@ -370,7 +370,9 @@ class EventWindow(MainWindow):
         return dialog
 
     def _after_people_change(self) -> None:
-        """Called by Ctrl+Z for a Media action (labels, moments, clock): repaint everything Media shows."""
+        """Called by Ctrl+Z for a Media action (labels, moments, clock, 🧪 group fixes): repaint everything Media shows."""
+        if self.grouping is not None:
+            self._regroup()  # a group fix (or a moment edit) undone: the groups follow
         self.reload_preserving_view()
         self._refresh_media_sidebar()
         self._show_inspector(self.view_record())
@@ -762,9 +764,9 @@ class EventWindow(MainWindow):
         """'break': this photo starts a new group; 'join': no break before this photo (same moment and camera)."""
         if self.project is None:
             return
-        with self.project.transaction() as conn:
-            sim.set_fix(conn, asset_id, fix)
-        self._record("group_break" if fix == "break" else "group_join")
+        self._media_action(sim.fix_group, asset_id, fix, kind="group_break" if fix == "break" else "group_join",
+                           text="🧪 Đã " + ("tách ảnh khỏi nhóm." if fix == "break" else "gộp với nhóm trước.")
+                           + " Ctrl+Z để hoàn tác.")
         self._regroup()
 
     def show_shortcuts(self) -> None:

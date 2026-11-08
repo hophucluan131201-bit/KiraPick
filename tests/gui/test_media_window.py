@@ -461,6 +461,9 @@ def test_near_duplicate_experiment_is_off_by_default_and_counts_actions(qtbot, h
     w.close_group()
     w.group_fix(first, "break")
     assert sim.fixes(w.project.conn) == {first: "break"}
+    qtbot.keyClick(w.grid, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)  # group fixes are in Ctrl+Z too
+    assert sim.fixes(w.project.conn) == {}
+    w.group_fix(first, "break")
     _select(w, [first])
     qtbot.keyClick(w.grid, Qt.Key.Key_P)
     lines = [r.getMessage() for r in caplog.records if r.name == "app.media.trial"]
@@ -474,6 +477,7 @@ def test_near_duplicate_experiment_is_off_by_default_and_counts_actions(qtbot, h
     result = trial.counts(w.media_event.folder, [log_file])
     assert result["experiment_on"] and result["P"] == 1 and result["actions_by_kind"]["keep"] == 1
     assert result["groups"]["fixes_break"] == 1 and result["groups"]["groups"] == len(w.grouping.groups)
+    assert result["actions_by_kind"]["group_break"] == 2 and result["actions_by_kind"]["undo"] == 1
     assert result["moments_without_P"] == result["moments"] - 1
     # off again: everything as before
     w.act_near_dup.setChecked(False)

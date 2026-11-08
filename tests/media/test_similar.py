@@ -131,3 +131,35 @@ def test_media_counts_cli_prints_numbers_only(tmp_path: Path, monkeypatch, capsy
     out = json.loads((tmp_path / "kq.json").read_text(encoding="utf-8"))
     assert out["photos"] == 2 and out["actions"] == 2 and out["minutes_first_to_last"] == 12.5
     assert "x1" not in capsys.readouterr().out
+
+
+def test_ab_runs_are_compared_with_the_owner_boundaries_of_a_reference_event(tmp_path: Path) -> None:
+    """REG-3: the owner marks activity starts (B) once, in a reference event that is never edited by hand; each run
+    (another event of the same folder) is compared with them: wrong merges / splits of moments, activities without
+    P, 🧪 groups mixing two activities; manual moment edits and group fixes are reported apart."""
+    from app.media import samples
+    from app.media import trial
+
+    # two activities seconds apart (x, y: one AI moment), then a lone activity 20 min later (solo)
+    e, ids = _event(tmp_path, [("x1", 1, 0, None), ("x2", 1, 3, None), ("y1", 2, 6, None), ("y2", 2, 9, None),
+                               ("solo", 3, 1200, None)])
+    ref = ev.create_event("ranh giới", tmp_path / "media")
+    cam.import_folder(ref, tmp_path / "A")
+    mo.analyse(ref)
+    rid = {Path(r[1]).stem: r[0] for r in ref.conn.execute("SELECT id, relative_path FROM assets")}
+    samples.set_sample(ref.conn, [rid["y1"], rid["solo"]], "boundary", "start")
+    with e.transaction() as conn:
+        sim.set_on(conn, True)
+    decisions.set_flag(e.conn, ids["x2"], "keep")
+    out = trial.counts(e.folder, [], ref.folder)
+    app_split = out["app_split_vs_owner_boundaries"]
+    assert app_split == {"activities": 3, "boundaries_found": 2, "boundaries_not_in_this_event": 0,
+                         "moment_merges_wrong": 1, "moment_splits_wrong": 0, "activities_without_P": 3}
+    run = out["vs_owner_boundaries"]
+    assert run["moment_merges_wrong"] == 1 and run["activities_without_P"] == 2
+    assert run["groups_mixing_activities"] == 0  # x and y are different scenes: never one group
+    mo.split_here(e, ids["y1"])  # the user cuts the two activities apart
+    out = trial.counts(e.folder, [], ref.folder)
+    assert out["vs_owner_boundaries"]["moment_merges_wrong"] == 0
+    assert out["manual_edits"] == {"moment_split": 0, "moment_merge": 0, "moment_move": 0, "group_break": 0,
+                                   "group_join": 0, "undo": 0}  # no log given here

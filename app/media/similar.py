@@ -7,7 +7,8 @@ photo per group. A rule on the photos already imported and analysed, no model:
 - the suggested photo of a group: no focus warning first, then the sharpest subject (Media focus measure on the
   original), then the earliest. A group of one photo is always suggested, focus warning or not;
 - the user's fixes win: "Tách khỏi nhóm" (the photo starts its own group) and "Gộp với nhóm trước" (no break before
-  this photo, same moment and camera only), kept in the event (media_meta 'near_dup_fixes'), counted as group fixes.
+  this photo, same moment and camera only), kept in the event (media_meta 'near_dup_fixes'), counted as group fixes,
+  undone by Ctrl+Z like the other Media actions (journal).
 
 Nothing is hidden or removed: "chỉ ảnh đại diện" is a view filter; P / X stay the user's.
 """
@@ -85,6 +86,15 @@ def set_fix(conn: sqlite3.Connection, asset_id: int, fix: str | None) -> None:
         current[asset_id] = fix
     conn.execute("INSERT INTO media_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                  (META_FIXES, json.dumps({str(k): v for k, v in sorted(current.items())})))
+
+
+def fix_group(event, asset_id: int, fix: str | None) -> None:  # noqa: ANN001 - a MediaEvent / Project
+    """The user's group fix as a journaled Media action: one Ctrl+Z undoes it, like ✂ / gộp khoảnh khắc."""
+    from app.media import journal
+
+    label = {"break": "tách khỏi nhóm gần trùng", "join": "gộp nhóm gần trùng"}.get(fix or "", "bỏ sửa nhóm")
+    journal.run(event, label, [journal.Scope("media_meta", "key = ?", (META_FIXES,))],
+                lambda conn: set_fix(conn, asset_id, fix))
 
 
 # ------------------------------------------------------------------------------------------------ hashing
