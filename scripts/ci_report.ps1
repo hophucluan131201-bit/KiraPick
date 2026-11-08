@@ -1,4 +1,4 @@
-# CI helper (Windows perf job): run pytest with a hard time limit and report its log in the job's notices and step
+﻿# CI helper (Windows perf job): run pytest with a hard time limit and report its log in the job's notices and step
 # summary, readable through the GitHub API even when the log and artifact storage cannot be reached
 # (review CR-P2-FINAL-02).
 #   . scripts/ci_report.ps1
