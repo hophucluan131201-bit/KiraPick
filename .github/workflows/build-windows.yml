@@ -626,10 +626,10 @@ jobs:
           function Step([string]$line) {
             $step = $line.Split(" ")
             Write-Host "=== $line"
-            if ($step[0] -eq "chuan-bi") { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc chuan-bi -Anh $anh }
-            elseif ($step.Count -gt 1) { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc $step[0] -Ban $step[1] }
-            else { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc $step[0] }
-            return $LASTEXITCODE
+            if ($step[0] -eq "chuan-bi") { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc chuan-bi -Anh $anh | Out-Host }
+            elseif ($step.Count -gt 1) { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc $step[0] -Ban $step[1] | Out-Host }
+            else { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc $step[0] | Out-Host }
+            return $LASTEXITCODE  # the script's own output goes to the log, not into the return value
           }
           foreach ($line in "chuan-bi", "do-nhanh", "do-lanh beta", "do-phan-tich", "tong-hop") {
             if ((Step $line) -ne 0) { throw "step failed: $line" }
