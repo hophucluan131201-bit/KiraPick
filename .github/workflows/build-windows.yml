@@ -680,6 +680,16 @@ jobs:
           }
           if (Test-Path $real) { throw "the real %LOCALAPPDATA%\KiraPick was created: the test profile leaked" }
           Write-Host "::notice title=owner_measure::real %LOCALAPPDATA%\KiraPick never created (separate profile and temp folders only)"
+          # Step 1b of the owner guide, run exactly as written there: the Desktop shortcut to the Beta (test)
+          $doc = Get-Content docs\owner-do-nhap-va-thu-phan-loai.md -Raw -Encoding UTF8
+          $block = [regex]::Match($doc.Substring($doc.IndexOf("## 1b.")), '(?s)```powershell\r?\n(.*?)```').Groups[1].Value
+          $ps = Join-Path $env:RUNNER_TEMP "step1b.ps1"; Set-Content $ps $block -Encoding UTF8
+          powershell -ExecutionPolicy Bypass -File $ps | Out-Host
+          $lnkPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "KiraPick Beta (test).lnk"
+          if (-not (Test-Path $lnkPath)) { throw "step 1b made no shortcut" }
+          $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($lnkPath)
+          if ($lnk.Arguments -notmatch "owner_measure.ps1.*-Buoc mo-beta") { throw "shortcut arguments: $($lnk.Arguments)" }
+          Write-Host "::notice title=owner guide 1b::shortcut OK: $($lnk.TargetPath) $($lnk.Arguments)"
 
   k2-repeat:
     if: github.event.inputs.k2_repeat == 'true'
