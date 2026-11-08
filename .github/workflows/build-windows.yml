@@ -30,6 +30,10 @@ on:
         description: "REG-1 import timing on Windows: 3.0.0, the tested Beta d45548b and this commit, same synthetic folders (editions=none; measurement only)"
         type: boolean
         default: false
+      owner_measure_check:
+        description: "REG-2: run scripts/owner_measure.ps1 end to end (all steps) on a synthetic folder, as the owner will (editions=none)"
+        type: boolean
+        default: false
       inspect_release:
         description: "Rights inventory: JSON list of published release tags, e.g. [\"v3.0.0\",\"v3.0.0a\"] (editions=none). Downloads, installs silently, lists files + SHA-256; never runs the app"
         default: ""
@@ -53,13 +57,14 @@ jobs:
           INSPECT: ${{ github.event.inputs.inspect_release }}
           LIC1: ${{ github.event.inputs.lic1_checks }}
           TIMING: ${{ github.event.inputs.run_timing }}
+          OWNER_MEASURE: ${{ github.event.inputs.owner_measure_check }}
         run: |
           python3 - <<'EOF'
           import json, os, sys
           msg, event = os.environ.get("MESSAGE", ""), os.environ["EVENT"]
           wanted = (os.environ.get("WANTED") or "").strip()
           checks_only = ((os.environ.get("INSPECT") or "").strip() or os.environ.get("LIC1") == "true"
-                         or os.environ.get("TIMING") == "true")
+                         or os.environ.get("TIMING") == "true" or os.environ.get("OWNER_MEASURE") == "true")
           if event != "push" and checks_only:
               # Release inspection / LIC-1 checks never build: an empty editions box means "none" (CI-1);
               # asking for both is an error
@@ -592,6 +597,42 @@ jobs:
           name: kirapick-timing-windows
           path: timing/
           retention-days: 30
+
+  owner-measure-check:
+    # REG-2: the owner's measuring script, every step, on a synthetic folder (60 public-domain NASA NEF copies + 20
+    # JPEG). Checks that the script runs on a clean Windows; the numbers are not the owner's.
+    if: github.event.inputs.owner_measure_check == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Synthetic photo folder
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -q numpy pillow
+          $raw = Join-Path $env:RUNNER_TEMP "nef"; New-Item -ItemType Directory -Force -Path $raw | Out-Null
+          $samples = (Get-Content tests/fixtures/raw_samples.json -Raw | ConvertFrom-Json).samples | Where-Object { $_.file -like "public/iss*.NEF" }
+          foreach ($s in $samples) { Invoke-WebRequest -Uri $s.url -OutFile (Join-Path $raw (Split-Path $s.file -Leaf)) }
+          python scripts/measure_import.py make-data (Join-Path $env:RUNNER_TEMP "anh") --raw @((Get-ChildItem $raw).FullName)
+      - name: owner_measure.ps1, all steps (Windows PowerShell 5.1, as on the owner's PC)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $anh = Join-Path $env:RUNNER_TEMP "anh\raw60"
+          foreach ($line in "chuan-bi", "do-lanh 3.0.0", "do-lanh beta", "do-am", "do-phan-tich", "tong-hop") {
+            $step = $line.Split(" ")
+            Write-Host "=== $line"
+            if ($step[0] -eq "chuan-bi") { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc chuan-bi -Anh $anh }
+            elseif ($step.Count -gt 1) { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc $step[0] -Ban $step[1] }
+            else { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc $step[0] }
+            if ($LASTEXITCODE -ne 0) { throw "step failed: $($step -join ' ')" }
+          }
+          $txt = Join-Path $env:USERPROFILE "KiraPick-Do\ket-qua\ket-qua.txt"
+          Get-Content $txt -Encoding UTF8 | ForEach-Object { Write-Host "::notice title=owner_measure::$_" }
+          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath("Desktop")) "KiraPick-do-nhap.zip"))) { throw "no result zip" }
 
   k2-repeat:
     if: github.event.inputs.k2_repeat == 'true'
