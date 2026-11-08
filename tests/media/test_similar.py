@@ -163,3 +163,19 @@ def test_ab_runs_are_compared_with_the_owner_boundaries_of_a_reference_event(tmp
     assert out["vs_owner_boundaries"]["moment_merges_wrong"] == 0
     assert out["manual_edits"] == {"moment_split": 0, "moment_merge": 0, "moment_move": 0, "group_break": 0,
                                    "group_join": 0, "undo": 0}  # no log given here
+
+
+def test_counts_cli_prints_vietnamese_through_a_cp1252_pipe(tmp_path: Path) -> None:
+    """REG-3 (found by the Windows CI check): PowerShell '| Out-Null' gives Python a cp1252 pipe; the Vietnamese
+    message must not crash the command."""
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ, PYTHONIOENCODING="cp1252", KIRAPICK_PROFILE_DIR=str(tmp_path / "profile"),
+               QT_QPA_PLATFORM="offscreen")
+    root = Path(__file__).resolve().parents[2]
+    done = subprocess.run([sys.executable, "-m", "app", "--media-counts", "THU A", "--ranh-gioi", "RANH GIOI"],
+                          cwd=root, env=env, capture_output=True, timeout=120)
+    assert done.returncode == 2, done.stderr.decode("utf-8", "replace")
+    assert "Không tìm thấy" in done.stdout.decode("utf-8")

@@ -44,6 +44,12 @@ def _folder_arg(text: str) -> Path | None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
+    for stream in (sys.stdout, sys.stderr):  # Vietnamese text on a cp1252 console or a pipe (PowerShell | Out-Null)
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
     if "--diagnose-grouping" in argv:  # read-only grouping report (F3 Batch 0), no window, network blocked
         from app.diagnostics.grouping import run_cli
 
