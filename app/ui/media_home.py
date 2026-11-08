@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import __version__
-from app.branding import APP_NAME
+from app.branding import APP_NAME, app_settings
 from app.media import event as ev
 from app.ui import theme
 
@@ -159,12 +159,10 @@ class MediaHome(QWidget):
     def show_event(self, event: ev.MediaEvent) -> None:
         """Open the event in its window (the Chụp cá nhân 3.0.0 window on the event); this list comes back when the
         user leaves the event (⟵ Danh sách sự kiện). Closing the event window with × closes the app, as in 3.0.0."""
-        from PySide6.QtCore import QSettings
-
         from app.ui.media_event_window import EventWindow
 
         self.close_event()
-        settings = self._settings if self._settings is not None else QSettings()
+        settings = self._settings if self._settings is not None else app_settings()
         window = EventWindow(event, settings, analysis_runner=self._analysis_runner)
         window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         window.mode_change_ready.connect(self._event_left)

@@ -21,8 +21,31 @@ _LEGACY_DIR_PARTS = ("Snorlu", "Snorlu AI Culling")
 log = logging.getLogger(__name__)
 
 
+PROFILE_ENV = "KIRAPICK_PROFILE_DIR"
+
+
+def profile_dir() -> Path | None:
+    """A separate test profile (owner tests, REG-3): every folder and setting of the app goes under it instead of
+    %LOCALAPPDATA% and the registry, so a test never touches the user's real data. Unset in normal use."""
+    value = os.environ.get(PROFILE_ENV, "").strip().strip('"')
+    return Path(value) if value else None
+
+
+def app_settings():  # noqa: ANN201 - QSettings
+    """The app's settings: the registry (HKCU\\Software\\KiraPick) normally, an .ini file in a test profile."""
+    from PySide6.QtCore import QSettings
+
+    profile = profile_dir()
+    if profile is not None:
+        return QSettings(str(profile / APP_NAME / "settings.ini"), QSettings.Format.IniFormat)
+    return QSettings(*SETTINGS_IDS)
+
+
 def _local_base() -> Path:
-    """%LOCALAPPDATA% on Windows, ~/.local/share on Linux (no Qt application needed)."""
+    """%LOCALAPPDATA% on Windows, ~/.local/share on Linux (no Qt application needed); a test profile if set."""
+    profile = profile_dir()
+    if profile is not None:
+        return profile
     from PySide6.QtCore import QStandardPaths
 
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericDataLocation)
@@ -87,6 +110,8 @@ def migrate_legacy_settings() -> None:
     """Copy window settings (size, shortcuts panel, auto-advance) from the old name, once."""
     from PySide6.QtCore import QSettings
 
+    if profile_dir() is not None:
+        return  # a test profile starts empty
     new = QSettings(*SETTINGS_IDS)
     if new.allKeys():
         return

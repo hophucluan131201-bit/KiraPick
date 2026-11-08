@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, QSettings, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
 
-from app.branding import SETTINGS_IDS
+from app.branding import app_settings
 from app.ui.media_home import MediaHome
 from app.ui.mode_picker import EVENT, PERSONAL, ModePicker
 
@@ -32,7 +32,7 @@ class AppShell(QObject):
     def __init__(self, settings: QSettings | None = None,
                  personal_factory: Callable[[QSettings], QWidget] = _personal_window) -> None:
         super().__init__()
-        self.settings = settings or QSettings(*SETTINGS_IDS)
+        self.settings = settings or app_settings()
         self._personal_factory = personal_factory
         self.picker = ModePicker()
         self.picker.chosen.connect(self._open)

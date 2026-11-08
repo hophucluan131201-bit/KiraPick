@@ -59,7 +59,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import __version__
-from app.branding import APP_NAME, SETTINGS_IDS, data_dir
+from app.branding import APP_NAME, app_settings, data_dir
 from app.storage import decisions, view
 from app.storage.db import SchemaTooNewError
 from app.storage.view import rotate_point
@@ -184,7 +184,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._switching_mode = False
         self.setWindowTitle(f"{APP_NAME} {__version__}")
-        self.settings = settings or QSettings(*SETTINGS_IDS)
+        self.settings = settings or app_settings()
         self.project: Project | None = None
         self.undo: UndoManager | None = None
         self._session_root: Path | None = None
