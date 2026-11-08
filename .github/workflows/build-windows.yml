@@ -622,18 +622,64 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $anh = Join-Path $env:RUNNER_TEMP "anh\raw60"
-          foreach ($line in "chuan-bi", "do-lanh 3.0.0", "do-lanh beta", "do-am", "do-phan-tich", "tong-hop") {
+          $real = Join-Path $env:LOCALAPPDATA "KiraPick"
+          function Step([string]$line) {
             $step = $line.Split(" ")
             Write-Host "=== $line"
             if ($step[0] -eq "chuan-bi") { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc chuan-bi -Anh $anh }
             elseif ($step.Count -gt 1) { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc $step[0] -Ban $step[1] }
             else { powershell -ExecutionPolicy Bypass -File scripts\owner_measure.ps1 -Buoc $step[0] }
-            if ($LASTEXITCODE -ne 0) { throw "step failed: $($step -join ' ')" }
+            return $LASTEXITCODE
+          }
+          foreach ($line in "chuan-bi", "do-nhanh", "do-lanh beta", "do-phan-tich", "tong-hop") {
+            if ((Step $line) -ne 0) { throw "step failed: $line" }
           }
           $txt = Join-Path $env:USERPROFILE "KiraPick-Do\ket-qua\ket-qua.txt"
           Get-Content $txt -Encoding UTF8 | ForEach-Object { Write-Host "::notice title=owner_measure::$_" }
+          $all = Get-Content $txt -Encoding UTF8
           if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath("Desktop")) "KiraPick-do-nhap.zip"))) { throw "no result zip" }
-          if (-not ((Get-Content $txt -Encoding UTF8) -match "\| 20 \|")) { throw "the 20 RAW+JPEG pairs were not counted" }
+          if (-not ($all -match "\| 60 \| 20 \|")) { throw "60 cards after pairing / 20 pairs not reported" }
+          if (-not ($all -match "^unchanged=True")) { throw "unchanged=True missing" }
+          if (-not ($all -match "chạy lại")) { throw "rerun rows missing" }
+          # A wrong source must stop the script (then chuan-bi puts the right one back, keeping the wrong one renamed)
+          Add-Content (Join-Path $env:USERPROFILE "KiraPick-Do\src\3.0.0\app\main.py") "# tampered"
+          if ((Step "do-nhanh") -eq 0) { throw "a tampered source did not stop the script" }
+          Write-Host "::notice title=owner_measure::tampered source stopped the script, as expected"
+          if ((Step "chuan-bi") -ne 0) { throw "chuan-bi did not restore the source" }
+          # A/B counts on the separate test profile: three events as the guide names them
+          $W = Join-Path $env:USERPROFILE "KiraPick-Do"
+          $env:KIRAPICK_PROFILE_DIR = Join-Path $W "profile-thu"
+          $helper = Join-Path $env:RUNNER_TEMP "ab_events.py"
+          @"
+          import sys
+          from pathlib import Path
+          from app.media import cameras as cam, event as ev, moments as mo, samples, similar
+          from app.storage import decisions
+          folder = Path(sys.argv[1])
+          made = {}
+          for name in ("RANH GIOI", "THU A", "THU B"):
+              e = ev.create_event(name)
+              cam.import_folder(e, folder)
+              mo.analyse(e)
+              made[name] = e
+          ids = [r[0] for r in made["RANH GIOI"].conn.execute("SELECT id FROM assets WHERE status = 'ok' ORDER BY relative_path")]
+          samples.set_sample(made["RANH GIOI"].conn, [ids[len(ids) // 2]], "boundary", "start")
+          with made["THU B"].transaction() as conn:
+              similar.set_on(conn, True)
+          first = made["THU A"].conn.execute("SELECT MIN(id) FROM assets WHERE status = 'ok'").fetchone()[0]
+          decisions.set_flag(made["THU A"].conn, first, "keep")
+          print("events", ev.media_root())
+          "@ -replace "(?m)^          ", "" | Set-Content $helper -Encoding UTF8
+          Push-Location (Join-Path $W "src\beta"); & (Join-Path $W "venv\Scripts\python.exe") $helper $anh; Pop-Location
+          Remove-Item Env:\KIRAPICK_PROFILE_DIR
+          if ((Step "dem-ab") -ne 0) { throw "dem-ab failed" }
+          foreach ($f in "dem-A.json", "dem-B.json") {
+            $j = Get-Content (Join-Path $W "thu-ab\$f") -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($null -eq $j.vs_owner_boundaries -or $null -eq $j.manual_edits) { throw "$f lacks the A/B numbers" }
+            Write-Host "::notice title=dem-ab $f::photos $($j.photos) | moments $($j.moments) | experiment $($j.experiment_on) | vs owner $($j.vs_owner_boundaries | ConvertTo-Json -Compress) | app split $($j.app_split_vs_owner_boundaries | ConvertTo-Json -Compress) | groups $($j.groups | ConvertTo-Json -Compress)"
+          }
+          if (Test-Path $real) { throw "the real %LOCALAPPDATA%\KiraPick was created: the test profile leaked" }
+          Write-Host "::notice title=owner_measure::real %LOCALAPPDATA%\KiraPick never created (separate profile and temp folders only)"
 
   k2-repeat:
     if: github.event.inputs.k2_repeat == 'true'
