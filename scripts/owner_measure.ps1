@@ -24,7 +24,7 @@ $Repo = "hophucluan131201-bit/KiraPick"
 $Refs = [ordered]@{
     "3.0.0"  = "e2fec9d769d8eb26f9772cd5f5bd0bf04adab4a2"   # tag v3.0.0
     "da-thu" = "d45548bb35b0dedd3e37fac5c55bf259ee9eb5a6"   # Beta đã thử (3.0.1b1)
-    "beta"   = "56278d585f65d890b75cca0d762b82ae0cda2126"   # Beta đã sửa (REG-2)
+    "beta"   = "63984129c98bec37b9d85443e593824fd872f6cc"   # Beta đã sửa (REG-2)
 }
 $Src = Join-Path $Work "src"
 $Out = Join-Path $Work "ket-qua"
@@ -173,7 +173,8 @@ switch ($Buoc) {
                    "", "bản | chế độ | cache | file | cặp RAW+JPEG | lưới có ảnh đầu (s) | dùng được khi đang nhập | đủ ảnh (s) | nhập xong (s) | mở lại (s) | phân tích (s)")
         foreach ($j in $rows) {
             $an = @($j.analysis_people_s, $j.analysis_quality_s, $j.analysis_media_s) | Where-Object { $_ }
-            $lines += "$($j.version_label) | $($j.mode) | $($j.cache) | $($j.files) | $($j.pairs) | $($j.grid_first_s) | $($j.usable_during_import) | $($j.grid_all_s) | $($j.import_done_s) | $($j.reopen_import_done_s) | $($an -join ' + ')"
+            $usable = if ($null -eq $j.usable_during_import) { "nhập xong trước lần làm mới lưới đầu" } elseif ($j.usable_during_import) { "có ($($j.mark_while_importing_ms) ms)" } else { "KHÔNG" }
+            $lines += "$($j.version_label) | $($j.mode) | $($j.cache) | $($j.files) | $($j.pairs) | $($j.grid_first_s) | $usable | $($j.grid_all_s) | $($j.import_done_s) | $($j.reopen_import_done_s) | $($an -join ' + ')"
         }
         if ($rows.Count) { $lines += "", "Loại file: $($rows[0].file_types | ConvertTo-Json -Compress)" }
         $txt = Join-Path $Out "ket-qua.txt"

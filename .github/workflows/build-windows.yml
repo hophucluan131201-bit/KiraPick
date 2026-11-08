@@ -612,7 +612,7 @@ jobs:
       - name: Synthetic photo folder
         shell: pwsh
         run: |
-          python -m pip install --disable-pip-version-check -q numpy pillow
+          python -m pip install --disable-pip-version-check -q numpy pillow exifread
           $raw = Join-Path $env:RUNNER_TEMP "nef"; New-Item -ItemType Directory -Force -Path $raw | Out-Null
           $samples = (Get-Content tests/fixtures/raw_samples.json -Raw | ConvertFrom-Json).samples | Where-Object { $_.file -like "public/iss*.NEF" }
           foreach ($s in $samples) { Invoke-WebRequest -Uri $s.url -OutFile (Join-Path $raw (Split-Path $s.file -Leaf)) }
@@ -633,6 +633,7 @@ jobs:
           $txt = Join-Path $env:USERPROFILE "KiraPick-Do\ket-qua\ket-qua.txt"
           Get-Content $txt -Encoding UTF8 | ForEach-Object { Write-Host "::notice title=owner_measure::$_" }
           if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath("Desktop")) "KiraPick-do-nhap.zip"))) { throw "no result zip" }
+          if (-not ((Get-Content $txt -Encoding UTF8) -match "\| 20 \|")) { throw "the 20 RAW+JPEG pairs were not counted" }
 
   k2-repeat:
     if: github.event.inputs.k2_repeat == 'true'
