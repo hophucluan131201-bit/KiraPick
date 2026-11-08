@@ -53,8 +53,17 @@ def make_data(out: Path, raws: list[Path]) -> None:
             shutil.copyfile(src, dst)
             with dst.open("ab") as f:  # a unique tail: the import dedupes identical files by size + first/last 64 KiB
                 f.write(i.to_bytes(4, "little"))
-            if i < 20:
-                shutil.copyfile(jpegs / f"EVT_{i:04d}.jpg", raw_dir / f"DSC_{i:04d}.JPG")
+            if i < 20:  # a JPEG with the same name AND the RAW's capture time: a real RAW+JPEG pair
+                import exifread
+
+                with src.open("rb") as f:
+                    taken = str(exifread.process_file(f, details=False).get("EXIF DateTimeOriginal", ""))
+                img = Image.open(jpegs / f"EVT_{i:04d}.jpg")
+                exif = Image.Exif()
+                exif[0x010F], exif[0x0110] = "KiraPick", "Synthetic"
+                if taken:
+                    exif.get_ifd(0x8769)[0x9003] = taken
+                img.save(raw_dir / f"DSC_{i:04d}.JPG", quality=88, exif=exif)
     print(json.dumps({"jpeg": 300, "raw": 60 if raws else 0, "pairs": 20 if raws else 0}))
 
 
@@ -118,8 +127,10 @@ def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: 
             app.processEvents()
             res[prefix + "usable_during_import"] = True
             res[prefix + "mark_while_importing_ms"] = round((time.perf_counter() - u0) * 1000)
+        elif win.import_thread is None:
+            res[prefix + "usable_during_import"] = None  # the import ended before the grid's first refresh (1.5 s)
         else:
-            res[prefix + "usable_during_import"] = False  # the grid had nothing before the import ended
+            res[prefix + "usable_during_import"] = False  # the grid had nothing while importing
         wait(lambda: model.rowCount() >= n_files or win.import_thread is None)
         res[prefix + "grid_all_s"] = round(time.perf_counter() - t0, 2)
         wait(lambda: win.import_thread is None)
