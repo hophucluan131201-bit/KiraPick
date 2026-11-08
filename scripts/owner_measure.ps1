@@ -1,4 +1,4 @@
-﻿﻿<#
+﻿<#
 KiraPick — phép thử trên máy chủ dự án (REG-3). Không cần bộ cài mới: ba bản chạy từ mã nguồn ở commit cố định.
 
     -Buoc chuan-bi  -Anh "<thư mục ảnh sự kiện thật, có RAW+JPEG>"   tải và kiểm mã nguồn, cài thư viện và mô hình được phép
