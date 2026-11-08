@@ -482,3 +482,50 @@ def test_near_duplicate_experiment_is_off_by_default_and_counts_actions(qtbot, h
     # off again: everything as before
     w.act_near_dup.setChecked(False)
     assert w.grouping is None and w.model.rowCount() == n_all and not w.group_filter.isVisible()
+
+
+def test_media_flow_as_3_0_0_mark_compare_rotate_undo_export(qtbot, home, tmp_path: Path) -> None:  # noqa: ANN001
+    """REG-3 (4): the 3.0.0 culling flow in an event: P / X / stars / ❤, compare, Xoay xem, Ctrl+Z, export copies of
+    P photos; ✂ split and Gộp of moments are both undone by Ctrl+Z (one Media history with the P/X marks)."""
+    before = hashes(home.shoot)
+    w = _import_and_analyse(qtbot, home, "Luồng 3.0.0")
+    ids = _ids(w)
+    conn = w.project.conn
+    a, b, c = ids["DSC_0000"], ids["DSC_0001"], ids["DSC_0004"]
+    _select(w, [a])
+    qtbot.keyClick(w.grid, Qt.Key.Key_P)
+    qtbot.keyClick(w.grid, Qt.Key.Key_5)
+    qtbot.keyClick(w.grid, Qt.Key.Key_F)
+    _select(w, [b])
+    qtbot.keyClick(w.grid, Qt.Key.Key_X)
+    da, db = decisions.get(conn, a), decisions.get(conn, b)
+    assert (da.flag, da.rating, bool(da.favorite), db.flag) == ("keep", 5, True, "reject")
+    _select(w, [a, b])
+    qtbot.keyClick(w.grid, Qt.Key.Key_C)
+    assert w.in_compare() and len(w.compare.records()) == 2
+    qtbot.keyClick(w.grid, Qt.Key.Key_Escape)
+    w.rotate_view()
+    # moments: ✂ split, then Gộp back, each undone by Ctrl+Z
+    n = conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0]
+    _select(w, [c])
+    w.split_here()
+    assert conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0] == n + 1
+    _select(w, [c])
+    w.merge_with_previous()
+    assert conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0] == n
+    qtbot.keyClick(w.grid, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)  # undo Gộp
+    assert conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0] == n + 1
+    qtbot.keyClick(w.grid, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)  # undo ✂
+    assert conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0] == n
+    qtbot.keyClick(w.grid, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)  # then the X, as one history
+    assert decisions.get(conn, b).flag is None
+    # export copies of the P photos (by moment), into a separate folder
+    export = w.open_export_dialog()
+    qtbot.addWidget(export)
+    assert export.which_box.currentData() is None  # Ảnh đã chọn (P)
+    export.dest.setText(str(tmp_path / "Xuat"))
+    assert export.preview() is not None
+    export.start_copy()
+    qtbot.waitUntil(lambda: export.thread is None, timeout=30000)
+    assert sorted(p.name for p in (tmp_path / "Xuat").rglob("*.jpg")) == ["DSC_0000.jpg"]
+    assert hashes(home.shoot) == before  # originals never changed (rotation is display only)
