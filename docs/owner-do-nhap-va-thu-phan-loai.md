@@ -12,22 +12,23 @@ Bạn chỉ gửi lại **con số** và **bảng ghi tay**. Ảnh, tên ảnh v
 |---|---|---|---|
 | Đo nhập (so sánh) | 3.0.0 | `e2fec9d` (tag v3.0.0) | SHA-256 của `app\main.py`, `app\ui\main_window.py` |
 | Đo nhập (so sánh) | Beta bạn đã thử (3.0.1b1) | `d45548b` | SHA-256 của `app\main.py`, `app\ui\media_window.py` |
-| Đo nhập, luồng Media, A/B | **Beta đã sửa** | **`22201ff`** | SHA-256 của 6 file: cửa sổ Media, 🧪 gom ảnh gần trùng, bộ đếm, profile test, công cụ đo |
-| Script đo / mở / đếm | `owner_measure.ps1` | `ab5ab82` | SHA-256 của cả file (bước 1) |
+| Đo nhập, luồng Media, A/B | **Beta đã sửa** | **`743b76a`** | SHA-256 của 6 file: cửa sổ Media, 🧪 gom ảnh gần trùng, bộ đếm, profile test, công cụ đo |
+| Script đo / mở / đếm | `owner_measure.ps1` | `cda80fe` | SHA-256 của cả file (bước 1) |
 
-**Vì sao ghim `22201ff`, không ghim HEAD.**
+**Vì sao ghim `743b76a`, không ghim HEAD.**
 - Ghim một commit cố định thì cả bạn và người duyệt đều biết chắc đang thử đúng mã nào. Commit mới hơn có thể đến sau mà
   không làm đổi phép thử.
-- `22201ff` là commit **cuối cùng có thay đổi mã của app**. Các commit sau nó chỉ đổi test, script và tài liệu, không đổi
+- `743b76a` là commit **cuối cùng có thay đổi mã của app**. Các commit sau nó chỉ đổi test, script và tài liệu, không đổi
   `app\`, `configs\` hay `packaging\`.
 - Vòng trước báo cáo ghi HEAD `ffb20fe` nhưng hướng dẫn ghim `6398412`: lý do giống hệt. `ffb20fe` chỉ thêm tài liệu và
   script vào sau `6398412`; mã app hai commit đó giống nhau.
-- Bản `22201ff` có:
+- Bản `743b76a` có:
   - 🧪 gom ảnh gần trùng: ⚙ Tuỳ chọn → 🧪, mặc định tắt;
   - các bộ đếm: mỗi thao tác một dòng nhật ký, đọc lại bằng `--media-counts`;
   - đối chiếu với ranh giới hoạt động bạn đánh dấu: `--ranh-gioi`;
   - sửa nhóm nằm trong Ctrl+Z;
-  - profile test riêng.
+  - profile test riêng;
+  - các lệnh đo / đếm in được tiếng Việt khi đầu ra bị chuyển hướng. Lỗi này do CI phát hiện; `22201ff` còn bị.
 
 **Script tự dừng** (chữ đỏ, mã thoát 1) khi:
 - mã nguồn tải về không khớp SHA-256. Bản sai được đổi tên, không bị xoá;
@@ -45,10 +46,10 @@ tên** (nếu được, chính thư mục từng nhập chậm):
 
 ```powershell
 $W = "$env:USERPROFILE\KiraPick-Do"; New-Item -ItemType Directory -Force -Path $W | Out-Null
-$URL = "https://raw.githubusercontent.com/hophucluan131201-bit/KiraPick/ab5ab82e0a2b5b55d8b49e26d57942e2793bc6c7/scripts/owner_measure.ps1"
+$URL = "https://raw.githubusercontent.com/hophucluan131201-bit/KiraPick/cda80fe6230ea8941d095ae54f271815d1817a7e/scripts/owner_measure.ps1"
 Invoke-WebRequest -Uri $URL -OutFile "$W\owner_measure.ps1" -UseBasicParsing
 $h = (Get-FileHash "$W\owner_measure.ps1" -Algorithm SHA256).Hash
-if ($h -ne "503ACCC6EC3730F0F8D1921A6639905E6F9F62BBFBD3C22872B5CB52A64F4949") {
+if ($h -ne "74B4537E11F89DB95624AF8D48E5B3C9909ABF0BC810DF8EB77E6F18657D7958") {
     Write-Host "SAI MÃ SCRIPT: $h — DỪNG, không chạy gì thêm, báo tôi" -ForegroundColor Red
 } else {
     Write-Host "OK: script đúng" -ForegroundColor Green
@@ -169,9 +170,13 @@ Cột **Bằng chứng**:
 | `unchanged` | — | — | — | — | — | — | (phải là True) | Chờ |
 
 Đã có bằng chứng CI cho chính quy trình đo: script chạy trọn trên Windows PowerShell 5.1; 60 NEF + 20 JPEG ghép đúng 20 cặp
-ở cả ba bản; dừng khi mã nguồn bị sửa; ra `unchanged=True`; không tạo `%LOCALAPPDATA%\KiraPick`.
+ở cả ba bản; dừng khi mã nguồn bị sửa; ra `unchanged=True`; không tạo `%LOCALAPPDATA%\KiraPick`
+([run 42508189761](https://github.com/hophucluan131201-bit/KiraPick/actions/runs/42508189761)).
 
 ### Bảng 3 — Luồng Media theo 3.0.0 (Beta, sự kiện `KIEM MEDIA`)
+
+Bằng chứng CI: các test thao tác thật của cửa sổ Media chạy đạt trên Windows
+([run 42508195716](https://github.com/hophucluan131201-bit/KiraPick/actions/runs/42508195716)) và trên Linux.
 
 | Thao tác | Làm thế nào | Đúng? (có/không, ghi chú) | Bằng chứng |
 |---|---|---|---|
