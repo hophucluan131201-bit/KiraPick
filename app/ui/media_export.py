@@ -157,6 +157,9 @@ class MediaExportDialog(QDialog):
         if error:
             self.summary.setText(f"Lỗi khi sao chép: {error}")
             return
+        from app.media import trial
+
+        trial.record(self.media_event.event_id, "export", len(self.plan.photos) if self.plan is not None else 0)
         text = f"Đã sao chép {len(result.copied)} tệp."
         if result.already_present:
             text += f" {len(result.already_present)} tệp đã có sẵn (giống hệt), không chép lại."

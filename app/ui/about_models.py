@@ -54,8 +54,9 @@ class ModelsDialog(QDialog):
             [[f.name, f.modes, ", ".join(names.get(m, m) for m in f.models) or f.rule,
               ft.feature_status(f, by_id), f.without or "—"] for f in ft.FEATURES])
         self.models = _table(
-            ["Mô hình", "File", "SHA-256", "Nguồn", "Giấy phép", "Trong bản này", "Căn cứ"],
-            [[r.name, r.file, r.sha256 or "—", r.source, r.licence, r.status, r.terms] for r in rows])
+            ["Mô hình", "File", "SHA-256", "Nguồn", "Giấy phép", "Trong bản này", "Căn cứ",
+             "Đo nội bộ (máy phát triển)"],
+            [[r.name, r.file, r.sha256 or "—", r.source, r.licence, r.status, r.terms, r.benchmark] for r in rows])
         tabs = QTabWidget()
         tabs.addTab(self.features, "Chức năng")
         tabs.addTab(self.models, "Mô hình và giấy phép")

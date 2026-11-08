@@ -60,6 +60,9 @@ STATUS_TEXT = {
 }
 
 
+BENCHMARK_TEXT = {"yes": "Được", "pending": "Chờ", "no": "Không"}
+
+
 @dataclass(frozen=True, slots=True)
 class ModelRow:
     model_id: str
@@ -70,6 +73,7 @@ class ModelRow:
     licence: str
     status: str  # STATUS_TEXT, plus "thiếu file" when allowed but not installed
     terms: str
+    benchmark: str = ""  # internal measurement on the development machine: "Được: …" / "Chờ: …" / "Không: …"
 
 
 def model_rows(registry: ModelRegistry | None = None) -> list[ModelRow]:
@@ -86,8 +90,11 @@ def model_rows(registry: ModelRegistry | None = None) -> list[ModelRow]:
             elif state is not ModelState.READY:
                 status = "Được phép, file không đúng bản đã kiểm"
         pinned = entry.pinned[0].sha256 if entry is not None and entry.pinned else spec.sha256
+        bench = (entry.benchmark or {}) if entry else {}
+        bench_text = (f"{BENCHMARK_TEXT.get(bench.get('allowed'), 'Chưa xét')}: {bench.get('basis', '')}"
+                      if bench else "Chưa xét")
         rows.append(ModelRow(model_id, spec.name, spec.file, pinned, spec.url, spec.license, status,
-                             entry.terms if entry else ""))
+                             entry.terms if entry else "", bench_text))
     return rows
 
 

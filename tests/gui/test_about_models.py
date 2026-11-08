@@ -79,3 +79,18 @@ def test_the_about_screen_is_in_the_options_menu(qtbot, tmp_path) -> None:  # no
     w = MainWindow(settings=QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
     qtbot.addWidget(w)
     assert w.act_about_models in w.options_button.menu().actions()
+
+
+def test_every_weight_has_its_own_benchmark_basis() -> None:
+    """REG-2 (4): internal benchmarking is decided per weight from its own terms; a 'never' weight is never
+    benchmarked, and the field can never make the app open a weight."""
+    policy = ModelRegistry().policy
+    for e in policy.entries.values():
+        assert e.benchmark and e.benchmark["allowed"] in ("yes", "pending", "no") and e.benchmark["basis"], e.id
+        if e.status == "never":
+            assert e.benchmark["allowed"] == "no", e.id
+        if e.status == "pending":
+            assert e.benchmark["allowed"] != "yes", e.id  # no use basis yet: no benchmark basis either
+    rows = {r.model_id: r for r in ft.model_rows()}
+    assert rows["face_embedder_arcface"].benchmark.startswith("Không")
+    assert rows["person_detector_s"].benchmark.startswith("Được")

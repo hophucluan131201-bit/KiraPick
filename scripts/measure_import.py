@@ -4,18 +4,21 @@
         <dir>/jpeg300: 300 synthetic 2400×1600 JPEGs with EXIF date, 2 s apart (no real photos)
         <dir>/raw60:   60 copies of the given RAW files (each made unique by a trailing byte, because the import
                        skips identical files) + 20 same-name JPEGs, so 20 RAW+JPEG pairs
-    python scripts/measure_import.py run <repo root> <photos> <personal|media> <out.json> [--reopen] [--analysis]
+    python scripts/measure_import.py run <repo root> <photos> <personal|media> <out.json> [--reopen] [--analysis] [--gpu]
 
-``run`` opens the window of the checkout at <repo root> (offscreen is fine) and records, separately: the first photo
+``--analysis`` only on this checkout (the allow-list of configs/model-policy.json decides which weights open); older
+checkouts are measured for the import only. ``run`` opens the window of the checkout at <repo root> (offscreen is fine) and records, separately: the first photo
 in the grid, whether the grid can be used while importing (select, P, scroll: round trip in ms), all photos listed,
 import done, the first time each import phase is reported, then (``--reopen``) the same folder again (nothing new to
-decode) and (``--analysis``) the AI analysis on the CPU. Counts only: no file name or photo data is written.
+decode) and (``--analysis``) the AI analysis, on the CPU unless ``--gpu``. Sessions, settings, learning data and logs
+go to a temporary folder: the user's KiraPick data is never read or written, and the photo folder only read. Counts only: no file name or photo data is written.
 """
 
 from __future__ import annotations
 
 import json
 import multiprocessing as mp
+from collections import Counter
 import os
 import shutil
 import sys
@@ -55,16 +58,31 @@ def make_data(out: Path, raws: list[Path]) -> None:
     print(json.dumps({"jpeg": 300, "raw": 60 if raws else 0, "pairs": 20 if raws else 0}))
 
 
-def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: bool) -> None:
+def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: bool, gpu: bool = False) -> None:
     sys.path.insert(0, str(root))
     os.chdir(root)
-    from PySide6.QtCore import QSettings
+    tmp = Path(tempfile.mkdtemp(prefix="kp-timing-"))
+    os.environ["KIRAPICK_LOG_DIR"] = str(tmp / "logs")  # analysis child processes log here
+    from PySide6.QtCore import QCoreApplication, QSettings
     from PySide6.QtWidgets import QApplication
 
+    # Never the user's KiraPick data: other settings name, and every data folder (sessions, learning, logs) in tmp
+    QCoreApplication.setOrganizationName("KiraPick-measure")
+    QCoreApplication.setApplicationName("KiraPick-measure")
     app = QApplication.instance() or QApplication([])
-    tmp = Path(tempfile.mkdtemp(prefix="kp-timing-"))
-    n_files = len([p for p in photos.iterdir() if p.is_file()])
-    res: dict = {"mode": mode, "files": n_files}
+    import app.branding as branding
+
+    branding._local_base = lambda: tmp / "data"
+    files = [p for p in photos.rglob("*") if p.is_file()]
+    n_files = len(files)
+    res: dict = {"mode": mode, "files": n_files,
+                 "file_types": dict(Counter(p.suffix.lower() or "(none)" for p in files).most_common()),
+                 "total_mb": round(sum(p.stat().st_size for p in files) / 2**20)}
+    try:
+        from app import __version__
+        res["app_version"] = __version__
+    except Exception:  # noqa: BLE001 - an old checkout without it
+        res["app_version"] = "?"
 
     def pump(sec: float = 0.0) -> None:
         end = time.perf_counter() + sec
@@ -126,7 +144,7 @@ def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: 
         w.show()
         pump(0.3)
         if hasattr(w, "act_gpu"):
-            w.act_gpu.setChecked(False)
+            w.act_gpu.setChecked(gpu)
         run_import(w, lambda: w.start_import(photos), "")
         counts(w.project.conn)
         if reopen:
@@ -142,7 +160,9 @@ def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: 
     else:
         from app.ui.media_home import MediaHome
 
-        h = MediaHome(root=tmp / "media")
+        settings = QSettings(str(tmp / "s.ini"), QSettings.Format.IniFormat)
+        kwargs = {"settings": settings} if "settings" in MediaHome.__init__.__code__.co_varnames else {}
+        h = MediaHome(root=tmp / "media", **kwargs)
         h.resize(1600, 1000)
         h.show()
         pump(0.3)
@@ -157,11 +177,11 @@ def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: 
         if analysis:
             t1 = time.perf_counter()
             if hasattr(v, "act_gpu"):  # the 3.0.0 window (EventWindow)
-                v.act_gpu.setChecked(False)
+                v.act_gpu.setChecked(gpu)
                 v.start_analysis("people")
                 attr = "analyze_thread"
             else:  # the tested Beta's EventView
-                v.start_analysis(prefer_gpu=False)
+                v.start_analysis(prefer_gpu=gpu)
                 attr = "analysis_thread"
             pump(0.2)
             wait(lambda: getattr(v, attr) is None)
@@ -178,8 +198,15 @@ def main(argv: list[str]) -> int:
         make_data(Path(argv[1]), raws)
         return 0
     if argv[:1] == ["run"] and len(argv) >= 5:
+        here = Path(__file__).resolve().parents[1]
+        if "--analysis" in argv and Path(argv[1]).resolve() != here:
+            # An older checkout (e.g. 3.0.0) opens weights this repository's allow-list refuses, some of which may
+            # not be used even for internal measurement (configs/model-policy.json, "benchmark"). Import only.
+            print("--analysis is only measured on this checkout (its allow-list decides what opens); "
+                  "other checkouts: import only")
+            return 2
         run(Path(argv[1]).resolve(), Path(argv[2]).resolve(), argv[3], Path(argv[4]).resolve(),
-            "--reopen" in argv, "--analysis" in argv)
+            "--reopen" in argv, "--analysis" in argv, "--gpu" in argv)
         return 0
     print(__doc__)
     return 2

@@ -331,3 +331,150 @@ def test_client_list_works_in_an_event_as_in_3_0_0(qtbot, home, tmp_path: Path) 
     export.dest.setText(str(tmp_path / "Giao khách"))
     plan = export.preview()
     assert plan is not None and len(plan.photos) == 2
+
+
+def _content(conn, asset_id: int) -> list[str]:  # noqa: ANN001
+    return sorted(v for v, state, _ in lb.labels_of(conn, asset_id).get("content", []) if state != "removed")
+
+
+def test_regression_real_operations_on_an_event(qtbot, home, tmp_path: Path) -> None:  # noqa: ANN001
+    """REG-2 (1): compare 2, 3, 4 photos; Xoay xem (display only, file untouched); export by client list; one Ctrl+Z
+    history over P, stars, rotation-free Media labels and moment edits."""
+    before = hashes(home.shoot)
+    w = _import_and_analyse(qtbot, home, "Hồi quy")
+    ids = _ids(w)
+    conn = w.project.conn
+    order = [ids[f"DSC_000{i}"] for i in range(5)]
+    for n in (2, 3, 4):
+        _select(w, order[:n])
+        qtbot.keyClick(w.grid, Qt.Key.Key_C)
+        assert w.in_compare() and len(w.compare.records()) == n
+        qtbot.keyClick(w.grid, Qt.Key.Key_Escape)
+        assert not w.in_compare()
+    # Xoay xem: the marked photos turn on screen; the files never change
+    _select(w, order[:2])
+    w.rotate_view()
+    assert [r.rotation for r in w.model.records() if r.id in order[:2]] == [1, 1]  # quarter turns
+    # one Ctrl+Z history: P, 3 sao, Alt+U Trung, Alt+1 Sân khấu, ✂ split — undone newest first
+    _select(w, [order[4]])
+    shots_before = lb.labels_of(conn, order[4]).get("shot")
+    moments_before = conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0]
+    qtbot.keyClick(w.grid, Qt.Key.Key_P)
+    qtbot.keyClick(w.grid, Qt.Key.Key_3)
+    qtbot.keyClick(w.grid, Qt.Key.Key_U, ALT)
+    qtbot.keyClick(w.grid, Qt.Key.Key_1, ALT)
+    w.split_here()
+    assert conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0] == moments_before + 1
+    for _ in range(5):
+        qtbot.keyClick(w.grid, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    assert conn.execute("SELECT COUNT(*) FROM moments").fetchone()[0] == moments_before
+    assert _content(conn, order[4]) == []
+    assert lb.labels_of(conn, order[4]).get("shot") == shots_before
+    d = decisions.get(conn, order[4])
+    assert d.flag is None and not d.rating
+    # Khách chọn → xuất theo danh sách, real copy
+    dialog = w.open_client_list_dialog()
+    dialog.text.setPlainText("0002 0004")
+    dialog.name.setText("Khách")
+    dialog.refresh()
+    dialog.create()
+    export = w.open_export_dialog()
+    qtbot.addWidget(export)
+    export.dest.setText(str(tmp_path / "Giao"))
+    assert export.preview() is not None
+    export.start_copy()
+    qtbot.waitUntil(lambda: export.thread is None, timeout=30000)
+    copied = sorted(p.name for p in (tmp_path / "Giao").rglob("*.jpg"))
+    assert copied == ["DSC_0002.jpg", "DSC_0004.jpg"]
+    assert hashes(home.shoot) == before  # originals untouched (rotation was display only)
+
+
+def test_star_keys_and_content_keys_never_mix(qtbot, home) -> None:  # noqa: ANN001
+    """REG-2 (1): 0–5 = sao (3.0.0), Alt+1–5 = nội dung (Media). In the grid and the large view each key does only its
+    own job; while typing (search box, client list) neither changes a photo."""
+    w = _open(qtbot, home, "Phím")
+    _import(qtbot, w, home.shoot)
+    ids = _ids(w)
+    conn = w.project.conn
+    a = ids["DSC_0001"]
+    _select(w, [a])
+    qtbot.keyClick(w.grid, Qt.Key.Key_2)
+    assert decisions.get(conn, a).rating == 2 and _content(conn, a) == []
+    qtbot.keyClick(w.grid, Qt.Key.Key_2, ALT)  # Booth / Gian hàng
+    assert decisions.get(conn, a).rating == 2 and _content(conn, a) == [lb.CONTENT_KEYS["2"]]
+    qtbot.keyClick(w.grid, Qt.Key.Key_0)  # 0 = xoá sao, content stays
+    assert not decisions.get(conn, a).rating and _content(conn, a) == [lb.CONTENT_KEYS["2"]]
+    qtbot.keyClick(w.grid, Qt.Key.Key_Return)  # large view: same keys
+    assert w.center.currentIndex() == 2
+    qtbot.keyClick(w.viewer, Qt.Key.Key_5)
+    qtbot.keyClick(w.viewer, Qt.Key.Key_4, ALT)  # Sản phẩm
+    assert decisions.get(conn, a).rating == 5
+    assert _content(conn, a) == sorted([lb.CONTENT_KEYS["2"], lb.CONTENT_KEYS["4"]])
+    qtbot.keyClick(w.viewer, Qt.Key.Key_Escape)
+    # typing in the search box: digits and Alt+digits change nothing
+    w.search.setFocus()
+    qtbot.keyClicks(w.search, "0001")
+    qtbot.keyClick(w.search, Qt.Key.Key_3, ALT)
+    qtbot.keyClick(w.search, Qt.Key.Key_1)
+    assert decisions.get(conn, a).rating == 5
+    assert _content(conn, a) == sorted([lb.CONTENT_KEYS["2"], lb.CONTENT_KEYS["4"]])
+    assert w.search.text() == "00011"
+    w.search.clear()
+    # typing in the client list dialog
+    dialog = w.open_client_list_dialog()
+    dialog.text.setFocus()
+    qtbot.keyClicks(dialog.text, "0001 3")
+    qtbot.keyClick(dialog.text, Qt.Key.Key_1, ALT)
+    dialog.reject()
+    assert decisions.get(conn, a).rating == 5
+    assert _content(conn, a) == sorted([lb.CONTENT_KEYS["2"], lb.CONTENT_KEYS["4"]])
+    # B and Alt+0 only act in 🏷 sample mode; outside it they change nothing
+    _select(w, [a])
+    w.grid.setFocus()
+    qtbot.keyClick(w.grid, Qt.Key.Key_B)
+    qtbot.keyClick(w.grid, Qt.Key.Key_0, ALT)
+    assert conn.execute("SELECT COUNT(*) FROM sample_labels").fetchone()[0] == 0
+
+
+def test_near_duplicate_experiment_is_off_by_default_and_counts_actions(qtbot, home, tmp_path: Path,
+                                                                        caplog) -> None:  # noqa: ANN001
+    """REG-2 (3): 🧪 off by default (the window is as before); on: groups, 'chỉ ảnh gợi ý', open / fix a group, the
+    '⚠ chưa có ảnh P' moments; every action is one local log line read back by --media-counts (numbers only)."""
+    import logging
+
+    from app.media import similar as sim
+    from app.media import trial
+
+    caplog.set_level(logging.INFO, logger="app.media.trial")
+    w = _import_and_analyse(qtbot, home, "Thử nghiệm")
+    assert not w.act_near_dup.isChecked() and not w.group_filter.isVisible() and w.grouping is None
+    n_all = w.model.rowCount()
+    w.act_near_dup.setChecked(True)
+    qtbot.waitUntil(lambda: w.grouping is not None, timeout=10000)
+    assert w.group_filter.isVisible() and sim.is_on(w.project.conn)
+    assert any("chưa có ảnh P" in w.moment_list.item(i).text() for i in range(w.moment_list.count()))
+    w.group_filter.setCurrentIndex(w.group_filter.findData("reps"))
+    assert w.model.rowCount() == len(w.grouping.representatives()) <= n_all
+    first = w.model.records()[0].id
+    w.open_group(first)
+    assert {r.id for r in w.model.records()} == set(w.grouping.group(first).members)
+    w.close_group()
+    w.group_fix(first, "break")
+    assert sim.fixes(w.project.conn) == {first: "break"}
+    _select(w, [first])
+    qtbot.keyClick(w.grid, Qt.Key.Key_P)
+    lines = [r.getMessage() for r in caplog.records if r.name == "app.media.trial"]
+    eid = w.media_event.event_id
+    assert f"media action: event={eid} kind=experiment_on n=1" in lines
+    assert any(x.startswith(f"media action: event={eid} kind=keep n=1") for x in lines)
+    assert all("DSC_" not in x and str(home.shoot) not in x for x in lines)  # no photo names or paths
+    log_file = tmp_path / "kirapick.log"
+    log_file.write_text("\n".join(f"2026-11-08 10:00:{i:02d},000 INFO app.media.trial: {x}" for i, x in enumerate(lines)),
+                        encoding="utf-8")
+    result = trial.counts(w.media_event.folder, [log_file])
+    assert result["experiment_on"] and result["P"] == 1 and result["actions_by_kind"]["keep"] == 1
+    assert result["groups"]["fixes_break"] == 1 and result["groups"]["groups"] == len(w.grouping.groups)
+    assert result["moments_without_P"] == result["moments"] - 1
+    # off again: everything as before
+    w.act_near_dup.setChecked(False)
+    assert w.grouping is None and w.model.rowCount() == n_all and not w.group_filter.isVisible()

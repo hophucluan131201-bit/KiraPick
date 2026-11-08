@@ -52,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
         from app.diagnostics.grp1 import run_cli as grp1
 
         return grp1(argv[argv.index("--grp1-counts") + 1:])
+    if "--media-counts" in argv:  # Media trial numbers (REG-2), read-only, numbers only, no window
+        from app.media.trial import run_cli as media_counts
+
+        return media_counts(argv[argv.index("--media-counts") + 1:])
     if "--media-score" in argv:  # Media sample scoring (spec §11), read-only, numbers only, network blocked
         from app.media.samples import run_cli as media_score
 

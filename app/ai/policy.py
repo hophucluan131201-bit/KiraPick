@@ -22,6 +22,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = _ROOT / "configs" / "model-policy.json"
 STATUSES = frozenset({"verified", "pending", "never"})
+BENCHMARK = frozenset({"yes", "pending", "no"})
 MODES = frozenset({"personal", "media"})
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,9 @@ class PolicyEntry:
     pinned: tuple[Pinned, ...]
     terms: str
     media: dict | None = None  # Media only: needed_for, fallback, block_from
+    # Internal benchmark (development machine, never shipped): {"allowed": "yes" | "pending" | "no", "basis": "…"},
+    # decided per weight from its own terms. It never lets the app open a weight: only "status" does that.
+    benchmark: dict | None = None
 
     @property
     def verified(self) -> bool:
@@ -91,9 +95,13 @@ def parse_policy(data: dict) -> ModelPolicy:
         pinned = tuple(Pinned(p["sha256"].lower(), int(p["size"]), p.get("note", "")) for p in m.get("pinned", []))
         if status == "verified" and not pinned:
             raise ValueError(f"{m['id']}: verified without a pinned SHA-256")
+        bench = m.get("benchmark")
+        if bench is not None and (bench.get("allowed") not in BENCHMARK or not bench.get("basis")):
+            raise ValueError(f"{m['id']}: benchmark needs allowed in {sorted(BENCHMARK)} and a basis")
         if status != "verified" and pinned:
             raise ValueError(f"{m['id']}: {status} weights must not pin a hash")
-        entries[m["id"]] = PolicyEntry(m["id"], status, modes, pinned, m.get("terms", ""), m.get("media"))
+        entries[m["id"]] = PolicyEntry(m["id"], status, modes, pinned, m.get("terms", ""), m.get("media"),
+                                     m.get("benchmark"))
     return ModelPolicy(entries)
 
 

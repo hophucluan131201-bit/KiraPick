@@ -48,6 +48,9 @@ class MediaAssetModel(AssetListModel):
         super().__init__(parent)
         self.media_filter = MediaFilter()
         self.info: dict[int, browse.CardInfo] = {}
+        self.grouping = None  # 🧪 app.media.similar.Grouping while the experiment is on
+        self.only_reps = False
+        self.open_group: int | None = None
 
     def set_media_filter(self, f: MediaFilter) -> None:
         self.media_filter = f
@@ -68,6 +71,13 @@ class MediaAssetModel(AssetListModel):
             rows = self._load_rows(extra + sql, params, search=True)
             order = browse.time_order(self._project.conn)
             rows.sort(key=lambda r: order.get(r.id, len(order)))
+            g = self.grouping
+            if g is not None and self.open_group is not None and self.open_group < len(g.groups):
+                members = set(g.groups[self.open_group].members)
+                rows = [r for r in rows if r.id in members]
+            elif g is not None and self.only_reps:
+                reps = g.representatives()
+                rows = [r for r in rows if r.id in reps or r.id not in g.group_of]
             self.info = browse.card_info(self._project.conn)
         self.beginResetModel()
         self._rows = rows
@@ -89,12 +99,20 @@ class MediaDelegate(ThumbnailDelegate):
         info = model.info.get(rec.id) if isinstance(model, MediaAssetModel) else None
         if info is None:
             return
+        lines = info.lines()
+        g = getattr(model, "grouping", None)
+        group = g.group(rec.id) if g is not None else None
+        if group is not None and group.representative == rec.id:
+            if group.size > 1:
+                lines.append(f"▣ gợi ý · +{group.size - 1}")
+            elif group.warned_single:
+                lines.append("⚠ ảnh duy nhất của nhóm")
         font = QFont(p.font())
         font.setPointSizeF(max(7.0, font.pointSizeF() * 0.9))
         p.setFont(font)
         fm = p.fontMetrics()
         y = pic.bottom() - 4
-        for text in reversed(info.lines()):
+        for text in reversed(lines):
             w = min(pic.width() - 8, fm.horizontalAdvance(text) + 10)
             box = QRect(pic.left() + 4, y - 18, w, 18)
             p.setPen(Qt.PenStyle.NoPen)

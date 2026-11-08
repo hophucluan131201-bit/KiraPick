@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, Qt, QThread, Signal
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -31,6 +31,8 @@ from PySide6.QtWidgets import (
 
 from app.branding import APP_NAME
 from app.media import analysis, browse, moments
+from app.media import similar as sim
+from app.media import trial
 from app.media import cameras as cam
 from app.media import labels as lb
 from app.media.browse import MediaFilter
@@ -130,6 +132,18 @@ class EventWindow(MainWindow):
         for name in ("Phân tích AI", "Chủ thể"):  # by position: a narrow panel shortens the titles; people: not Mốc 1
             tabs.setTabVisible(TABS.index(name), False)
         self._media_shortcuts()
+        # 🧪 near-duplicate groups (REG-2): an experiment, off by default, switched on per event
+        self.act_near_dup = QAction("🧪 Thử nghiệm: gom ảnh gần trùng (sự kiện này)", self)
+        self.act_near_dup.setCheckable(True)
+        self.act_near_dup.setToolTip("Gom ảnh chụp liền nhau gần giống nhau (cùng máy, cùng cỡ cảnh, cách ≤ 10 giây) "
+                                     "thành nhóm, gợi ý một ảnh mỗi nhóm. Không ẩn hay xoá ảnh nào. Tắt là về như cũ.")
+        self.act_near_dup.toggled.connect(self.set_near_dup)
+        menu = self.options_button.menu()
+        menu.addSeparator()
+        menu.addAction(self.act_near_dup)
+        self.grouping: sim.Grouping | None = None
+        self._hashes: dict[int, int] = {}
+        self._hash_thread: _HashThread | None = None
 
     def _event_box(self) -> QWidget:
         box = QWidget()
@@ -167,11 +181,17 @@ class EventWindow(MainWindow):
                                    (f"AI gợi ý {lb.EXPERIMENTAL}", "suggested"), ("Đã xác nhận", "confirmed")])
         self.camera_filter = QComboBox()
         self.camera_filter.currentIndexChanged.connect(self._apply_media_filter)
+        self.group_filter = QComboBox()  # 🧪 shown while the experiment is on
+        self.group_filter.addItem("🧪 Nhóm: tất cả ảnh", "all")
+        self.group_filter.addItem("🧪 Nhóm: chỉ ảnh gợi ý", "reps")
+        self.group_filter.currentIndexChanged.connect(self._group_filter_changed)
+        self.group_filter.setVisible(False)
         box = QWidget()
         v = QVBoxLayout(box)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(2)
-        for w in (self.shot_filter, self.content_filter, self.focus_filter, self.camera_filter, self.state_filter):
+        for w in (self.shot_filter, self.content_filter, self.focus_filter, self.camera_filter, self.state_filter,
+                  self.group_filter):
             v.addWidget(w)
         return box
 
@@ -222,6 +242,11 @@ class EventWindow(MainWindow):
         self._update_undo_action()
         self.setWindowTitle(f"{self.media_event.event_name} — Media sự kiện — {APP_NAME}")
         self.event_name.setText(f"<b>{self.media_event.event_name}</b>")
+        if hasattr(self, "act_near_dup"):
+            self.act_near_dup.blockSignals(True)
+            self.act_near_dup.setChecked(sim.is_on(project.conn))
+            self.act_near_dup.blockSignals(False)
+            self._show_group_ui(self.act_near_dup.isChecked())
         self._refresh_media_sidebar()
 
     def _open_session_for(self, root: Path) -> bool:
@@ -233,6 +258,7 @@ class EventWindow(MainWindow):
         if self.project is not None:
             cam.refresh_sources(self.project)
             self._refresh_media_sidebar()
+            self._rebuild_groups()
             if len(cam.cameras(self.project.conn)) >= 2:
                 self.status.setText(self.status.text() + "  Nhiều máy ảnh: bấm 🕒 Máy ảnh & giờ để chỉnh giờ.")
 
@@ -318,6 +344,7 @@ class EventWindow(MainWindow):
         self.reload_preserving_view()
         self._refresh_media_sidebar()
         self._update_steps()
+        self._rebuild_groups()
         if error:
             self.status.setText(f"Phân tích lỗi: {error}")
         elif summary is not None and summary.get("unavailable"):
@@ -350,6 +377,8 @@ class EventWindow(MainWindow):
 
     def undo_last(self) -> None:
         notice = self.undo.notice() if isinstance(self.undo, MediaUndo) else None
+        if self.undo is not None and self.undo.can_undo():
+            self._record("undo")
         super().undo_last()
         if notice:
             self.status.setText(self.status.text() + "  " + notice)
@@ -372,14 +401,26 @@ class EventWindow(MainWindow):
         move = menu.addMenu("Chuyển sang khoảnh khắc")
         for m in moments.moments(self.project.conn):
             move.addAction(m.name, lambda mid=m.id: self._move_to_moment(assets, mid))
+        group = self.grouping.group(assets[0]) if self.grouping is not None else None
+        if group is not None:
+            menu.addSeparator()
+            if self.model.open_group is None:
+                menu.addAction(f"🧪 Mở nhóm ({group.size} ảnh)", lambda: self.open_group(assets[0]))
+            else:
+                menu.addAction("🧪 Đóng nhóm", self.close_group)
+            if group.size > 1 and group.members[0] != assets[0]:
+                menu.addAction("🧪 Tách ảnh này khỏi nhóm (bắt đầu nhóm mới)", lambda: self.group_fix(assets[0], "break"))
+            menu.addAction("🧪 Gộp nhóm này với nhóm trước", lambda: self.group_fix(group.members[0], "join"))
         self._run_menu(menu, global_pos)
 
     # ------------------------------------------------------------------ Media labels
     def _ids(self, assets: list[int] | None = None) -> list[int]:
         return assets if assets is not None else [r.id for r in self._action_records()]
 
-    def _media_action(self, fn, *args, text: str = "") -> None:  # noqa: ANN001
+    def _media_action(self, fn, *args, text: str = "", kind: str | None = None, n: int = 1) -> None:  # noqa: ANN001
         self.undo.media(fn, *args)
+        if kind is not None:
+            self._record(kind, n)
         self._update_undo_action()
         self.model.refresh_info()
         self._refresh_media_sidebar()
@@ -390,13 +431,14 @@ class EventWindow(MainWindow):
     def set_shot(self, value: str, assets: list[int] | None = None) -> None:
         ids = self._ids(assets)
         if ids:
-            self._media_action(lb.confirm, ids, "shot", value, text=f"Đã gán {lb.SHOT[value]} cho {len(ids)} ảnh.")
+            self._media_action(lb.confirm, ids, "shot", value, text=f"Đã gán {lb.SHOT[value]} cho {len(ids)} ảnh.",
+                               kind="shot", n=len(ids))
 
     def toggle_content(self, digit: str, assets: list[int] | None = None) -> None:
         ids = self._ids(assets)
         if ids:
             self._media_action(lb.toggle_content, ids, digit,
-                               text=f"{lb.CONTENT[lb.CONTENT_KEYS[digit]]}: {len(ids)} ảnh.")
+                               text=f"{lb.CONTENT[lb.CONTENT_KEYS[digit]]}: {len(ids)} ảnh.", kind="content", n=len(ids))
 
     def set_focus_label(self, label: str) -> None:
         """Q / W / R as in 3.0.0 (nét / soft / lệch nét) → the Media focus labels; in sample mode, the answers."""
@@ -413,14 +455,17 @@ class EventWindow(MainWindow):
             for v in shown:
                 self.undo.media(lb.remove, ids, "focus", v)
             self._media_action(lambda _e: None, text=("Đã đánh dấu nét (bỏ cảnh báo nét)" if shown
-                                                      else "Ảnh không có cảnh báo nét") + f": {len(ids)} ảnh.")
+                                                      else "Ảnh không có cảnh báo nét") + f": {len(ids)} ảnh.",
+                               kind="focus", n=len(ids))
         else:
-            self._media_action(lb.confirm, ids, "focus", value, text=f"Đã gán {lb.FOCUS[value]}: {len(ids)} ảnh.")
+            self._media_action(lb.confirm, ids, "focus", value, text=f"Đã gán {lb.FOCUS[value]}: {len(ids)} ảnh.",
+                               kind="focus", n=len(ids))
 
     def assign_booth(self, assets: list[int]) -> None:
         name, ok = QInputDialog.getText(self, "Tên booth / nhà tài trợ", "Tên:")
         if ok and name.strip():
-            self._media_action(lb.assign_booth, assets, name.strip(), text=f"Booth “{name.strip()}”: {len(assets)} ảnh.")
+            self._media_action(lb.assign_booth, assets, name.strip(), text=f"Booth “{name.strip()}”: {len(assets)} ảnh.",
+                               kind="booth", n=len(assets))
 
     # ------------------------------------------------------------------ moments
     def split_here(self) -> None:
@@ -428,7 +473,7 @@ class EventWindow(MainWindow):
         if rec is None:
             return
         try:
-            self._media_action(moments.split_here, rec.id, text="Đã tách khoảnh khắc (📌).")
+            self._media_action(moments.split_here, rec.id, text="Đã tách khoảnh khắc (📌).", kind="split")
         except ValueError as exc:
             self.status.setText(str(exc))
 
@@ -441,7 +486,8 @@ class EventWindow(MainWindow):
         if m is None or ms.index(m) == 0:
             self.status.setText("Không có khoảnh khắc trước để gộp.")
             return
-        self._media_action(moments.merge, ms[ms.index(m) - 1], m, text="Đã gộp với khoảnh khắc trước (📌).")
+        self._media_action(moments.merge, ms[ms.index(m) - 1], m, text="Đã gộp với khoảnh khắc trước (📌).",
+                           kind="merge")
 
     def rename_moment(self, name: str | None = None) -> None:
         rec = self.current_record()
@@ -453,10 +499,11 @@ class EventWindow(MainWindow):
             if not ok:
                 return
         if name.strip():
-            self._media_action(moments.rename, m, name.strip(), text="Đã đổi tên khoảnh khắc (📌).")
+            self._media_action(moments.rename, m, name.strip(), text="Đã đổi tên khoảnh khắc (📌).", kind="rename")
 
     def _move_to_moment(self, assets: list[int], moment_id: int) -> None:
-        self._media_action(moments.move_photos, assets, moment_id, text=f"Đã chuyển {len(assets)} ảnh (📌).")
+        self._media_action(moments.move_photos, assets, moment_id, text=f"Đã chuyển {len(assets)} ảnh (📌).",
+                           kind="move", n=len(assets))
 
     def _warning_action(self, move: bool) -> None:
         if self.project is None:
@@ -467,7 +514,8 @@ class EventWindow(MainWindow):
             return
         for a in warned:
             self.undo.media(moments.accept_warning if move else moments.keep_warning, a)
-        self._media_action(lambda _e: None, text=("Đã chuyển " if move else "Đã giữ ") + f"{len(warned)} ảnh.")
+        self._media_action(lambda _e: None, text=("Đã chuyển " if move else "Đã giữ ") + f"{len(warned)} ảnh.",
+                           kind="drift", n=len(warned))
 
     def open_clock(self) -> None:
         if self.project is None:
@@ -481,7 +529,8 @@ class EventWindow(MainWindow):
             self.undo.media(moments.set_clock, camera_id, seconds)
         if changes:
             n = len(moments.warnings(self.project.conn))
-            self._media_action(lambda _e: None, text="Đã chỉnh giờ." + (f" {n} ảnh ⚠ lệch giờ cần xem." if n else ""))
+            self._media_action(lambda _e: None, text="Đã chỉnh giờ." + (f" {n} ảnh ⚠ lệch giờ cần xem." if n else ""),
+                               kind="clock", n=len(changes))
 
     # ------------------------------------------------------------------ sidebar, filters, details
     def _refresh_media_sidebar(self) -> None:
@@ -499,6 +548,7 @@ class EventWindow(MainWindow):
         self.clock_button.setEnabled(len(cam.cameras(conn)) >= 2)
         current = self.moment_list.currentItem().data(Qt.ItemDataRole.UserRole) if self.moment_list.currentItem() else None
         warnings = moments.warnings(conn)
+        no_pick = set(sim.moments_without_pick(conn)) if self.act_near_dup.isChecked() else set()
         self.moment_list.blockSignals(True)
         self.moment_list.clear()
         all_item = QListWidgetItem("Tất cả khoảnh khắc")
@@ -508,7 +558,8 @@ class EventWindow(MainWindow):
             warn = sum(1 for a in m.assets if a in warnings)
             cover = " ".join(f"{lb.SHOT[k]}{'✓' if ok else '✗'}" for k, ok in lb.shot_coverage(conn, m.id).items())
             item = QListWidgetItem(f"{'📌 ' if m.pinned else ''}{m.name} · {len(m.assets)} ảnh"
-                                   + (f" · ⚠{warn}" if warn else "") + f"\n{cover}")
+                                   + (f" · ⚠{warn}" if warn else "") + f"\n{cover}"
+                                   + ("\n⚠ chưa có ảnh P" if m.id in no_pick else ""))
             item.setData(Qt.ItemDataRole.UserRole, m.id)
             self.moment_list.addItem(item)
         row = next((i for i in range(self.moment_list.count())
@@ -594,6 +645,128 @@ class EventWindow(MainWindow):
         n = conn.execute("SELECT COUNT(DISTINCT asset_id) FROM sample_labels").fetchone()[0]
         self.status.setText(f"Nhãn mẫu: {n} ảnh đã dán. " + SAMPLE_HELP)
 
+    # ------------------------------------------------------------------ trial numbers (REG-2)
+    def _record(self, kind: str, n: int = 1) -> None:
+        if self.project is not None:
+            trial.record(self.media_event.event_id, kind, n)
+
+    def _apply_to(self, targets, fn, label: str = "thay đổi ảnh") -> None:  # noqa: ANN001
+        super()._apply_to(targets, fn, label)
+        if targets and self.project is not None:
+            self._record(trial.decision_kind(label), len(targets))
+            if self.act_near_dup.isChecked():
+                self._refresh_media_sidebar()  # '⚠ chưa có ảnh P' follows the picks
+
+    def show_compare(self) -> bool:
+        shown = super().show_compare()
+        if shown:
+            self._record("compare", len(self.compare.records()))
+        return shown
+
+    def open_client_list_dialog(self):  # noqa: ANN201
+        dialog = super().open_client_list_dialog()
+        if dialog is not None:
+            dialog.accepted.connect(lambda: self._record("client_list"))
+        return dialog
+
+    # ------------------------------------------------------------------ 🧪 near-duplicate groups (experiment)
+    def set_near_dup(self, on: bool) -> None:
+        if self.project is None:
+            return
+        with self.project.transaction() as conn:
+            sim.set_on(conn, on)
+        self._record("experiment_on" if on else "experiment_off")
+        self._show_group_ui(on)
+        if on:
+            self._rebuild_groups()
+        else:
+            self.grouping = None
+            self.model.grouping, self.model.open_group = None, None
+            self.group_filter.setCurrentIndex(0)
+            self.reload_preserving_view()
+        self._refresh_media_sidebar()
+
+    def _show_group_ui(self, on: bool) -> None:
+        self.group_filter.setVisible(on)
+
+    def _rebuild_groups(self) -> None:
+        """Thumbnail hashes off the Qt thread, then the groups (a few SQL reads) here."""
+        if self.project is None or not self.act_near_dup.isChecked():
+            return
+        if self._hash_thread is not None:
+            self._hash_again = True
+            return
+        self._hash_again = False
+        t = _HashThread(self.project.folder, dict(self._hashes))
+        t.done.connect(self._hashes_ready)
+        self._hash_thread = t
+        self.status.setText("🧪 Đang gom ảnh gần trùng…")
+        t.start()
+
+    def _hashes_ready(self, hashes: dict) -> None:
+        t, self._hash_thread = self._hash_thread, None
+        if t is not None:
+            t.wait()
+        self._hashes = hashes
+        if getattr(self, "_hash_again", False):
+            self._rebuild_groups()
+            return
+        self._regroup()
+        if self.grouping is not None:
+            g = self.grouping
+            self.status.setText(f"🧪 {len(g.groups)} nhóm, gợi ý {len(g.representatives())} ảnh "
+                                f"({sum(1 for x in g.groups if x.size == 1)} nhóm chỉ một ảnh).")
+
+    def _regroup(self) -> None:
+        if self.project is None or not self.act_near_dup.isChecked():
+            return
+        self.grouping = sim.build(self.project.conn, self._hashes)
+        self.model.grouping = self.grouping
+        if self.model.open_group is not None and self.model.open_group >= len(self.grouping.groups):
+            self.model.open_group = None
+        self.reload_preserving_view()
+
+    def _group_filter_changed(self) -> None:
+        if self.group_filter.currentData() != "open":
+            self.model.open_group = None
+            i = self.group_filter.findData("open")
+            if i >= 0:
+                self.group_filter.blockSignals(True)
+                self.group_filter.removeItem(i)
+                self.group_filter.blockSignals(False)
+        self.model.only_reps = self.group_filter.currentData() == "reps"
+        self._apply_media_filter()
+
+    def open_group(self, asset_id: int) -> None:
+        if self.grouping is None or asset_id not in self.grouping.group_of:
+            return
+        index = self.grouping.group_of[asset_id]
+        self.model.open_group = index
+        self.group_filter.blockSignals(True)
+        if self.group_filter.findData("open") < 0:
+            self.group_filter.addItem("🧪 Nhóm đang mở", "open")
+        self.group_filter.setCurrentIndex(self.group_filter.findData("open"))
+        self.group_filter.blockSignals(False)
+        self._apply_media_filter()
+        size = self.grouping.groups[index].size
+        self._record("group_open", size)
+        self.status.setText(f"🧪 Nhóm {size} ảnh. Chuột phải → Đóng nhóm, hoặc chọn lại bộ lọc Nhóm.")
+
+    def close_group(self) -> None:
+        if self.model.open_group is None:
+            return
+        self._record("group_close")
+        self.group_filter.setCurrentIndex(self.group_filter.findData("reps"))
+
+    def group_fix(self, asset_id: int, fix: str) -> None:
+        """'break': this photo starts a new group; 'join': no break before this photo (same moment and camera)."""
+        if self.project is None:
+            return
+        with self.project.transaction() as conn:
+            sim.set_fix(conn, asset_id, fix)
+        self._record("group_break" if fix == "break" else "group_join")
+        self._regroup()
+
     def show_shortcuts(self) -> None:
         from PySide6.QtWidgets import QMessageBox
 
@@ -603,3 +776,29 @@ class EventWindow(MainWindow):
 
 
 __all__ = ["EventWindow", "MediaUndo", "QAction"]
+
+
+class _HashThread(QThread):
+    """Thumbnail hashes for the 🧪 near-duplicate groups, on its own read-only connection."""
+
+    done = Signal(dict)
+
+    def __init__(self, event_folder: Path, known: dict[int, int]) -> None:
+        super().__init__()
+        self.event_folder, self.known = event_folder, known
+
+    def run(self) -> None:
+        import sqlite3
+
+        from app.storage.project import CACHE_DIR, DB_NAME
+
+        try:
+            conn = sqlite3.connect(f"file:{self.event_folder / DB_NAME}?mode=ro", uri=True)
+            try:
+                hashes = sim.thumbnail_hashes(conn, self.event_folder / CACHE_DIR, self.known)
+            finally:
+                conn.close()
+        except Exception:  # noqa: BLE001 - the experiment must never break the window
+            log.exception("near-duplicate hashes failed")
+            hashes = dict(self.known)
+        self.done.emit(hashes)
