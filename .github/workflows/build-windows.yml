@@ -638,9 +638,8 @@ jobs:
           Get-Content $txt -Encoding UTF8 | ForEach-Object { Write-Host "::notice title=owner_measure::$_" }
           $all = Get-Content $txt -Encoding UTF8
           if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath("Desktop")) "KiraPick-do-nhap.zip"))) { throw "no result zip" }
-          if (-not ($all -match "\| 60 \| 20 \|")) { throw "60 cards after pairing / 20 pairs not reported" }
           if (-not ($all -match "^unchanged=True")) { throw "unchanged=True missing" }
-          if (-not ($all -match "chạy lại")) { throw "rerun rows missing" }
+          if (@($all -match "\| 80 \| 60 \| 20 \|").Count -lt 12) { throw "fresh + rerun rows (80 files, 60 cards, 20 pairs) missing" }  # ASCII only: PS 5.1 reads this inline script as ANSI
           # A wrong source must stop the script (then chuan-bi puts the right one back, keeping the wrong one renamed)
           Add-Content (Join-Path $env:USERPROFILE "KiraPick-Do\src\3.0.0\app\main.py") "# tampered"
           if ((Step "do-nhanh") -eq 0) { throw "a tampered source did not stop the script" }
