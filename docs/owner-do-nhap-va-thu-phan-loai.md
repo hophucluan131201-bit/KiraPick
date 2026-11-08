@@ -1,10 +1,42 @@
 # Test ngắn trên máy của bạn (REG-3): nhập ảnh, luồng Media, thử gợi ý ảnh gần trùng
 
-Không cần bộ cài mới. Ba bản chạy từ mã nguồn, ở đúng các commit ghi dưới đây, trong thư mục `%USERPROFILE%\KiraPick-Do`.
-Mọi phép thử dùng **profile test riêng** và **thư mục xuất riêng**: dữ liệu KiraPick thật của bạn
-(`%LOCALAPPDATA%\KiraPick`, cài đặt trong registry) không bị đọc hay ghi, và thư mục ảnh chỉ được **đọc**.
+## ĐỌC TRƯỚC: bản để test lấy ở đâu?
 
-Bạn chỉ gửi lại **con số** và **bảng ghi tay**. Ảnh, tên ảnh và đường dẫn không rời máy.
+**Bạn không tải bộ cài nào, và không gỡ hay cài lại gì cả.**
+
+- **KiraPick 3.0.0a đang cài trên máy giữ nguyên.** Nó không có Media, và lần test này **không dùng** nó. Dữ liệu của nó
+  (ảnh đã chọn, sao, nhóm người) không bị đụng tới.
+- **Bản có Media là "KiraPick Beta (test)".** Chưa có bộ cài cho bản này; nó chạy thẳng từ mã nguồn. Ở bước 1, script tự
+  tải về máy bạn, vào thư mục `C:\Users\<tên bạn>\KiraPick-Do`, đúng ba bản:
+
+  | Tên trong script | Là bản nào | Dùng để |
+  |---|---|---|
+  | `3.0.0` | mã nguồn của 3.0.0 (cùng chức năng với bản 3.0.0a bạn đang dùng; chỉ khác là chạy bằng CPU / DirectML) | so tốc độ nhập |
+  | `da-thu` | Beta 3.0.1b1 bạn đã thử trước đây | so tốc độ nhập |
+  | `beta` | **Beta đã sửa, có Media** | so tốc độ nhập, kiểm Media, thử A/B |
+
+- Script cũng tự cài **Python 3.12** (nếu máy chưa có) và các thư viện cần thiết. Mọi thứ nằm trong `KiraPick-Do`.
+  **Cần khoảng 3 GB ổ C trống** và mạng Internet ở bước 1.
+- Sau bước 1, bạn tạo **một biểu tượng "KiraPick Beta (test)" trên Desktop** (bước 1b). Bấm đúp vào đó là mở bản có Media,
+  giống mở một app bình thường.
+- Bản test dùng **profile riêng** (`KiraPick-Do\profile-thu`). Sự kiện, cài đặt và nhật ký của nó **không trộn** với
+  KiraPick 3.0.0a. Thư mục ảnh của bạn chỉ được **đọc**, không bị sửa.
+- Test xong muốn dọn: đóng KiraPick rồi xoá thư mục `KiraPick-Do`. KiraPick 3.0.0a vẫn như cũ.
+
+**Thứ tự làm:**
+1. **Bước 1:** tải và chuẩn bị (một lần, khoảng 20 phút).
+2. **Bước 1b:** tạo biểu tượng trên Desktop.
+3. **Bước 2:** đo tốc độ nhập (khoảng 10 phút, tự chạy).
+4. **Bước 3:** kiểm Media (khoảng 15 phút, bạn tự bấm).
+5. **Bước 4:** thử A/B (1–2 buổi).
+
+Gửi lại tôi **2 file zip** và **các bảng ghi tay** ở cuối tài liệu. Chỉ có con số; ảnh, tên ảnh và đường dẫn không rời máy.
+
+**Cách mở PowerShell:**
+1. Bấm nút Start, gõ `powershell`.
+2. Chọn **Windows PowerShell**. Không cần "Run as administrator".
+3. Mỗi khối lệnh: bấm vào khung lệnh trong tài liệu, Ctrl+C để sao chép, rồi bấm chuột phải vào cửa sổ PowerShell để dán.
+   Chờ chạy xong mới dán khối tiếp. Gặp chữ **đỏ** thì dừng lại, chụp màn hình gửi tôi.
 
 ## 0. Bản nào dùng cho phép thử nào
 
@@ -62,6 +94,28 @@ bản mã nguồn đều khớp SHA-256".
 
 ---
 
+## 1b. Tạo biểu tượng "KiraPick Beta (test)" trên Desktop
+
+```powershell
+$W = "$env:USERPROFILE\KiraPick-Do"
+$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$([Environment]::GetFolderPath('Desktop'))\KiraPick Beta (test).lnk")
+$lnk.TargetPath = "powershell.exe"
+$lnk.Arguments = "-ExecutionPolicy Bypass -WindowStyle Minimized -File `"$W\owner_measure.ps1`" -Buoc mo-beta"
+$lnk.WorkingDirectory = $W
+$ico = "$W\src\beta\packaging\kirapick.ico"; if (Test-Path $ico) { $lnk.IconLocation = $ico }
+$lnk.Save()
+Write-Host "Đã tạo biểu tượng KiraPick Beta (test) trên Desktop" -ForegroundColor Green
+```
+
+Bấm đúp vào biểu tượng:
+1. Một cửa sổ PowerShell nhỏ mở thu gọn dưới thanh tác vụ. **Đừng đóng nó**; nó tự đóng khi bạn đóng KiraPick.
+2. Sau vài giây, KiraPick hiện **màn hình chọn chế độ**: Chụp cá nhân / **Media sự kiện**.
+
+Nếu biểu tượng không mở được, dùng lệnh thay thế:
+`powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\KiraPick-Do\owner_measure.ps1" -Buoc mo-beta`
+
+---
+
 ## 2. Đo nhập nhanh (khoảng 10 phút)
 
 Nếu được, **khởi động lại máy** trước. Khi đó lần đo đầu là "cache lạnh"; script tự ghi theo thời gian máy đã bật.
@@ -95,10 +149,7 @@ Gửi tôi **`KiraPick-do-nhap.zip`** trên Desktop.
 
 ## 3. Kiểm nhanh luồng Media theo 3.0.0 (khoảng 15 phút)
 
-```powershell
-$W = "$env:USERPROFILE\KiraPick-Do"
-powershell -ExecutionPolicy Bypass -File "$W\owner_measure.ps1" -Buoc mo-beta
-```
+Bấm đúp biểu tượng **KiraPick Beta (test)** trên Desktop (bước 1b).
 
 1. Chọn **Media sự kiện**, tạo sự kiện **`KIEM MEDIA`**, nhập cùng thư mục ảnh, bấm 🧠 Phân tích sự kiện.
 2. Làm lần lượt các thao tác trong bảng 3 và điền kết quả.
@@ -110,7 +161,7 @@ powershell -ExecutionPolicy Bypass -File "$W\owner_measure.ps1" -Buoc mo-beta
 
 ### 4.1 Cùng tập ảnh, cùng trạng thái ban đầu
 
-Mở Beta bằng `-Buoc mo-beta` như mục 3. Tạo **ba** sự kiện từ **cùng** thư mục ảnh, gõ tên **đúng** như sau:
+Mở **KiraPick Beta (test)** từ biểu tượng trên Desktop, chọn **Media sự kiện**. Tạo **ba** sự kiện từ **cùng** thư mục ảnh, gõ tên **đúng** như sau:
 `RANH GIOI`, `THU A`, `THU B`. Với từng sự kiện: 📂 Nhập ảnh → 🧠 Phân tích sự kiện → chờ xong. **Chưa sửa gì.**
 
 ### 4.2 Ranh giới hoạt động theo đánh giá của bạn (trước mọi tách / gộp tay)
