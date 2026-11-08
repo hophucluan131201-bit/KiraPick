@@ -650,7 +650,8 @@ jobs:
           $env:KIRAPICK_PROFILE_DIR = Join-Path $W "profile-thu"
           $helper = Join-Path $env:RUNNER_TEMP "ab_events.py"
           @"
-          import sys
+          import os, sys
+          sys.path.insert(0, os.getcwd())  # run from src\\beta: the app package is there, not next to this file
           from pathlib import Path
           from app.media import cameras as cam, event as ev, moments as mo, samples, similar
           from app.storage import decisions

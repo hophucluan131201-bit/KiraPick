@@ -26,14 +26,14 @@ $Repo = "hophucluan131201-bit/KiraPick"
 $Refs = [ordered]@{
     "3.0.0"  = "e2fec9d769d8eb26f9772cd5f5bd0bf04adab4a2"   # tag v3.0.0
     "da-thu" = "d45548bb35b0dedd3e37fac5c55bf259ee9eb5a6"   # Beta bạn đã thử (3.0.1b1)
-    "beta"   = "22201ffd1b0a82a569ba56d24895a6ae9a9be9e1"   # Beta đã sửa: cửa sổ 3.0.0, 🧪 gom ảnh gần trùng, bộ đếm, profile test
+    "beta"   = "743b76a09fd5bfe60ba24233ef9b02a3ee423a5e"   # Beta đã sửa: cửa sổ 3.0.0, 🧪 gom ảnh gần trùng, bộ đếm, profile test, in UTF-8
 }
 $Expect = @{
     "3.0.0"  = @{ "app\main.py" = "29edb81f84e23991b449f7211cded83967e8d6c48d62102f67115f49200e86a0"
                   "app\ui\main_window.py" = "e53178f94e2fdfb6857998a712f375d7b53ac644df84b03f2da2bad241446b4f" }
     "da-thu" = @{ "app\main.py" = "5ed22dbcb3ba54db00bef01e3d1a1be500e58b1f7357d7d6916afa8ef38f22f3"
                   "app\ui\media_window.py" = "29983792007e521eef1a19208664c7f0af78cde42bf71abc51d5abbf90813519" }
-    "beta"   = @{ "app\main.py" = "3b92f576d9234942b2b3db68f3aa1a49630af1cc8045a1f392fe00aed959c0a6"
+    "beta"   = @{ "app\main.py" = "4d7db2755f2e9f68c1212d8e0c925bfe45a728d89f4b796f048afb7b81489cbb"
                   "app\ui\media_event_window.py" = "e160ee1335c73971eff78ce19733e165b0330d744e90b7b9bbc75647dee9a746"
                   "app\media\similar.py" = "8137146080ca966b20d5fdbc5bd495edc7cb4558f297290a6597e846f945ffd9"
                   "app\media\trial.py" = "8da0eaf9880699e50a6bbdb1b38542b1c466f4ff88f578d156bd84af61fb755f"
