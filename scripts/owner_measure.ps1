@@ -36,7 +36,7 @@ $Expect = @{
                   "app\ui\main_window.py" = "871d3848f09a42b06bbf96118caf1f4a0a5ad383fd8015c797d39083b689c947"
                   "app\branding.py" = "415798f79c091a15a90f93a09abe77bece0b1fede271ec6337cd21db1c7ab369"
                   "scripts\measure_import.py" = "5ceb0b3a91a64a1caa61b15b96d7c90bbd160167a5ab1497311d812cd631a408" }
-}}
+}
 $Src = Join-Path $Work "src"
 $Out = Join-Path $Work "ket-qua"
 $Py = Join-Path $Work "venv\Scripts\python.exe"
