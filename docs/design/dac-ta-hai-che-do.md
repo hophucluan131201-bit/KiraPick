@@ -1,5 +1,7 @@
 # KiraPick Beta — Đặc tả màn hình chọn chế độ
 
+> **ĐÃ BỎ (2026-11-12):** chủ dự án quyết định bỏ hẳn Media sự kiện; mã đã gỡ khỏi `beta` (commit `942b02e`). Tài liệu này chỉ còn là lịch sử.
+
 **Trạng thái:** Dự thảo để chủ dự án duyệt.  
 **Phạm vi GitHub:** Làm việc tại khu vực Beta của repository KiraPick. Claude Code xác minh nhánh hoặc đích PR thực tế tương ứng với “tab Beta” trước khi triển khai. Chủ dự án duyệt riêng việc hợp nhất vào nhánh chính, tạo tag và phát hành.
 

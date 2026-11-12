@@ -1,5 +1,7 @@
 # Media — đề xuất phân loại theo việc của người chụp (bản trình 2, 2026-11-07)
 
+> **ĐÃ BỎ (2026-11-12):** chủ dự án quyết định bỏ hẳn Media sự kiện; mã đã gỡ khỏi `beta` (commit `942b02e`). Tài liệu này chỉ còn là lịch sử.
+
 **Trạng thái:** trình chủ dự án. **Chưa sửa logic phân loại** cho tới khi chủ dự án duyệt.
 Bản 1 (phương án A / B / C) được thay bằng bản này theo kết luận "BETA 3.0.1b1 / b1a CHƯA ĐẠT NGHIỆM THU", mục 3.
 

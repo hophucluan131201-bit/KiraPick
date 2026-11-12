@@ -1,5 +1,7 @@
 # Media sự kiện — Kế hoạch triển khai Mốc 1 (bản 3, 2026-11-07)
 
+> **ĐÃ BỎ (2026-11-12):** chủ dự án quyết định bỏ hẳn Media sự kiện; mã đã gỡ khỏi `beta` (commit `942b02e`). Tài liệu này chỉ còn là lịch sử.
+
 **Trạng thái:**
 - Chủ dự án **duyệt M1-OK và MED-EXP** (2026-11-07).
 - Review: làm theo **hai đợt**. **Đợt 1 (M1–M5)** đã review xong, kết quả ở mục 6. **Đợt 2 (M6–M11)** đã làm sau vòng

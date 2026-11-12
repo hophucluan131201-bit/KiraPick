@@ -1,5 +1,7 @@
 # Màn hình chọn chế độ — Thiết kế bước 1 (chờ duyệt)
 
+> **ĐÃ BỎ (2026-11-12):** chủ dự án quyết định bỏ hẳn Media sự kiện; mã đã gỡ khỏi `beta` (commit `942b02e`). Tài liệu này chỉ còn là lịch sử.
+
 Đặc tả gốc: `KiraPick_Beta_Dac_ta_hai_che_do.md`.
 **Chưa viết code nào.** Phần mở rộng này sẽ được làm sau khi bạn duyệt thiết kế này.
 

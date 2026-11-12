@@ -1,5 +1,7 @@
 # Media sự kiện — Đặc tả bản 6 (2026-11-07)
 
+> **ĐÃ BỎ (2026-11-12):** chủ dự án quyết định bỏ hẳn Media sự kiện; mã đã gỡ khỏi `beta` (commit `942b02e`). Tài liệu này chỉ còn là lịch sử.
+
 - **Phạm vi:** nhánh `beta`. Mốc 1 đang được viết mã (đợt 1: M1–M5 đã có; kế hoạch ở `docs/design/media-moc1-ke-hoach.md`).
 - **Bản 5** đã được chủ dự án duyệt ngày 2026-11-06. **Bản 6** chỉ sửa phần kỹ thuật theo LIC-1 và các quyết định
   ngày 2026-11-07 (mục 0). Không đổi quyết định nào của chủ dự án ngoài những quyết định ghi ở mục 0.

@@ -1,5 +1,7 @@
 # Hướng dẫn thử bản Beta KiraPick 3.0.1b1 (DirectML) và 3.0.1b1a (CUDA)
 
+> **ĐÃ BỎ (2026-11-12):** chủ dự án quyết định bỏ hẳn Media sự kiện; mã đã gỡ khỏi `beta` (commit `942b02e`). Tài liệu này chỉ còn là lịch sử.
+
 Đây là **bộ cài thử**, không phải bản phát hành: chưa tag, chưa release, chưa merge `main`.
 Phạm vi: phần nền LIC-1 (chỉ dùng mô hình có căn cứ quyền) + chế độ **Media sự kiện** Mốc 1.
 

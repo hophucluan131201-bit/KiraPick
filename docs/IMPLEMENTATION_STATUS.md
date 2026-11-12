@@ -6,6 +6,17 @@ Windows laptop" unless stated.
 
 Last update: 2026-10-27 (release 2.0.0 = beta 0.3.0b4 merged into main) — dev container: Linux x86-64, Python 3.13.17, no GPU, no display. First Windows field test received (see raw-support-matrix.md).
 
+## Media sự kiện — REMOVED (owner decision 2026-11-12)
+
+The owner judged the event mode not worth it after the REG-1…REG-3 rounds and chose to delete it. Commit `942b02e`:
+`app/media/`, the Media and mode-picker UI, `--media-score` / `--media-counts`, the self-test Media step, the Media tests
+and the `media` mode of `configs/model-policy.json` are gone; KiraPick opens straight into the Chụp cá nhân window, as
+3.0.0. Kept because they serve Chụp cá nhân: ⚙ → ℹ Giới thiệu (models and licences, benchmark basis per weight),
+plain function names on work screens, the empty-subject guard, the `KIRAPICK_PROFILE_DIR` test profile, UTF-8
+command-line output. Owner measurements before the removal: `docs/owner-ket-qua-reg3.md` (Chụp cá nhân import not
+slower than 3.0.0). Event data a tester created with 3.0.1b1 stays on their disk untouched. Design documents
+`docs/design/media-*.md` are kept as history, marked removed.
+
 ## Target machine (from `scripts/diagnose_hardware.py`, 2026-10-27)
 
 Windows 11 (10.0.26300), Python 3.12.10, NVIDIA GeForce RTX 2080 Super with Max-Q Design,

@@ -1,5 +1,7 @@
 # Phản biện đặc tả "Media sự kiện" (bản 1)
 
+> **ĐÃ BỎ (2026-11-12):** chủ dự án quyết định bỏ hẳn Media sự kiện; mã đã gỡ khỏi `beta` (commit `942b02e`). Tài liệu này chỉ còn là lịch sử.
+
 Mình tự soi lại bản đặc tả vừa viết, như một người duyệt khó tính. Mỗi mục gồm: **vấn đề**, **vì sao quan trọng** và
 **đề xuất sửa**. Mức độ được ghi trong ngoặc:
 - **Chặn:** phải sửa trước khi làm.
