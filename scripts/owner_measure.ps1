@@ -1,5 +1,6 @@
 ﻿<#
-KiraPick — phép thử trên máy chủ dự án (REG-3). Không cần bộ cài mới: ba bản chạy từ mã nguồn ở commit cố định.
+KiraPick — đo nhập ảnh trên máy chủ dự án (Chụp cá nhân). Không cần bộ cài mới: ba bản chạy từ mã nguồn ở commit cố
+định. Media sự kiện đã bỏ (2026-11-12): script chỉ còn đo Chụp cá nhân.
 
     -Buoc chuan-bi  -Anh "<thư mục ảnh sự kiện thật, có RAW+JPEG>"   tải và kiểm mã nguồn, cài thư viện và mô hình được phép
     -Buoc do-nhanh                     đo nhanh: mỗi bản một lần (lần mở đầu + lần chạy lại)
@@ -7,14 +8,12 @@ KiraPick — phép thử trên máy chủ dự án (REG-3). Không cần bộ c�
     -Buoc do-am                        đo đầy đủ, cache ấm, hai vòng
     -Buoc do-phan-tich                 thời gian phân tích AI, đo riêng (chỉ Beta)
     -Buoc tong-hop                     bảng kết quả + KiraPick-do-nhap.zip trên Desktop
-    -Buoc mo-beta                      mở Beta đã sửa trên PROFILE TEST RIÊNG (không đụng dữ liệu KiraPick thật)
-    -Buoc dem-ab                       lấy số của phép thử A/B + KiraPick-thu-phan-loai.zip trên Desktop
 
 Thư mục ảnh chỉ được ĐỌC (kiểm trước / sau: unchanged=True). Kết quả chỉ có con số, không có ảnh, tên ảnh hay đường dẫn.
 #>
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("chuan-bi", "do-nhanh", "do-lanh", "do-am", "do-phan-tich", "tong-hop", "mo-beta", "dem-ab")]
+    [ValidateSet("chuan-bi", "do-nhanh", "do-lanh", "do-am", "do-phan-tich", "tong-hop")]
     [string]$Buoc,
     [string]$Anh = "",
     [ValidateSet("3.0.0", "beta", "da-thu")][string]$Ban = "beta",
@@ -26,26 +25,22 @@ $Repo = "hophucluan131201-bit/KiraPick"
 $Refs = [ordered]@{
     "3.0.0"  = "e2fec9d769d8eb26f9772cd5f5bd0bf04adab4a2"   # tag v3.0.0
     "da-thu" = "d45548bb35b0dedd3e37fac5c55bf259ee9eb5a6"   # Beta bạn đã thử (3.0.1b1)
-    "beta"   = "743b76a09fd5bfe60ba24233ef9b02a3ee423a5e"   # Beta đã sửa: cửa sổ 3.0.0, 🧪 gom ảnh gần trùng, bộ đếm, profile test, in UTF-8
+    "beta"   = "942b02e6251e72a422c9c242a6fc661406f7a16c"   # Beta hiện tại: Chụp cá nhân như 3.0.0, đã bỏ Media
 }
 $Expect = @{
     "3.0.0"  = @{ "app\main.py" = "29edb81f84e23991b449f7211cded83967e8d6c48d62102f67115f49200e86a0"
                   "app\ui\main_window.py" = "e53178f94e2fdfb6857998a712f375d7b53ac644df84b03f2da2bad241446b4f" }
     "da-thu" = @{ "app\main.py" = "5ed22dbcb3ba54db00bef01e3d1a1be500e58b1f7357d7d6916afa8ef38f22f3"
                   "app\ui\media_window.py" = "29983792007e521eef1a19208664c7f0af78cde42bf71abc51d5abbf90813519" }
-    "beta"   = @{ "app\main.py" = "4d7db2755f2e9f68c1212d8e0c925bfe45a728d89f4b796f048afb7b81489cbb"
-                  "app\ui\media_event_window.py" = "e160ee1335c73971eff78ce19733e165b0330d744e90b7b9bbc75647dee9a746"
-                  "app\media\similar.py" = "8137146080ca966b20d5fdbc5bd495edc7cb4558f297290a6597e846f945ffd9"
-                  "app\media\trial.py" = "8da0eaf9880699e50a6bbdb1b38542b1c466f4ff88f578d156bd84af61fb755f"
+    "beta"   = @{ "app\main.py" = "77d7d3c79c2074c79be96c690afccafcf732e45ec2676753a74cf16ee5a71739"
+                  "app\ui\main_window.py" = "871d3848f09a42b06bbf96118caf1f4a0a5ad383fd8015c797d39083b689c947"
                   "app\branding.py" = "415798f79c091a15a90f93a09abe77bece0b1fede271ec6337cd21db1c7ab369"
-                  "scripts\measure_import.py" = "9c06de2076797b0c4073d31a955c562781a0b49d9b3b9db46109624e7c2d5c36" }
-}
+                  "scripts\measure_import.py" = "5ceb0b3a91a64a1caa61b15b96d7c90bbd160167a5ab1497311d812cd631a408" }
+}}
 $Src = Join-Path $Work "src"
 $Out = Join-Path $Work "ket-qua"
 $Py = Join-Path $Work "venv\Scripts\python.exe"
 $Conf = Join-Path $Work "cau-hinh.json"
-$TestProfile = Join-Path $Work "profile-thu"        # profile test riêng cho Beta chạy từ mã nguồn
-$EventNames = @("RANH GIOI", "THU A", "THU B")   # tên sự kiện của phép thử A/B, gõ đúng như vậy
 
 function Say([string]$text) { Write-Host $text -ForegroundColor Cyan }
 function Stop-Here([string]$text) { Write-Host $text -ForegroundColor Red; exit 1 }
@@ -99,13 +94,6 @@ function Measure-One([string]$ban, [string]$mode, [string]$cache, [string[]]$ext
     ($j | ConvertTo-Json -Depth 6) | Set-Content -Path $file -Encoding UTF8
     Write-Host ("  ảnh đầu {0} s | mở/đánh dấu được {1} s | nhập xong {2} s | {3} thẻ ảnh sau ghép, {4} cặp RAW+JPEG | chạy lại: xong {5} s" -f `
         $j.grid_first_s, $j.usable_s, $j.import_done_s, $j.rows, $j.pairs, $j.reopen_import_done_s)
-}
-
-function Run-Python-App([string[]]$appArgs) {
-    Require-Source "beta"
-    $env:KIRAPICK_PROFILE_DIR = $TestProfile
-    Push-Location (Root "beta")
-    try { & $Py -m app @appArgs } finally { Pop-Location }
 }
 
 switch ($Buoc) {
@@ -185,7 +173,7 @@ switch ($Buoc) {
     "do-nhanh" {
         # Mỗi bản một lần, nối tiếp. Lần đo đầu tiên sau khi khởi động lại máy (< 20 phút) là cache lạnh, các lần sau ấm.
         $first = $true
-        foreach ($x in @(@("3.0.0", "personal"), @("da-thu", "personal"), @("beta", "personal"), @("da-thu", "media"), @("beta", "media"))) {
+        foreach ($x in @(@("3.0.0", "personal"), @("da-thu", "personal"), @("beta", "personal"))) {
             $cache = if ($first -and (Uptime-Minutes) -lt 20) { "lanh" } else { "am" }
             Measure-One $x[0] $x[1] $cache @() "nhanh"
             $first = $false
@@ -201,7 +189,7 @@ switch ($Buoc) {
         }
     }
     "do-am" {
-        $order = @(@("3.0.0", "personal"), @("da-thu", "personal"), @("da-thu", "media"), @("beta", "personal"), @("beta", "media"))
+        $order = @(@("3.0.0", "personal"), @("da-thu", "personal"), @("beta", "personal"))
         foreach ($round in 1..2) {
             $list = if ($round -eq 1) { $order } else { $order[($order.Count - 1)..0] }  # đảo thứ tự ở vòng 2
             foreach ($x in $list) { Measure-One $x[0] $x[1] "am" @() "day-du" }
@@ -210,7 +198,6 @@ switch ($Buoc) {
     "do-phan-tich" {
         # Chỉ bản Beta: bản cũ mở những mô hình không được dùng, kể cả để đo (configs\model-policy.json)
         Measure-One "beta" "personal" "am" @("--analysis", "--gpu") "phan-tich"
-        Measure-One "beta" "media" "am" @("--analysis", "--gpu") "phan-tich"
     }
     "tong-hop" {
         $c = Load-Conf
@@ -238,20 +225,5 @@ switch ($Buoc) {
         Compress-Archive -Path (Join-Path $Out "*") -DestinationPath $zip -Force
         if (-not $unchanged) { Stop-Here "unchanged=False: thư mục ảnh đã đổi trong lúc đo. Đừng dùng thư mục đó nữa, báo lại ngay." }
         Say "Gửi file này: $zip (chỉ có con số, không có ảnh hay tên ảnh)."
-    }
-    "mo-beta" {
-        Say "Mở Beta đã sửa ($($Refs['beta'].Substring(0,7))) trên profile test: $TestProfile"
-        Say "Dữ liệu KiraPick thật của bạn không bị đọc hay ghi. Đóng cửa sổ KiraPick là xong."
-        Run-Python-App @()
-    }
-    "dem-ab" {
-        $ab = Join-Path $Work "thu-ab"
-        New-Item -ItemType Directory -Force -Path $ab | Out-Null
-        Run-Python-App @("--media-counts", "THU A", "--ranh-gioi", "RANH GIOI", "--out", (Join-Path $ab "dem-A.json")) | Out-Null
-        Run-Python-App @("--media-counts", "THU B", "--ranh-gioi", "RANH GIOI", "--out", (Join-Path $ab "dem-B.json")) | Out-Null
-        foreach ($f in "dem-A.json", "dem-B.json") { if (-not (Test-Path (Join-Path $ab $f))) { Stop-Here "Thiếu $($f): kiểm tên ba sự kiện $($EventNames -join ', ')" } }
-        $zip = Join-Path ([Environment]::GetFolderPath("Desktop")) "KiraPick-thu-phan-loai.zip"
-        Compress-Archive -Path (Join-Path $ab "*") -DestinationPath $zip -Force
-        Say "Gửi file này cùng bảng ghi tay: $zip (chỉ có con số)."
     }
 }

@@ -509,7 +509,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          $tests = "tests/unit/test_model_policy.py tests/unit/test_load_log.py tests/unit/test_provenance.py tests/unit/test_old_cache.py tests/unit/test_user_edits.py tests/unit/test_fallback_paths.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_network_blocked.py tests/unit/test_selftest.py tests/unit/test_media_models.py tests/gui/test_manual_grouping.py tests/gui/test_mode_picker.py tests/gui/test_media_window.py tests/unit/test_packaging.py tests/unit/test_package_inventory.py tests/unit/test_grp1_counts.py tests/media".Split(" ")
+          $tests = "tests/unit/test_model_policy.py tests/unit/test_load_log.py tests/unit/test_provenance.py tests/unit/test_old_cache.py tests/unit/test_user_edits.py tests/unit/test_fallback_paths.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_network_blocked.py tests/unit/test_selftest.py tests/gui/test_manual_grouping.py tests/gui/test_about_models.py tests/unit/test_packaging.py tests/unit/test_package_inventory.py tests/unit/test_grp1_counts.py tests/unit/test_test_profile.py".Split(" ")
           python -m pytest -q -p no:cacheprovider -rs @tests *>&1 | Tee-Object -FilePath lic1.log
           Write-Host "::notice title=LIC-1 tests (network open)::$((Get-Content lic1.log -Tail 3) -join ' | ')"
           if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -524,7 +524,7 @@ jobs:
             python -c "import socket; socket.create_connection(('example.com', 443), timeout=5)"
             if ($LASTEXITCODE -eq 0) { Write-Host "::error::the firewall rule did not block python.exe"; exit 1 }
             Write-Host "::notice title=firewall::outbound connections of python.exe are blocked"
-            $tests = "tests/unit/test_network_blocked.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_selftest.py tests/gui/test_mode_picker.py".Split(" ")
+            $tests = "tests/unit/test_network_blocked.py tests/unit/test_analysis_without_recogniser.py tests/unit/test_selftest.py".Split(" ")
             python -m pytest -q -p no:cacheprovider -rs @tests *>&1 | Tee-Object -FilePath lic1fw.log
             $code = $LASTEXITCODE
             Write-Host "::notice title=LIC-1 tests (firewall)::$((Get-Content lic1fw.log -Tail 3) -join ' | ')"
@@ -579,8 +579,7 @@ jobs:
             foreach ($set in "jpeg300", "raw60") {
               foreach ($k in 0..2) {
                 $name = $names[($k + $round - 1) % 3]  # rotate the order each round
-                foreach ($mode in "personal", "media") {
-                  if ($name -eq "3.0.0" -and $mode -eq "media") { continue }  # 3.0.0 has no Media
+                foreach ($mode in @("personal")) {  # Media sự kiện removed (2026-11-12)
                   $out = Join-Path (Resolve-Path timing).Path "$name-$mode-$set-r$round.json"
                   python $tool run $roots[$name] (Join-Path $data $set) $mode $out --reopen | Out-Null
                   if (Test-Path $out) {
@@ -599,7 +598,7 @@ jobs:
           retention-days: 30
 
   owner-measure-check:
-    # REG-2: the owner's measuring script, every step, on a synthetic folder (60 public-domain NASA NEF copies + 20
+    # The owner's import-timing script (Chụp cá nhân), every step, on a synthetic folder (60 public-domain NASA NEF copies + 20
     # JPEG). Checks that the script runs on a clean Windows; the numbers are not the owner's.
     if: github.event.inputs.owner_measure_check == 'true'
     runs-on: windows-2022
@@ -639,57 +638,13 @@ jobs:
           $all = Get-Content $txt -Encoding UTF8
           if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath("Desktop")) "KiraPick-do-nhap.zip"))) { throw "no result zip" }
           if (-not ($all -match "^unchanged=True")) { throw "unchanged=True missing" }
-          if (@($all -match "\| 80 \| 60 \| 20 \|").Count -lt 12) { throw "fresh + rerun rows (80 files, 60 cards, 20 pairs) missing" }  # ASCII only: PS 5.1 reads this inline script as ANSI
+          if (@($all -match "\| 80 \| 60 \| 20 \|").Count -lt 10) { throw "fresh + rerun rows (80 files, 60 cards, 20 pairs) missing" }  # ASCII only: PS 5.1 reads this inline script as ANSI
           # A wrong source must stop the script (then chuan-bi puts the right one back, keeping the wrong one renamed)
           Add-Content (Join-Path $env:USERPROFILE "KiraPick-Do\src\3.0.0\app\main.py") "# tampered"
           if ((Step "do-nhanh") -eq 0) { throw "a tampered source did not stop the script" }
           Write-Host "::notice title=owner_measure::tampered source stopped the script, as expected"
           if ((Step "chuan-bi") -ne 0) { throw "chuan-bi did not restore the source" }
-          # A/B counts on the separate test profile: three events as the guide names them
-          $W = Join-Path $env:USERPROFILE "KiraPick-Do"
-          $env:KIRAPICK_PROFILE_DIR = Join-Path $W "profile-thu"
-          $helper = Join-Path $env:RUNNER_TEMP "ab_events.py"
-          @"
-          import os, sys
-          sys.path.insert(0, os.getcwd())  # run from src\\beta: the app package is there, not next to this file
-          from pathlib import Path
-          from app.media import cameras as cam, event as ev, moments as mo, samples, similar
-          from app.storage import decisions
-          folder = Path(sys.argv[1])
-          made = {}
-          for name in ("RANH GIOI", "THU A", "THU B"):
-              e = ev.create_event(name)
-              cam.import_folder(e, folder)
-              mo.analyse(e)
-              made[name] = e
-          ids = [r[0] for r in made["RANH GIOI"].conn.execute("SELECT id FROM assets WHERE status = 'ok' ORDER BY relative_path")]
-          samples.set_sample(made["RANH GIOI"].conn, [ids[len(ids) // 2]], "boundary", "start")
-          with made["THU B"].transaction() as conn:
-              similar.set_on(conn, True)
-          first = made["THU A"].conn.execute("SELECT MIN(id) FROM assets WHERE status = 'ok'").fetchone()[0]
-          decisions.set_flag(made["THU A"].conn, first, "keep")
-          print("events", ev.media_root())
-          "@ -replace "(?m)^          ", "" | Set-Content $helper -Encoding UTF8
-          Push-Location (Join-Path $W "src\beta"); & (Join-Path $W "venv\Scripts\python.exe") $helper $anh; Pop-Location
-          Remove-Item Env:\KIRAPICK_PROFILE_DIR
-          if ((Step "dem-ab") -ne 0) { throw "dem-ab failed" }
-          foreach ($f in "dem-A.json", "dem-B.json") {
-            $j = Get-Content (Join-Path $W "thu-ab\$f") -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($null -eq $j.vs_owner_boundaries -or $null -eq $j.manual_edits) { throw "$f lacks the A/B numbers" }
-            Write-Host "::notice title=dem-ab $f::photos $($j.photos) | moments $($j.moments) | experiment $($j.experiment_on) | vs owner $($j.vs_owner_boundaries | ConvertTo-Json -Compress) | app split $($j.app_split_vs_owner_boundaries | ConvertTo-Json -Compress) | groups $($j.groups | ConvertTo-Json -Compress)"
-          }
-          if (Test-Path $real) { throw "the real %LOCALAPPDATA%\KiraPick was created: the test profile leaked" }
-          Write-Host "::notice title=owner_measure::real %LOCALAPPDATA%\KiraPick never created (separate profile and temp folders only)"
-          # Step 1b of the owner guide, run exactly as written there: the Desktop shortcut to the Beta (test)
-          $doc = Get-Content docs\owner-do-nhap-va-thu-phan-loai.md -Raw -Encoding UTF8
-          $block = [regex]::Match($doc.Substring($doc.IndexOf("## 1b.")), '(?s)```powershell\r?\n(.*?)```').Groups[1].Value
-          $ps = Join-Path $env:RUNNER_TEMP "step1b.ps1"; Set-Content $ps $block -Encoding UTF8
-          powershell -ExecutionPolicy Bypass -File $ps | Out-Host
-          $lnkPath = Join-Path ([Environment]::GetFolderPath("Desktop")) "KiraPick Beta (test).lnk"
-          if (-not (Test-Path $lnkPath)) { throw "step 1b made no shortcut" }
-          $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($lnkPath)
-          if ($lnk.Arguments -notmatch "owner_measure.ps1.*-Buoc mo-beta") { throw "shortcut arguments: $($lnk.Arguments)" }
-          Write-Host "::notice title=owner guide 1b::shortcut OK: $($lnk.TargetPath) $($lnk.Arguments)"
+
 
   k2-repeat:
     if: github.event.inputs.k2_repeat == 'true'
