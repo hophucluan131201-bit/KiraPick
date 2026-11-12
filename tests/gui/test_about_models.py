@@ -36,7 +36,7 @@ def _ui_strings(path: Path) -> list[tuple[int, str]]:
 
 
 def test_work_screens_name_functions_not_models() -> None:
-    files = sorted(ROOT.glob("app/ui/*.py")) + [ROOT / "app/media/analysis.py", ROOT / "app/quality/score.py",
+    files = sorted(ROOT.glob("app/ui/*.py")) + [ROOT / "app/quality/score.py",
                                                   ROOT / "app/workers/analyze_process.py"]
     found = []
     for f in files:

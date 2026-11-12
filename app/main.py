@@ -58,14 +58,6 @@ def main(argv: list[str] | None = None) -> int:
         from app.diagnostics.grp1 import run_cli as grp1
 
         return grp1(argv[argv.index("--grp1-counts") + 1:])
-    if "--media-counts" in argv:  # Media trial numbers (REG-2), read-only, numbers only, no window
-        from app.media.trial import run_cli as media_counts
-
-        return media_counts(argv[argv.index("--media-counts") + 1:])
-    if "--media-score" in argv:  # Media sample scoring (spec §11), read-only, numbers only, network blocked
-        from app.media.samples import run_cli as media_score
-
-        return media_score(argv[argv.index("--media-score") + 1:])
     if "--self-test" in argv:  # packaged app check, no window: KiraPick.exe --self-test report.json
         rest = argv[argv.index("--self-test") + 1:]  # [report.json] [a photo folder to try, read-only]
         report = Path(rest[0]) if rest else Path.cwd() / "kirapick-selftest.json"
@@ -105,12 +97,12 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger(__name__).info("starting %s (logs in %s)", __version__, log_dir)
     _install_excepthook()
 
-    from app.ui.app_shell import AppShell
+    from app.ui.main_window import MainWindow
     from app.ui.theme import apply_dark_theme
 
     apply_dark_theme(app)
-    shell = AppShell()  # every normal start: the mode picker (Chụp cá nhân / Media sự kiện)
-    shell.start()
+    window = MainWindow()
+    window.show()
     return app.exec()
 
 

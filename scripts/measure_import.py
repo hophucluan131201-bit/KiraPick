@@ -4,7 +4,7 @@
         <dir>/jpeg300: 300 synthetic 2400×1600 JPEGs with EXIF date, 2 s apart (no real photos)
         <dir>/raw60:   60 copies of the given RAW files (each made unique by a trailing byte, because the import
                        skips identical files) + 20 same-name JPEGs, so 20 RAW+JPEG pairs
-    python scripts/measure_import.py run <repo root> <photos> <personal|media> <out.json> [--reopen] [--analysis] [--gpu]
+    python scripts/measure_import.py run <repo root> <photos> personal <out.json> [--reopen] [--analysis] [--gpu]
 
 ``--analysis`` only on this checkout (the allow-list of configs/model-policy.json decides which weights open); older
 checkouts are measured for the import only. ``run`` opens the window of the checkout at <repo root> (offscreen is fine) and records, separately: the first photo
@@ -148,58 +148,30 @@ def run(root: Path, photos: Path, mode: str, out: Path, reopen: bool, analysis: 
                                     "WHERE pair_group_id IS NOT NULL").fetchone()[0]
         res["with_capture_time"] = conn.execute("SELECT COUNT(*) FROM assets WHERE capture_time IS NOT NULL").fetchone()[0]
 
-    if mode == "personal":
-        import app.ui.main_window as mw
+    if mode != "personal":
+        raise SystemExit("only 'personal' (Chụp cá nhân): Media sự kiện was removed on 2026-11-12")
+    import app.ui.main_window as mw
 
-        mw.sessions_dir = lambda: tmp / "sessions"
-        w = mw.MainWindow(settings=QSettings(str(tmp / "s.ini"), QSettings.Format.IniFormat))
-        w._maximize_on_show = False
-        w.resize(1600, 1000)
-        w.show()
-        pump(0.3)
-        if hasattr(w, "act_gpu"):
-            w.act_gpu.setChecked(gpu)
-        run_import(w, lambda: w.start_import(photos), "")
-        counts(w.project.conn)
-        if reopen:
-            run_import(w, lambda: w.start_import(photos), "reopen_")
-        if analysis:
-            for m in ("people", "quality"):
-                t1 = time.perf_counter()
-                w.start_analysis(m)
-                pump(0.2)
-                wait(lambda: w.analyze_thread is None)
-                res[f"analysis_{m}_s"] = round(time.perf_counter() - t1, 2)
-                pump(0.3)
-    else:
-        from app.ui.media_home import MediaHome
-
-        settings = QSettings(str(tmp / "s.ini"), QSettings.Format.IniFormat)
-        kwargs = {"settings": settings} if "settings" in MediaHome.__init__.__code__.co_varnames else {}
-        h = MediaHome(root=tmp / "media", **kwargs)
-        h.resize(1600, 1000)
-        h.show()
-        pump(0.3)
-        h.create("Timing")
-        v = h.view
-        if hasattr(v, "resize"):
-            v.resize(1600, 1000)
-        run_import(v, lambda: v.start_import(photos), "")
-        counts(v.media_event.conn)
-        if reopen:
-            run_import(v, lambda: v.start_import(photos), "reopen_")
-        if analysis:
+    mw.sessions_dir = lambda: tmp / "sessions"
+    w = mw.MainWindow(settings=QSettings(str(tmp / "s.ini"), QSettings.Format.IniFormat))
+    w._maximize_on_show = False
+    w.resize(1600, 1000)
+    w.show()
+    pump(0.3)
+    if hasattr(w, "act_gpu"):
+        w.act_gpu.setChecked(gpu)
+    run_import(w, lambda: w.start_import(photos), "")
+    counts(w.project.conn)
+    if reopen:
+        run_import(w, lambda: w.start_import(photos), "reopen_")
+    if analysis:
+        for m in ("people", "quality"):
             t1 = time.perf_counter()
-            if hasattr(v, "act_gpu"):  # the 3.0.0 window (EventWindow)
-                v.act_gpu.setChecked(gpu)
-                v.start_analysis("people")
-                attr = "analyze_thread"
-            else:  # the tested Beta's EventView
-                v.start_analysis(prefer_gpu=gpu)
-                attr = "analysis_thread"
+            w.start_analysis(m)
             pump(0.2)
-            wait(lambda: getattr(v, attr) is None)
-            res["analysis_media_s"] = round(time.perf_counter() - t1, 2)
+            wait(lambda: w.analyze_thread is None)
+            res[f"analysis_{m}_s"] = round(time.perf_counter() - t1, 2)
+            pump(0.3)
     out.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(res, ensure_ascii=False))
     sys.stdout.flush()

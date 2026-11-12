@@ -15,42 +15,34 @@ from app.ai.models import ModelRegistry, ModelState
 @dataclass(frozen=True, slots=True)
 class Feature:
     name: str  # the function, as the work screens say it
-    modes: str  # "Chụp cá nhân", "Media", or both
+    modes: str  # where the function is ("Chụp cá nhân"; "—" for functions of 3.0.0 that are gone)
     models: tuple[str, ...]  # model ids (configs/model-manifest.json); empty = a rule, no model
     rule: str = ""  # what it runs on when it needs no model
     without: str = ""  # what the user gets when the model is off or missing
 
 
 FEATURES: tuple[Feature, ...] = (
-    Feature("Dò người trong ảnh", "Chụp cá nhân, Media", ("person_detector_s", "person_detector_m"),
-            without="Không dò được người: không gom tay theo người được, Media không xếp cỡ cảnh. Duyệt, P/X, sao, "
-                    "xuất vẫn dùng được."),
-    Feature("Dò khuôn mặt", "Chụp cá nhân, Media", ("face_detector",),
-            without="Không đo nét ở mặt / mắt; Media xếp cỡ cảnh chỉ theo khung người."),
+    Feature("Dò người trong ảnh", "Chụp cá nhân", ("person_detector_s", "person_detector_m"),
+            without="Không dò được người: không gom tay theo người được. Duyệt, P/X, sao, xuất vẫn dùng được."),
+    Feature("Dò khuôn mặt", "Chụp cá nhân", ("face_detector",),
+            without="Không đo nét ở mặt / mắt."),
     Feature("Chấm chất lượng khuôn mặt", "Chụp cá nhân", ("face_quality",),
             without="Điểm kỹ thuật bỏ phần khuôn mặt, phần còn lại chia lại tỉ lệ."),
     Feature("Mắt nhắm, biểu cảm", "Chụp cá nhân", ("face_mesh", "face_blendshapes"),
             without="Không cảnh báo mắt nhắm."),
-    Feature("Gom ảnh theo người tự động", "Chụp cá nhân, Media", ("face_embedder",),
+    Feature("Gom ảnh theo người tự động", "Chụp cá nhân", ("face_embedder",),
             without="Gom tay: chuột phải trên ảnh → ➕ Tạo chủ thể mới / Gán cho chủ thể…; Gộp, Tách, Đổi tên, "
                     "Hoàn tác như 3.0.0. Ảnh không có người được dò thì không gom được (app báo lý do)."),
     Feature("Hợp gu, dạy gu", "Chụp cá nhân", ("clip_l14_image", "clip_prompts", "laion_aesthetic"),
             without="Điểm xếp hạng chỉ có phần Kỹ thuật; 🎓 Dạy gu chưa dùng được."),
-    Feature("Gợi ý nội dung, đổi cảnh, gợi ý booth", "Media", ("clip_l14_image", "clip_prompts"),
-            without="Nội dung gán tay (Alt+1–5, nhiều ảnh một lúc); khoảnh khắc chia theo khoảng nghỉ; tên booth "
-                    "gợi ý theo khoảnh khắc."),
     Feature("Gom theo dáng người / trang phục bằng AI (bản 3.0.0)", "—", ("body_reid",),
             without="Không dùng trong bản này; gom tay như trên."),
     Feature("Nhận mặt mạnh (bản 3.0.0)", "—", ("face_embedder_arcface",),
             without="Đã gỡ (điều khoản không cho dùng thương mại); gom tay như trên."),
     Feature("Điểm thẩm mỹ và kỹ thuật bằng AI (bản 3.0.0)", "—", ("aesthetic", "tech_iqa", "face_iqa"),
             without="Đã gỡ (điều khoản không cho dùng thương mại); độ nét đo bằng quy tắc trên ảnh gốc."),
-    Feature("Độ nét (đo trên ảnh gốc), lỗi nét Q / W / R", "Chụp cá nhân, Media", (),
+    Feature("Độ nét (đo trên ảnh gốc), lỗi nét Q / W / R", "Chụp cá nhân", (),
             rule="Quy tắc đo độ nét trên vùng ảnh gốc 100 %, không cần mô hình"),
-    Feature("Chia khoảnh khắc, giờ máy ảnh, nguồn máy", "Media", (),
-            rule="Quy tắc theo giờ chụp đã chỉnh và khoảng nghỉ ≥ 5 phút, không cần mô hình"),
-    Feature("Cỡ cảnh Toàn / Trung / Cận", "Media", (),
-            rule="Quy tắc trên khung người và khuôn mặt đã dò (cần hai chức năng dò ở trên)"),
 )
 
 STATUS_TEXT = {

@@ -25,11 +25,7 @@ def test_self_test_passes_offline(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert selftest.run(report) == 0
     data = json.loads(report.read_text(encoding="utf-8"))
     assert data["ok"] and data["network_attempts"] == [] and "selection ran" in data["steps"]
-    media = data["media"]  # M10: the Media step, through MediaRegistry only
-    assert any(s.startswith("media: ") for s in data["steps"]) and media["failed"] == 0
-    assert media["personal_has_media_tables"] is False
-    assert {m["model_id"] for m in media["models"]} <= {"person_detector_s", "person_detector_m", "face_detector"}
-    assert set(data["report_a"]["media"]["loaded"]) <= {"person_detector_s", "person_detector_m", "face_detector"}
+    assert "media" not in data and set(data["report_a"]) == {"personal"}  # Media sự kiện removed (2026-11-12)
     with pytest.raises(OSError):  # the block is real: any connection attempt fails and is recorded
         socket.create_connection(("example.com", 443), timeout=1)
 

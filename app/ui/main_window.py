@@ -176,13 +176,10 @@ def _action_kind(label: str) -> str:
             return kind
     return "other"
 
-class MainWindow(QMainWindow):
-    # "⇄ Đổi chế độ": emitted once the window has released its session and is about to close (app.ui.app_shell)
-    mode_change_ready = Signal()
 
+class MainWindow(QMainWindow):
     def __init__(self, settings: QSettings | None = None) -> None:
         super().__init__()
-        self._switching_mode = False
         self.setWindowTitle(f"{APP_NAME} {__version__}")
         self.settings = settings or app_settings()
         self.project: Project | None = None
@@ -246,7 +243,7 @@ class MainWindow(QMainWindow):
         self._update_empty_state()
 
     def _make_model(self) -> AssetListModel:
-        """The grid's list model (the Media event window uses a subclass with event filters)."""
+        """The grid's list model."""
         return AssetListModel(self)
 
     # ------------------------------------------------------------ layout
@@ -362,13 +359,6 @@ class MainWindow(QMainWindow):
         # Everything that is not a workflow step lives in ⚙, so the top bar fits a 1080p screen.
         options = QMenu(self)
         options.setToolTipsVisible(True)
-        # Back to the mode picker (shown only when the window was opened from it: app.ui.app_shell)
-        self.act_switch_mode = QAction("⇄ Đổi chế độ…", self)
-        self.act_switch_mode.setToolTip("Quay về màn hình chọn chế độ (Chụp cá nhân / Media sự kiện). Mọi lựa chọn đã "
-                                        "được lưu.")
-        self.act_switch_mode.triggered.connect(lambda: self.request_mode_change())
-        self.act_switch_mode.setVisible(False)
-        options.addAction(self.act_switch_mode)
         options.addAction(self.act_reset)
         options.addAction(self.act_learning)
         options.addAction(self.act_help)
@@ -901,8 +891,8 @@ class MainWindow(QMainWindow):
         return thread
 
     def _open_session_for(self, root: Path) -> bool:
-        """Make the session of this photo folder the open one (Chụp cá nhân: one session per folder; the Media event
-        window keeps its event open and adds the folder to it). False: nothing to import into."""
+        """Make the session of this photo folder the open one (one session per folder). False: nothing to import
+        into."""
         if self.project is not None and self._session_root == root:
             return True
         # One session per photo folder: switching folders closes the current one.
@@ -1133,8 +1123,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         if not self._shutdown_ready:
-            if not self._export_may_stop("đổi chế độ" if self._switching_mode else "thoát"):
-                self._switching_mode = False
+            if not self._export_may_stop("thoát"):
                 event.ignore()
                 return
             self.settings.setValue("geometry", self.saveGeometry())
@@ -1159,43 +1148,7 @@ class MainWindow(QMainWindow):
         if self.teacher.store is not None:
             self.teacher.store.close()
             self.teacher.store = None
-        if self._switching_mode:
-            self.mode_change_ready.emit()  # the picker shows before this window hides: the app does not quit
         super().closeEvent(event)
-
-    # ------------------------------------------------------------ "⇄ Đổi chế độ"
-    def enable_mode_switch(self) -> None:
-        self.act_switch_mode.setVisible(True)
-
-    def mode_change_text(self) -> str:
-        text = ("Các lựa chọn, sao, ❤, gộp và đổi tên đã được lưu.\n"
-                "Sau khi rời, Ctrl+Z vẫn hoàn tác được thao tác với chủ thể, nhưng không còn hoàn tác được "
-                "P / X / sao / ❤.")
-        if self.analyze_thread is not None:
-            text += ("\n\nPhân tích đang chạy sẽ dừng; lần sau mở lại thư mục này, bấm lại để chạy tiếp.")
-        return text
-
-    def _ask_leave_mode(self) -> bool:
-        box = QMessageBox(QMessageBox.Icon.Question, "Đổi chế độ", "Rời chế độ Chụp cá nhân?", parent=self)
-        box.setInformativeText(self.mode_change_text())
-        stay = box.addButton("Ở lại", QMessageBox.ButtonRole.RejectRole)
-        leave = box.addButton("Đổi chế độ", QMessageBox.ButtonRole.AcceptRole)
-        box.setDefaultButton(stay)
-        box.setEscapeButton(stay)
-        box.exec()
-        return box.clickedButton() is leave
-
-    def request_mode_change(self) -> bool:
-        """Back to the mode picker: asked first when a folder is open ("Ở lại" keeps everything as it is), then the
-        window closes exactly as when quitting (workers stopped, session released) and the picker shows again.
-        Returns False when the user stayed."""
-        if self._switching_mode or self._shutdown_since is not None:
-            return False
-        if self.project is not None and not self._ask_leave_mode():
-            return False
-        self._switching_mode = True
-        self.close()
-        return True
 
     def _wait_then_close(self, left: list[str]) -> None:
         """Workers still run: keep everything open, wait on a GUI timer (the window stays responsive)."""

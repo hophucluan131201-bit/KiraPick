@@ -43,8 +43,6 @@ a = Analysis(
         (str(ROOT / "configs" / "model-manifest.json"), "configs"),
         (str(ROOT / "configs" / "model-policy.json"), "configs"),  # the allow-list (LIC-1): read at every start
         (str(ROOT / "packaging" / "kirapick.png"), "assets"),
-        (str(ROOT / "packaging" / "modes" / "personal.jpg"), "assets/modes"),
-        (str(ROOT / "packaging" / "modes" / "event.jpg"), "assets/modes"),
     ],
     hiddenimports=["app.selftest"] + (["openvino", "onnxruntime.tools.add_openvino_win_libs"]
                                       if EDITION == "openvino" else []),

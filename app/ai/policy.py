@@ -3,7 +3,7 @@
 A weight may be opened only when its status is ``verified`` **and** the file's SHA-256 is one of the hashes pinned in
 the list. ``pending`` (no basis for the purpose yet) and ``never`` weights are refused whatever the file is, and
 ``<file>.sha256`` side files are not trusted: editing one cannot make a file acceptable. ModelRegistry asks this
-policy before it hands out any path, so every load path (normal run, GPU -> CPU, YOLOX-M -> S, --self-test, Media)
+policy before it hands out any path, so every load path (normal run, GPU -> CPU, YOLOX-M -> S, --self-test)
 goes through the same check.
 
 LOAD_LOG records, for the self-test's report A and the analysis log, every weight that was really opened (id,
@@ -23,7 +23,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = _ROOT / "configs" / "model-policy.json"
 STATUSES = frozenset({"verified", "pending", "never"})
 BENCHMARK = frozenset({"yes", "pending", "no"})
-MODES = frozenset({"personal", "media"})
+MODES = frozenset({"personal"})
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +42,6 @@ class PolicyEntry:
     modes: frozenset[str]
     pinned: tuple[Pinned, ...]
     terms: str
-    media: dict | None = None  # Media only: needed_for, fallback, block_from
     # Internal benchmark (development machine, never shipped): {"allowed": "yes" | "pending" | "no", "basis": "…"},
     # decided per weight from its own terms. It never lets the app open a weight: only "status" does that.
     benchmark: dict | None = None
@@ -100,7 +99,7 @@ def parse_policy(data: dict) -> ModelPolicy:
             raise ValueError(f"{m['id']}: benchmark needs allowed in {sorted(BENCHMARK)} and a basis")
         if status != "verified" and pinned:
             raise ValueError(f"{m['id']}: {status} weights must not pin a hash")
-        entries[m["id"]] = PolicyEntry(m["id"], status, modes, pinned, m.get("terms", ""), m.get("media"),
+        entries[m["id"]] = PolicyEntry(m["id"], status, modes, pinned, m.get("terms", ""),
                                      m.get("benchmark"))
     return ModelPolicy(entries)
 
@@ -110,11 +109,10 @@ def load_model_policy(path: Path = POLICY_PATH) -> ModelPolicy:
 
 
 def policy_for_tests(entries: dict[str, tuple[str, int]], status: str = "verified",
-                     modes: tuple[str, ...] = ("personal", "media")) -> ModelPolicy:
+                     modes: tuple[str, ...] = ("personal",)) -> ModelPolicy:
     """A policy verifying exactly these files (id -> (sha256, size)); for tests with synthetic weights only."""
-    media = {"needed_for": "test", "fallback": None, "block_from": None} if "media" in modes else None
     return ModelPolicy({i: PolicyEntry(i, status, frozenset(modes), (Pinned(sha, size),) if status == "verified" else (),
-                                       "test", media) for i, (sha, size) in entries.items()})
+                                       "test") for i, (sha, size) in entries.items()})
 
 
 @dataclass

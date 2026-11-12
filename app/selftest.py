@@ -193,42 +193,8 @@ def run(report_path: Path, photos: Path | None = None) -> int:
 
             child = run_in_child(Path(tmp) / "session", "people", None, False, lambda *_a: None, lambda: False)
             step(f"child process: ok ({child['analysed']} new photos)")
-
-            # Media (Mốc 1): an event of its own, imported and analysed through MediaRegistry only
-            from app.media import cameras as media_cameras
-            from app.media import event as media_events
-            from app.media.analysis import analyse_event
-            from app.media.models import MediaRegistry
-
-            media = MediaRegistry(registry)
-            with media_events.create_event("selftest", Path(tmp) / "media") as event:
-                media_cameras.import_folder(event, shoot)
-                summary = analyse_event(event, registry=media, prefer_gpu=gpu)
-                used = sorted({m["model_id"] for m in summary.models})
-                report["media"] = {"analysed": summary.analysed, "failed": summary.failed,
-                                   "unavailable": summary.unavailable, "moments": summary.moments,
-                                   "device": summary.device, "models": summary.models,
-                                   "is_media_db": True, "personal_has_media_tables": False}
-                not_media = [m for m in used if m not in media.policy.loadable_ids()]
-                if not_media:
-                    raise RuntimeError(f"Media opened weights it may not use: {not_media}")
-                if summary.failed or (summary.unavailable is None and summary.analysed != expected):
-                    raise RuntimeError("Media analysis reported failures")
-                media_folder = event.folder
-            from app.media.schema import is_media_db
-
-            with Project.open(Path(tmp) / "session") as personal:  # the personal session never gets Media tables
-                report["media"]["personal_has_media_tables"] = is_media_db(personal.conn)
-            if report["media"]["personal_has_media_tables"]:
-                raise RuntimeError("the Chụp cá nhân session has Media tables")
-            from app.media.analysis_process import run_in_child as media_child
-
-            again = media_child(media_folder, False, lambda *_a: None, lambda: False)
-            step(f"media: {summary.analysed} analysed, {summary.moments} moments, models {used or 'none'}; "
-                 f"child process ok ({again['analysed']} new)")
-        # Report A: what was really opened (id, SHA-256 of the file, provider) and what was refused, per mode
-        report["report_a"] = {"personal": LOAD_LOG.report(),
-                              "media": {"loaded": media.report_loaded(), "unavailable": media.report_unavailable()}}
+        # Report A: what was really opened (id, SHA-256 of the file, provider) and what was refused
+        report["report_a"] = {"personal": LOAD_LOG.report()}
         opened_not_verified = [i for i in report["report_a"]["personal"]["opened"]
                                if not registry.policy.verified(i)]
         bypassed = [k for k in report["report_a"]["personal"]["skipped"] if k.startswith("?")]

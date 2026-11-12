@@ -10,9 +10,9 @@ from app import branding
 def test_profile_moves_every_folder_and_the_settings(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setenv(branding.PROFILE_ENV, f'"{tmp_path / "profile"}" ')  # quotes / spaces from PowerShell
     assert branding.data_dir() == tmp_path / "profile" / branding.APP_NAME
-    from app.media import event as ev
+    from app.ui.main_window import sessions_dir
 
-    assert ev.media_root() == tmp_path / "profile" / branding.APP_NAME / "media"
+    assert sessions_dir().is_relative_to(tmp_path / "profile" / branding.APP_NAME)
     s = branding.app_settings()
     s.setValue("probe", 1)
     s.sync()

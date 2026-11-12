@@ -30,7 +30,7 @@ class TopBar(QWidget):
         row.setSpacing(4)
         self.buttons: dict[str, QToolButton] = {}
         self._actions: dict[str, QAction] = {}
-        self.step_labels = dict(STEP_LABELS)  # a window may rename a step (Media: 🧠 Phân tích sự kiện)
+        self.step_labels = dict(STEP_LABELS)
         for key in STEPS:
             b = QToolButton()
             b.setObjectName("step")

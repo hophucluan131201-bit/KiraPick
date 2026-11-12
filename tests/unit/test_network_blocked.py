@@ -1,4 +1,4 @@
-"""U7 (LIC-1 S11): the analysis, the scoring and Media work with the network blocked, and never try to connect.
+"""U7 (LIC-1 S11): the analysis and the scoring work with the network blocked, and never try to connect.
 
 In-process block here (every socket connect / name lookup fails and is recorded). The Windows CI job 'lic1-checks'
 adds an operating-system firewall rule that blocks every outbound connection of python.exe, which also covers
@@ -39,8 +39,7 @@ def test_the_block_is_real(blocked: list[str]) -> None:
 
 
 @pytest.mark.skipif(not REG.can_detect(), reason="verified detection weights not present")
-def test_analysis_scoring_and_media_with_the_network_blocked(tmp_path: Path, blocked: list[str]) -> None:
-    from app.media.models import MediaRegistry
+def test_analysis_and_scoring_with_the_network_blocked(tmp_path: Path, blocked: list[str]) -> None:
     from app.quality import select
     from app.selftest import _synthetic_photo
     from app.storage.project import Project
@@ -56,23 +55,4 @@ def test_analysis_scoring_and_media_with_the_network_blocked(tmp_path: Path, blo
         assert AnalyzeJob(project, REG, prefer_gpu=False).run(mode="people").failed == 0
         assert AnalyzeJob(project, REG, prefer_gpu=False).run(mode="quality").measure_failed == 0
         select.select_per_person(project.conn, 3)
-    media = MediaRegistry(REG)
-    media.report_unavailable()
-    # Media (M10): an event imported, analysed (YOLOX / YuNet through MediaRegistry), scored and exported
-    from app.media import cameras, samples
-    from app.media import event as events
-    from app.media import export as media_export
-    from app.media.analysis import analyse_event
-    from app.storage import decisions
-
-    with events.create_event("offline", tmp_path / "media") as event:
-        cameras.import_folder(event, shoot)
-        summary = analyse_event(event, registry=media, prefer_gpu=False)
-        assert summary.analysed == 2 and summary.failed == 0 and summary.unavailable is None
-        first = event.conn.execute("SELECT MIN(id) FROM assets").fetchone()[0]
-        decisions.set_flag(event.conn, first, "keep")
-        samples.set_sample(event.conn, [first], "shot", "toan")
-        assert samples.score(event)["kind"] == "kirapick-media-score"
-        result = media_export.run(event, media_export.plan(event, tmp_path / "out"))
-        assert len(result.copied) == 1 and not result.failed
     assert blocked == []  # nothing tried to connect

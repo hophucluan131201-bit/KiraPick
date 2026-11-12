@@ -34,7 +34,7 @@ def _fake_weights(folder: Path) -> tuple[dict, ModelPolicy]:
         e = real.entries[model_id]
         if e.verified:
             entries[model_id] = PolicyEntry(e.id, e.status, e.modes,
-                                            (Pinned(hashlib.sha256(data).hexdigest(), len(data)),), e.terms, e.media)
+                                            (Pinned(hashlib.sha256(data).hexdigest(), len(data)),), e.terms, e.benchmark)
     return specs, ModelPolicy(entries)
 
 

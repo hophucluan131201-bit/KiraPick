@@ -98,7 +98,7 @@ def _package(tmp_path: Path, edition: str = "directml") -> tuple[Path, ModelPoli
         (folder / "models" / specs[model_id].file).write_bytes(data)
         e = real.entries[model_id]
         entries[model_id] = PolicyEntry(e.id, e.status, e.modes, (Pinned(hashlib.sha256(data).hexdigest(), len(data)),),
-                                        e.terms, e.media)
+                                        e.terms, e.benchmark)
     assert collect_licenses.collect(folder / "docs" / "licenses", edition) == [] or True
     (folder / "docs" / "THIRD_PARTY_NOTICES.md").write_text((ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8"),
                                                             encoding="utf-8")
