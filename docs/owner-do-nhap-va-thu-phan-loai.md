@@ -32,10 +32,10 @@ Script tự dừng (chữ đỏ) nếu mã nguồn tải về không khớp SHA-
 
 ```powershell
 $W = "$env:USERPROFILE\KiraPick-Do"; New-Item -ItemType Directory -Force -Path $W | Out-Null
-$URL = "https://raw.githubusercontent.com/hophucluan131201-bit/KiraPick/ef094c81699e46888d3947f0f1a3703e7bcf55f0/scripts/owner_measure.ps1"
+$URL = "https://raw.githubusercontent.com/hophucluan131201-bit/KiraPick/24cf38db8679becdc7b93bfdf7bfe6a38a263b69/scripts/owner_measure.ps1"
 Invoke-WebRequest -Uri $URL -OutFile "$W\owner_measure.ps1" -UseBasicParsing
 $h = (Get-FileHash "$W\owner_measure.ps1" -Algorithm SHA256).Hash
-if ($h -ne "33F7861976D45E85EDBC7526929144FFBA0B34C508D7D4AF47016EF8C00B0212") {
+if ($h -ne "8D672C6AC13974D8630F8E99348E4AD9BE4C6CFD187FE3B50C2F43CC99CDC1DF") {
     Write-Host "SAI MÃ SCRIPT: $h — DỪNG, không chạy gì thêm, báo tôi" -ForegroundColor Red
 } else {
     Write-Host "OK: script đúng" -ForegroundColor Green
