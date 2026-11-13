@@ -9,10 +9,11 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QSlider, QToolButton, QWidget
 
 from app.storage.workflow import STEPS, StepState
+from app.ui import theme
 from app.ui.score_style import COLORS
 
 STEP_LABELS = {"import": ("📂", "Nhập ảnh"), "people": ("🧠", "Nhận diện chủ thể"), "quality": ("📊", "Phân tích AI"),
-               "pick": ("⭐", "Chọn ảnh"), "export": ("⤴", "Xuất ảnh")}
+               "pick": ("⭐", "AI gợi ý"), "export": ("⤴", "Xuất ảnh")}
 assert tuple(STEP_LABELS) == STEPS
 CELL_MIN, CELL_MAX, CELL_DEFAULT = 140, 340, 220  # grid card size (logical px)
 
@@ -40,6 +41,7 @@ class TopBar(QWidget):
             self.buttons[key] = b
         row.addStretch(1)
         search.setMaximumWidth(260)
+        search.setMinimumWidth(180)  # the hint "🔎 Tìm tên file (Ctrl+F)" fits (UX-1: it was cut at 125 px)
         row.addWidget(search)
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(CELL_MIN, CELL_MAX)
@@ -92,5 +94,7 @@ class TopBar(QWidget):
         b.setToolTip(f"{name}: {tip}" if self._compact else tip)
         b.setEnabled(action.isEnabled() if action is not None else True)
         is_next = key == self.next_step
+        # the next step stands out; with the keyboard focus its border thickens, so the focus stays visible (UX-1)
         b.setStyleSheet(f"QToolButton#step {{ border: 1px solid {COLORS['accent']}; border-radius: 6px; "
-                        f"font-weight: bold; }}" if is_next else "")
+                        f"font-weight: bold; }} QToolButton#step:focus {{ border: 2px solid {theme.ACCENT}; }}"
+                        if is_next else "")

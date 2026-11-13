@@ -233,6 +233,15 @@ class ScoreCard(QWidget):
         self.value_text = "—"
         self.ring_color = COLORS["none"]
 
+    def set_available(self, aesthetic: bool, taste: bool) -> None:
+        """Hide what this build can never fill: the aesthetic row needs an aesthetic model, the taste line needs the
+        image-embedding model (⚙ → ℹ Giới thiệu says which are off). A row that always shows "—" reads as unfinished."""
+        row = self.rows.get("aesthetic")
+        if row is not None:
+            for w in (row.name, row.value, row.bar, row.reason):
+                w.setVisible(aesthetic)
+        self.taste_row.setVisible(taste)
+
     def show_record(self, rec: AssetRecord | None, taste: TasteStatus | None, selection: str | None = None) -> None:
         value = display_value(rec.ranked) if rec is not None else None
         self.value_text = "—" if value is None else str(value)
@@ -240,7 +249,7 @@ class ScoreCard(QWidget):
         self.ring.set(self.value_text, self.ring_color, (value or 0) / 100)
         self.histogram.request(rec.id if rec else None, rec.thumb_file if rec else None)
         chip = chip_for(rec.flag, rec.pick_rank is not None, rec.score, rec.ranked, rec.uncertain) if rec else None
-        self.suggestion.setText({"suggested": "⭐ Đề xuất giữ", "review": "⚠ Xem lại", "keep": "✅ Bạn đã Chọn",
+        self.suggestion.setText({"suggested": "⭐ Đề xuất giữ", "review": "⚠ Xem lại", "keep": "✅ Bạn đã Giữ",
                                  "reject": "❌ Bạn đã Loại"}.get(chip.kind, "") if chip else "")
         self.suggestion.setStyleSheet(f"color: {chip.color}; font-weight: bold;" if chip else "")
         r = rec.ranked if rec is not None else None

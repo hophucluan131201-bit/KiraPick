@@ -221,10 +221,10 @@ def test_merge_carries_marks_and_flags_stale_picks(qtbot, env, monkeypatch) -> N
         conn.execute("INSERT INTO picks (run_id, asset_id, subject_id, rank, score, reason_json) "
                      "VALUES (?, ?, 2, 1, 1, '{}')", (run, assets[3]))
     d = _dialog(w, [1, 2], monkeypatch)
-    assert "cần chọn lại" in d.summary_text()
+    assert "cần chạy lại" in d.summary_text()
     assert actions.are_different(w.project.conn, 1, 3)  # subject 2's mark now applies to the kept subject 1
-    assert picks_stale(w.project.conn) and "chọn lại" in w.status.text()
-    assert "chọn lại" in (select.why_not_picked(w.project.conn, assets[1]) or "")
+    assert picks_stale(w.project.conn) and "chạy lại" in w.status.text()
+    assert "chạy lại" in (select.why_not_picked(w.project.conn, assets[1]) or "")
     _ctrl_z(qtbot, w)
     assert not picks_stale(w.project.conn) and actions.are_different(w.project.conn, 2, 3)
     assert not actions.are_different(w.project.conn, 1, 3)

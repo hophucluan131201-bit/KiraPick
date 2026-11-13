@@ -56,7 +56,7 @@ def explain_html(score: Score, ranked: Ranked | None = None, taste: TasteStatus 
         gu = f"Hợp gu bạn: chưa có – {escape(taste.reason)}" if taste is not None else "Hợp gu bạn: chưa có"
     head = f"{tech} · {gu}"
     if pick_rank is not None:
-        head += f"<br>⭐ AI chọn (thứ {pick_rank})"
+        head += f"<br>⭐ AI gợi ý (thứ {pick_rank})"
     if selection:
         head += f"<br><i>{escape(selection)}</i>"
     rows = []  # plain wrapped lines (no table): readable in a narrow, half-screen window
@@ -150,7 +150,7 @@ class Inspector(QWidget):
         f["Máy"].setText(rec.camera or "—")
         f["Ống kính"].setText(rec.lens or "—")
         f["Thông số"].setText(_exposure(rec.exif))
-        flag = {"keep": "Giữ ✓", "reject": "Loại ✕"}.get(rec.flag or "", "chưa chọn")
+        flag = {"keep": "Giữ ✓", "reject": "Loại ✕"}.get(rec.flag or "", "chưa xét")
         f["Đánh dấu"].setText(flag)
         f["Sao"].setText("★" * rec.rating if rec.rating else "chưa chấm")
         f["Yêu thích"].setText("♥ có" if rec.favorite else "không")

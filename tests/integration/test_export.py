@@ -19,7 +19,7 @@ from tests.integration.test_import_job import _photo
 
 
 def run_export(plan, **kw):  # noqa: ANN001, ANN003, ANN201
-    """These tests check the list in the destination: "Xuất kèm danh sách ảnh đã chọn" ticked (RB1)."""
+    """These tests check the list in the destination: "Xuất kèm danh sách tên ảnh đã xuất" ticked (RB1)."""
     kw.setdefault("customer_list", True)
     return _run_export(plan, **kw)
 

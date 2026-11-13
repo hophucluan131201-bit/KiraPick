@@ -1,4 +1,4 @@
-"""Bottom bar: Chọn / Loại / Chưa chọn counts (photos), the estimated export size (files), marking, actions."""
+"""Bottom bar: Chọn / Loại / Chưa xét counts (photos), the estimated export size (files), marking, actions."""
 
 from __future__ import annotations
 
@@ -18,12 +18,12 @@ def test_counts_and_size_text(qtbot) -> None:  # noqa: ANN001
     qtbot.addWidget(bar)
     bar.set_counts(Counts(total=10, keep=2, reject=3, undecided=4, errors=1, keep_bytes=int(2.46 * GB)),
                    fmt=ExportFormat.RAW_JPEG, marked=0)
-    assert bar.kept.text() == "Đã chọn 2 ảnh (2,5 GB, gồm JPEG kèm)"
-    assert bar.rejected.text() == "Đã loại 3" and bar.undecided.text() == "Chưa chọn 4"
+    assert bar.kept.text() == "Đã giữ 2 ảnh (2,5 GB, gồm JPEG kèm)"
+    assert bar.rejected.text() == "Đã loại 3" and bar.undecided.text() == "Chưa xét 4"
     bar.set_counts(Counts(10, 2, 3, 4, 1, int(0.0412 * GB)), fmt=ExportFormat.RAW, marked=0)
-    assert bar.kept.text() == "Đã chọn 2 ảnh (41,2 MB, chỉ RAW)"
+    assert bar.kept.text() == "Đã giữ 2 ảnh (41,2 MB, chỉ RAW)"
     bar.set_counts(Counts(10, 2, 3, 4, 1, int(0.0412 * GB)), fmt=ExportFormat.JPEG, marked=0)
-    assert bar.kept.text() == "Đã chọn 2 ảnh (41,2 MB, chỉ JPEG)"
+    assert bar.kept.text() == "Đã giữ 2 ảnh (41,2 MB, chỉ JPEG)"
     assert size_text(0) == "0 MB" and size_text(int(1.26 * GB)) == "1,3 GB"
 
 
@@ -91,7 +91,7 @@ def test_bar_counts_follow_decisions_and_marking(qtbot, env: dict) -> None:  # n
     _import(qtbot, w, env["photos"])
     w.select_row(0)
     _key(qtbot, w, Qt.Key.Key_K)
-    assert w.bottom_bar.kept.text().startswith("Đã chọn 1 ảnh")
+    assert w.bottom_bar.kept.text().startswith("Đã giữ 1 ảnh")
     sel = w.grid.selectionModel()
     sel.select(w.model.index(1), QItemSelectionModel.SelectionFlag.Select)
     sel.select(w.model.index(2), QItemSelectionModel.SelectionFlag.Select)
@@ -135,11 +135,11 @@ def test_every_menu_action_emits_its_signal(qtbot) -> None:  # noqa: ANN001
 
 
 def test_compact_menu_has_clear_and_it_works(qtbot, env: dict) -> None:  # noqa: F811
-    """Review CR11-01: compact mode hides "Bỏ chọn", so "⋯" must offer it."""
+    """Review CR11-01: compact mode hides "Bỏ dấu", so "⋯" must offer it."""
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
     w.bottom_bar.set_compact(True)
-    clear = next(a for a in w.bottom_bar.more_button.menu().actions() if a.text() == "Bỏ chọn")
+    clear = next(a for a in w.bottom_bar.more_button.menu().actions() if a.text() == "Bỏ dấu")
     conn = w.project.conn
     for row, flag in ((0, "keep"), (1, "reject")):
         w.select_row(row)
@@ -202,7 +202,7 @@ def test_format_survives_reopening_and_matches_the_bar(qtbot, env: dict) -> None
     _import(qtbot, w2, env["photos"])  # reopens the same session
     conn = w2.project.conn
     size = estimated_bytes(conn, select_ids(conn, Selection.KEEP), fmt=ExportFormat.JPEG)
-    assert w2.bottom_bar.kept.text() == f"Đã chọn 1 ảnh ({size_text(size)}, chỉ JPEG)"
+    assert w2.bottom_bar.kept.text() == f"Đã giữ 1 ảnh ({size_text(size)}, chỉ JPEG)"
     dialog2 = w2.open_export_dialog()
     qtbot.addWidget(dialog2)
     assert dialog2.format_buttons[ExportFormat.JPEG].isChecked()

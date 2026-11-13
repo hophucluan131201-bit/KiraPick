@@ -16,6 +16,7 @@ REJECT = "#f85149"
 FAVORITE = "#ff7eb6"
 STAR = "#f2c94c"
 ERROR = "#ff9f43"
+REJECT_ON_BUTTON = "#ff7b72"  # "✕ Loại" text on a button (#2f3237): 5.1:1; REJECT there was 3.84:1 (UX-1)
 
 
 def apply_dark_theme(app: QApplication) -> None:
@@ -52,8 +53,9 @@ def apply_dark_theme(app: QApplication) -> None:
         QSplitter::handle {{ background: {BG}; }}
         QLabel#sectionTitle {{ color: {MUTED}; font-weight: 600; padding: 8px 4px 2px 4px; }}
         QToolButton#sectionHeader {{ color: {MUTED}; font-weight: 600; padding: 6px 2px 2px 2px; border: none; text-align: left; }}
-        QLabel#emptyHint {{ color: {MUTED}; font-size: 15px; }}
+        QLabel#emptyHint {{ color: {TEXT}; font-size: 14px; }}
         QToolButton:checked {{ background: #2d4a78; color: #ffffff; }}
+        QToolButton:focus, QPushButton:focus {{ border: 2px solid {ACCENT}; border-radius: 4px; }}
         QLabel#keyHints {{ background: {PANEL}; padding: 6px 10px; border-top: 1px solid {RAISED}; }}
         QToolButton#backToGrid {{ background: rgba(30, 31, 34, 210); border: 1px solid {RAISED};
                                   padding: 6px 12px; font-weight: 600; }}

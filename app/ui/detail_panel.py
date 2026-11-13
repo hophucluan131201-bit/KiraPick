@@ -116,14 +116,14 @@ class DetailPanel(QWidget):
         stars.addStretch(1)
         stars.addWidget(self.favorite_button)
         actions = QHBoxLayout()
-        self.keep_button = QPushButton("✓ Chọn")  # short labels fit the 240 px minimum width; keys in tooltips
+        self.keep_button = QPushButton("✓ Giữ")  # short labels fit the 240 px minimum width; keys in tooltips
         self.reject_button = QPushButton("✕ Loại")
-        self.clear_button = QPushButton("Bỏ chọn")
-        self.keep_button.setToolTip("Chọn ảnh này (phím P hoặc K)")
+        self.clear_button = QPushButton("Bỏ dấu")
+        self.keep_button.setToolTip("Giữ ảnh này (phím P hoặc K)")
         self.reject_button.setToolTip("Loại ảnh này (phím X)")
-        self.clear_button.setToolTip("Bỏ Chọn / Loại (phím U)")
+        self.clear_button.setToolTip("Bỏ dấu Giữ / Loại (phím U)")
         self.keep_button.setStyleSheet(f"color: {COLORS['good']};")
-        self.reject_button.setStyleSheet(f"color: {COLORS['poor']};")
+        self.reject_button.setStyleSheet(f"color: {theme.REJECT_ON_BUTTON};")
         for b, sig in ((self.keep_button, self.keep_clicked), (self.reject_button, self.reject_clicked),
                        (self.clear_button, self.clear_clicked)):
             b.clicked.connect(sig)

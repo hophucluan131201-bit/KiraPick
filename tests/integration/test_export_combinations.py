@@ -109,7 +109,7 @@ def test_twelve_combinations(session, tmp_path: Path, source: str, fmt: ExportFo
     on_disk = {p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()}
     lists = {p for p in on_disk if p.startswith("_kirapick_danh_sach/")}
     assert on_disk - lists == expected
-    # RB1: the destination holds only the photos unless "Xuất kèm danh sách ảnh đã chọn" is ticked
+    # RB1: the destination holds only the photos unless "Xuất kèm danh sách tên ảnh đã xuất" is ticked
     assert (out / "_kirapick_danh_sach").exists() is customer_list
     assert len(lists) == (2 if customer_list else 0)
     assert result.manifest_csv.parent == record_dir and result.manifest_json.is_file()  # the record, always

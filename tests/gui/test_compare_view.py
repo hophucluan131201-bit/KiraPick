@@ -178,7 +178,7 @@ def test_update_record_without_size_change_does_not_rearrange(qtbot, photos, mon
     real = cv.arrange
     monkeypatch.setattr(cv, "arrange", lambda *a, **k: calls.append(1) or real(*a, **k))
     view.update_record(replace(recs[0], flag="keep", rating=4))
-    assert calls == [] and "Chọn" in view.tile(1).header.toolTip()
+    assert calls == [] and "Giữ" in view.tile(1).header.toolTip()
 
 
 def test_tiles_and_pools_created_once(qtbot, photos) -> None:  # noqa: ANN001

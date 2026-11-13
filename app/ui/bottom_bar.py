@@ -18,10 +18,10 @@ from app.ui import theme
 from app.ui.score_style import COLORS
 
 SIZE_TIP = ("Số ảnh: một cặp RAW+JPEG tính là 1 ảnh.\n"
-            "Dung lượng: các file sẽ được chép khi xuất ảnh đã Chọn từ thư mục đã nhập, theo Định dạng đang chọn khi "
+            "Dung lượng: các file sẽ được chép khi xuất ảnh đã Giữ từ thư mục đã nhập, theo Định dạng đang chọn khi "
             "xuất (RAW + JPEG / chỉ RAW / chỉ JPEG), vào một thư mục.\n"
             "Đây là con số ước tính lấy lúc nhập ảnh: khi xuất có thể ít hơn nếu file đã bị xoá khỏi ổ hoặc đã có sẵn ở "
-            "thư mục đích, và có thể nhiều hơn nếu một file JPEG được Chọn riêng từ trước khi ghép cặp.")
+            "thư mục đích, và có thể nhiều hơn nếu một file JPEG được Giữ riêng từ trước khi ghép cặp.")
 
 
 def size_text(n: int) -> str:
@@ -47,15 +47,15 @@ class BottomBar(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(8, 2, 8, 2)
         row.setSpacing(8)
-        self.kept = QLabel("Đã chọn 0 ảnh")
+        self.kept = QLabel("Đã giữ 0 ảnh")
         self.kept.setStyleSheet(f"color: {COLORS['good']}; font-weight: bold;")
         self.kept.setToolTip(SIZE_TIP)
         self.rejected = QLabel("Đã loại 0")
         self.rejected.setStyleSheet(f"color: {COLORS['poor']};")
-        self.undecided = QLabel("Chưa chọn 0")
+        self.undecided = QLabel("Chưa xét 0")
         self.undecided.setStyleSheet(f"color: {theme.MUTED};")
         self.marking = QLabel()
-        self.marking.setStyleSheet(f"color: {COLORS['accent']};")
+        self.marking.setStyleSheet(f"color: {theme.ACCENT};")  # 5.15:1 on the window (COLORS accent: 4.40:1)
         self.marking.setHidden(True)
         self.status = QLabel("Sẵn sàng")
         self.status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)  # long text is cut
@@ -77,11 +77,11 @@ class BottomBar(QWidget):
             row.addWidget(b)
             return b
 
-        self.keep_button = button("✓ Chọn", "Chọn (P hoặc K)", self.keep)
+        self.keep_button = button("✓ Giữ", "Giữ ảnh (P hoặc K)", self.keep)
         self.keep_button.setStyleSheet(f"color: {COLORS['good']};")
         self.reject_button = button("✕ Loại", "Loại (X)", self.reject)
-        self.reject_button.setStyleSheet(f"color: {COLORS['poor']};")
-        self.clear_button = button("Bỏ chọn", "Bỏ Chọn / Loại (U)", self.clear)
+        self.reject_button.setStyleSheet(f"color: {theme.REJECT_ON_BUTTON};")
+        self.clear_button = button("Bỏ dấu", "Bỏ dấu Giữ / Loại (U)", self.clear)
         self.star_buttons: list[QPushButton] = []
         for n in range(1, 6):
             b = QPushButton("★")
@@ -103,7 +103,7 @@ class BottomBar(QWidget):
         more = QMenu(self)
         for n in range(1, 6):
             more.addAction(QAction("★" * n, self, triggered=lambda _c=False, n=n: self.rating.emit(n)))
-        more.addAction(QAction("Bỏ chọn", self, triggered=lambda _c=False: self.clear.emit()))  # hidden from the bar in compact mode
+        more.addAction(QAction("Bỏ dấu", self, triggered=lambda _c=False: self.clear.emit()))  # hidden from the bar in compact mode
         more.addAction(QAction("⧉ So sánh", self, triggered=lambda _c=False: self.compare.emit()))
         more.addAction(QAction("⟳ Xoay xem", self, triggered=lambda _c=False: self.rotate.emit()))
         more.addAction(QAction("Xem EXIF", self, triggered=lambda _c=False: self.exif.emit()))
@@ -111,7 +111,7 @@ class BottomBar(QWidget):
         row.addWidget(self.more_button)
         self.export_button = QToolButton()
         self.export_button.setText("⤴ Xuất bản sao")
-        self.export_button.setToolTip("Sao chép ảnh đã Chọn sang thư mục khác (Ctrl+E); ảnh gốc không đổi")
+        self.export_button.setToolTip("Sao chép ảnh đã Giữ sang thư mục khác (Ctrl+E); ảnh gốc không đổi")
         self.export_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.export_button.setStyleSheet(f"QToolButton {{ background: {COLORS['accent']}; color: #ffffff; "
                                          f"font-weight: bold; padding: 5px 12px; }}")
@@ -164,7 +164,7 @@ class BottomBar(QWidget):
             return
         pairs = {ExportFormat.RAW_JPEG: ", gồm JPEG kèm", ExportFormat.RAW: ", chỉ RAW",
                  ExportFormat.JPEG: ", chỉ JPEG"}[self._format]
-        self.kept.setText(f"Đã chọn {c.keep} ảnh ({size_text(c.keep_bytes)}{pairs})")
+        self.kept.setText(f"Đã giữ {c.keep} ảnh ({size_text(c.keep_bytes)}{pairs})")
         self.rejected.setText(f"Đã loại {c.reject}")
-        self.undecided.setText(f"Chưa chọn {c.undecided}")
+        self.undecided.setText(f"Chưa xét {c.undecided}")
 

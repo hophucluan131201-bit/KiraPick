@@ -38,7 +38,7 @@ class Chip:
 
 
 _CHIPS = {
-    "keep": Chip("keep", "✅ Chọn", COLORS["good"]),
+    "keep": Chip("keep", "✅ Giữ", COLORS["good"]),
     "reject": Chip("reject", "❌ Loại", COLORS["poor"]),
     "suggested": Chip("suggested", "⭐ Đề xuất", COLORS["suggestion"]),
     "review": Chip("review", "⚠ Xem lại", COLORS["fair"]),

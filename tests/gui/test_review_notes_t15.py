@@ -179,7 +179,7 @@ def test_real_raw_jpeg_pair_import_keep_export(qtbot, env: dict, public_nef: Pat
 
 # ------------------------------------------------------------------ HD cache lifetime (Task 13 approval note)
 def test_hd_cache_and_backups_go_with_the_session(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
-    """"↺ Làm lại" and the 30-day clean-up delete the session folder, its HD thumbnails and its pre-upgrade backup;
+    """"🗑 Xoá các dấu của thư mục này…" and the 30-day clean-up delete the session folder, its HD thumbnails and its pre-upgrade backup;
     the photos are untouched."""
     import time
 

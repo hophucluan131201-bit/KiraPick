@@ -21,11 +21,11 @@ from app.quality.score import NOT_MEASURED
 class SelectDialog(QDialog):
     def __init__(self, parent: QWidget | None, *, people: int, in_view: int, view_name: str, scored: int) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Chọn ảnh đẹp")
+        self.setWindowTitle("AI gợi ý ảnh đẹp")
         layout = QVBoxLayout(self)
         intro = QLabel(
             "AI chọn những ảnh điểm cao nhất (nét ở mắt, mắt mở, mặt rõ, đủ sáng, bố cục, gợi ý thẩm mỹ) và tránh "
-            "chọn các ảnh gần giống nhau (cùng dáng, cùng loạt chụp liên tiếp). Ảnh được chọn xếp lên "
+            "chọn các ảnh gần giống nhau (cùng dáng, cùng loạt chụp liên tiếp). Ảnh được gợi ý xếp lên "
             "đầu, có nhãn “AI”; bạn xem lại và bấm K (giữ) / X (loại) như bình thường.\n"
             + (f"Chưa chấm được: {', '.join(NOT_MEASURED)} — hãy nhìn kỹ những điểm này."
                if NOT_MEASURED else "Điểm thẩm mỹ chỉ là gợi ý (AI học từ ảnh thi chung, không riêng cosplay).")
@@ -58,15 +58,15 @@ class SelectDialog(QDialog):
         layout.addLayout(row)
         self.per_person.toggled.connect(self._update_label)
         self._update_label()
-        self.mark_keep = QCheckBox("Đánh dấu Giữ ✓ cho ảnh được chọn (ảnh bạn đã đánh dấu thì giữ nguyên)")
+        self.mark_keep = QCheckBox("Đánh dấu Giữ ✓ cho ảnh được gợi ý (ảnh bạn đã đánh dấu thì giữ nguyên)")
         self.mark_keep.setChecked(True)
         layout.addWidget(self.mark_keep)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Chọn ảnh")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Gợi ý ảnh")
         buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(scored > 0)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
     def _update_label(self) -> None:
-        self.count_label.setText("Số ảnh cho mỗi chủ thể:" if self.per_person.isChecked() else "Số ảnh cần chọn:")
+        self.count_label.setText("Số ảnh cho mỗi chủ thể:" if self.per_person.isChecked() else "Số ảnh cần gợi ý:")

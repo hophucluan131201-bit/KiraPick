@@ -1,4 +1,4 @@
-"""Detail panel: preview, Chọn/Loại/Bỏ chọn, and the tabs Phân tích AI / Thông tin ảnh / Ảnh tương tự / Chủ thể."""
+"""Detail panel: preview, Chọn/Loại/Bỏ dấu, and the tabs Phân tích AI / Thông tin ảnh / Ảnh tương tự / Chủ thể."""
 
 from __future__ import annotations
 

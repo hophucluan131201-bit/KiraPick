@@ -163,13 +163,13 @@ def why_not_picked(conn: sqlite3.Connection, asset_id: int) -> str | None:
     if run is None or conn.execute("SELECT 1 FROM picks WHERE asset_id = ?", (asset_id,)).fetchone():
         return None
     if picks_stale(conn):
-        return "Lần ⭐ Chọn ảnh trước được làm trước khi gộp chủ thể: hãy chọn lại để có kết quả theo chủ thể mới."
+        return "Lần ⭐ AI gợi ý trước được làm trước khi gộp chủ thể: hãy chạy lại để có kết quả theo chủ thể mới."
     params = json.loads(run[0])
     subjects = [r[0] for r in conn.execute(
         "SELECT DISTINCT subject_id FROM occurrences WHERE asset_id = ? AND subject_id IS NOT NULL", (asset_id,))]
     subject = params.get("subject_id") if params.get("mode") == "in_view" else (subjects[0] if subjects else None)
     if params.get("mode") == "per_person" and subject is None:
-        return "Không được chọn: chưa thuộc chủ thể nào (Chưa xác định)."
+        return "Không được gợi ý: chưa thuộc chủ thể nào (Chưa xác định)."
     picked = [r[0] for r in conn.execute(
         "SELECT asset_id FROM picks WHERE subject_id IS ?" if subject is None else
         "SELECT asset_id FROM picks WHERE subject_id = ?", (subject,))]
@@ -180,12 +180,12 @@ def why_not_picked(conn: sqlite3.Connection, asset_id: int) -> str | None:
     nearest = max((c for a, c in cands.items() if a != asset_id), key=lambda c: similarity(me, c), default=None)
     if nearest is not None and similarity(me, nearest) >= 0.5:
         name = conn.execute("SELECT relative_path FROM assets WHERE id = ?", (nearest.asset_id,)).fetchone()[0]
-        better = "điểm cao hơn" if (nearest.score.total or 0) >= me.score.total else "đã được chọn trước"
-        return (f"Không được chọn: gần giống {name.rsplit('/', 1)[-1]} ({better}) — "
+        better = "điểm cao hơn" if (nearest.score.total or 0) >= me.score.total else "đã được gợi ý trước"
+        return (f"Không được gợi ý: gần giống {name.rsplit('/', 1)[-1]} ({better}) — "
                 "cùng dáng/khung hoặc chụp liên tiếp.")
-    return (f"Không được chọn: đã đủ {params.get('n')} ảnh"
+    return (f"Không được gợi ý: đã đủ {params.get('n')} ảnh"
             + (" cho chủ thể này" if params.get("mode") == "per_person" else "")
-            + ", các ảnh được chọn có điểm cao hơn hoặc khác dáng hơn.")
+            + ", các ảnh được gợi ý có điểm cao hơn hoặc khác dáng hơn.")
 
 
 def pick_reason(reason_json: str | None, rank: int) -> str:

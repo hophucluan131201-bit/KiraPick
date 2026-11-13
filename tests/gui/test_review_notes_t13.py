@@ -112,7 +112,7 @@ def test_filmstrip_tooltip_has_status(qtbot, env: dict) -> None:  # noqa: F811
     w.select_row(1)
     w.set_flag("keep")
     tip = w.filmstrip.model().index(1, 0).data(Qt.ItemDataRole.ToolTipRole)
-    assert "Chọn" in tip and w.model.record(w.model.index(1)).relative_path in tip
+    assert "Giữ" in tip and w.model.record(w.model.index(1)).relative_path in tip
 
 
 # ------------------------------------------------------------------ RV8

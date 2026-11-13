@@ -81,7 +81,7 @@ ACTIONS = {
     "bar clear": (lambda w: w.bottom_bar.clear_button.click(), (None, 2, False, None, 0)),
     "bar 3 stars": (lambda w: w.bottom_bar.star_buttons[2].click(), ("keep", 3, False, None, 0)),
     "bar rotate": (lambda w: w.bottom_bar.rotate_button.click(), ("keep", 2, False, None, 1)),
-    "menu clear": (lambda w: _menu_action(w, "Bỏ chọn").trigger(), (None, 2, False, None, 0)),
+    "menu clear": (lambda w: _menu_action(w, "Bỏ dấu").trigger(), (None, 2, False, None, 0)),
     "menu rotate": (lambda w: _menu_action(w, "⟳ Xoay xem").trigger(), ("keep", 2, False, None, 1)),
     "menu 5 stars": (lambda w: _menu_action(w, "★★★★★").trigger(), ("keep", 5, False, None, 0)),
 }
@@ -105,7 +105,7 @@ def test_action_hits_active_only(qtbot, env: dict, name: str) -> None:  # noqa: 
     tile = w.compare.tile(ids[1])
     assert tile.viewer._rotation == expected[4]  # the tile follows Xoay xem
     if expected[0] == "keep":
-        assert "Chọn" in tile.header.toolTip()
+        assert "Giữ" in tile.header.toolTip()
     if expected[0] == "reject":
         assert "Loại" in tile.header.toolTip()
 

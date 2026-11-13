@@ -100,7 +100,7 @@ def test_keyboard_culling_and_new_session_on_restart(qtbot, env: dict) -> None:
     _key(qtbot, w, Qt.Key.Key_U)
     _key(qtbot, w, Qt.Key.Key_0)
     assert decisions.get(w.project.conn, second.id) == decisions.Decision()
-    assert w.counts.text().startswith("Đã chọn 1 ảnh")
+    assert w.counts.text().startswith("Đã giữ 1 ảnh")
     w.close()
 
     w2 = _window(qtbot, env)  # every start is an empty session ...
@@ -121,14 +121,14 @@ def test_reset_forgets_folder_and_switching_folders(qtbot, env: dict, tmp_path: 
     w.select_row(0)
     _key(qtbot, w, Qt.Key.Key_K)
     _import(qtbot, w, other)  # switching folder = switching session
-    assert [r.name for r in w.model.records()] == ["IMG_0001.jpg"] and w.counts.text().startswith("Đã chọn 0 ảnh")
+    assert [r.name for r in w.model.records()] == ["IMG_0001.jpg"] and w.counts.text().startswith("Đã giữ 0 ảnh")
     _import(qtbot, w, env["photos"])
-    assert w.counts.text().startswith("Đã chọn 1 ảnh")
+    assert w.counts.text().startswith("Đã giữ 1 ảnh")
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     w.reset_current_folder()
     qtbot.waitUntil(lambda: w.import_thread is None, timeout=30000)
-    assert w.model.rowCount() == 7 and w.counts.text().startswith("Đã chọn 0 ảnh")
+    assert w.model.rowCount() == 7 and w.counts.text().startswith("Đã giữ 0 ảnh")
     assert "Đã nhớ" not in w.status.text()
     assert sorted(p.name for p in env["photos"].iterdir())[:2] == ["DSC_0000.jpg", "DSC_0001.jpg"]  # photos untouched
 
@@ -547,10 +547,10 @@ def test_ai_selection_puts_picks_first_marks_keep_and_explains(qtbot, env: dict)
     recs = {r.id: r for r in w.model.records()}
     assert recs[ids[1]].pick_rank == 1 and recs[ids[1]].flag == "keep"
     assert recs[ids[3]].flag == "reject"  # never overrides the user's own decision
-    assert "AI đã chọn" in w.status.text()
+    assert "AI đã gợi ý" in w.status.text()
     w.select_row(0)
     text = w.detail.score_card.text()
-    assert w.detail.score_card.value_text.isdigit() and "Được chọn vì" in text
+    assert w.detail.score_card.value_text.isdigit() and "AI gợi ý vì" in text
     assert "Chưa đánh giá" in text and "mắt nhắm/mở" in text
     before = w.teacher.store.culling_count()
     w.set_flag("reject")  # the user disagrees with the AI's first choice: a taste example
@@ -592,9 +592,9 @@ def test_per_person_selection_covers_everyone_even_from_a_person_view(qtbot, env
     first = [r.id for r in w.model.records()][:5]
     assert set(first) == set(chosen)
     w.select_row(0)
-    assert "Được chọn vì: điểm cao nhất" in w.detail.score_card.text()
+    assert "AI gợi ý vì: điểm cao nhất" in w.detail.score_card.text()
     w.select_row(5)  # the photo of person 1 that was left out
-    assert "Không được chọn" in w.detail.score_card.text()
+    assert "Không được gợi ý" in w.detail.score_card.text()
 
 
 def test_ctrl_and_shift_click_select_several_in_grid_and_filmstrip(qtbot, env: dict) -> None:

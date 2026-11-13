@@ -128,7 +128,7 @@ def test_tile_header_follows_record(qtbot, big: Path) -> None:  # noqa: ANN001
     token = tile.viewer._token
     tile.update_record(replace(rec, flag="keep", rating=3, favorite=True))
     text = tile.header.toolTip()
-    assert text.startswith("2") and "BIG_0001.jpg" in text and "Chọn" in text and "★★★" in text and "♥" in text
+    assert text.startswith("2") and "BIG_0001.jpg" in text and "Giữ" in text and "★★★" in text and "♥" in text
     assert tile.viewer._token == token  # no reload
     tile.update_record(replace(rec, flag="reject"))
     assert "Loại" in tile.header.toolTip() and "★" not in tile.header.toolTip()
@@ -164,4 +164,4 @@ def test_tile_unreadable_file(qtbot, tmp_path: Path) -> None:  # noqa: ANN001
     tile = _tile(qtbot, rec)
     qtbot.waitUntil(lambda: bool(tile.viewer._message), timeout=20000)
     tile.update_record(replace(rec, flag="keep"))
-    assert "Chọn" in tile.header.toolTip()
+    assert "Giữ" in tile.header.toolTip()

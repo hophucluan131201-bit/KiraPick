@@ -124,7 +124,7 @@ def test_reload_keeps_zoom_pan_and_active(qtbot, env: dict) -> None:  # noqa: F8
     w.reload_preserving_view()
     assert w.in_compare() and w.compare.active_id == ids[1]
     assert v.zoom == zoom and v._token == token and v.mapToScene(v.viewport().rect().center()) == centre
-    assert "Chọn" in w.compare.tile(ids[2]).header.toolTip()
+    assert "Giữ" in w.compare.tile(ids[2]).header.toolTip()
 
 
 def test_filtered_out_photo_stays_until_compare_closes(qtbot, env: dict) -> None:  # noqa: F811

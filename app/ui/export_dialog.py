@@ -305,7 +305,7 @@ class ExportDialog(QDialog):
         dest_row.addWidget(self.dest, 1)
         dest_row.addWidget(browse)
         dbox.addLayout(dest_row)
-        self.customer_list = QCheckBox("Xuất kèm danh sách ảnh đã chọn")
+        self.customer_list = QCheckBox("Xuất kèm danh sách tên ảnh đã xuất")
         self.customer_list.setToolTip(f"Tạo thêm thư mục con {MANIFEST_DIR} (CSV + JSON) trong thư mục đích. "
                                       "Không tick: thư mục đích chỉ có ảnh; nhật ký xuất vẫn được KiraPick giữ "
                                       "riêng trong dữ liệu của app.")
@@ -366,7 +366,7 @@ class ExportDialog(QDialog):
         nbox.addWidget(self.copy_names_button)
         self.names_status = QLabel()
         nbox.addWidget(self.names_status)
-        self.tabs.addTab(self.names_tab, "📋 Tên ảnh đã Chọn")
+        self.tabs.addTab(self.names_tab, "📋 Tên ảnh đã Giữ")
         self._names: list[str] = []
         self._names_ids: list[int] = []
         self._names_dirty = True  # computed when the tab is shown (database only, but 10 000 photos take ~0.3 s)
@@ -785,7 +785,7 @@ class ExportDialog(QDialog):
         self._names_dirty = False
         names = keep_names(self.project.conn, ids, with_extension=self.names_with_ext.isChecked())
         self._names = names.lines
-        self.names_count.setText(f"{names.photos} ảnh đã Chọn trong phạm vi này · {len(names.lines)} tên")
+        self.names_count.setText(f"{names.photos} ảnh đã Giữ trong phạm vi này · {len(names.lines)} tên")
         self.names_list.setPlainText("\n".join(names.lines))
         if names.shared_stems:
             shown = ", ".join(f"{stem} ({n} ảnh)" for stem, n in list(names.shared_stems.items())[:5])

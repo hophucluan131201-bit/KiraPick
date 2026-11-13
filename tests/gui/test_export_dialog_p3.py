@@ -1,5 +1,5 @@
 """Part 3 Task 10 — the export dialog: three independent groups, preview tabs, confirming unsure matches, copy,
-retry, and the "Tên ảnh đã Chọn" tab (spec §4, RV-P3-C02, RV-P3-C05)."""
+retry, and the "Tên ảnh đã Giữ" tab (spec §4, RV-P3-C02, RV-P3-C05)."""
 
 from __future__ import annotations
 
@@ -238,14 +238,14 @@ def test_retry_button_after_partial_failure(qtbot, fx, monkeypatch: pytest.Monke
     assert dialog.result.copied == ["DSC_0004.JPG"] and not dialog.retry_button.isVisibleTo(dialog)
 
 
-# --- 📋 Tên ảnh đã Chọn ---------------------------------------------------------------------------------------------
+# --- 📋 Tên ảnh đã Giữ ---------------------------------------------------------------------------------------------
 
 def test_names_tab_copies_to_clipboard(qtbot, fx) -> None:  # noqa: ANN001
     dialog = imported_dialog(qtbot, fx)
     dialog.tabs.setCurrentWidget(dialog.names_tab)  # computed when shown
     assert dialog.names_list.toPlainText().splitlines() == ["DSC_0001", "DSC_0002", "DSC_0003", "DSC_0004",
                                                              "DSC_0005", "DSC_0006"]
-    assert dialog.names_count.text().startswith("6 ảnh đã Chọn trong phạm vi này")
+    assert dialog.names_count.text().startswith("6 ảnh đã Giữ trong phạm vi này")
     dialog.copy_names_button.click()
     assert QGuiApplication.clipboard().text() == "DSC_0001\nDSC_0002\nDSC_0003\nDSC_0004\nDSC_0005\nDSC_0006"
     assert dialog.names_status.text() == "Đã sao chép 6 tên vào bộ nhớ tạm"
@@ -418,7 +418,7 @@ def test_copy_names_responsive_while_the_source_is_unreachable(qtbot, tmp_path: 
         project.close()
 
 
-# --- RB1: "Xuất kèm danh sách ảnh đã chọn" -----------------------------------------------------------------------------
+# --- RB1: "Xuất kèm danh sách tên ảnh đã xuất" -----------------------------------------------------------------------------
 def _files(root: Path) -> set[str]:
     return {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
 
@@ -427,7 +427,7 @@ def test_customer_list_off_by_default_and_not_remembered(qtbot, fx) -> None:  # 
     decisions.set_flag(fx.project.conn, fx.ids["raw_only"], "keep")
     fx.project.conn.commit()
     dialog = imported_dialog(qtbot, fx)
-    assert dialog.customer_list.text() == "Xuất kèm danh sách ảnh đã chọn" and not dialog.customer_list.isChecked()
+    assert dialog.customer_list.text() == "Xuất kèm danh sách tên ảnh đã xuất" and not dialog.customer_list.isChecked()
     wait_plan(qtbot, dialog)
     result = copy_and_wait(qtbot, dialog)
     assert result.copied and not (fx.dest / copy_export.MANIFEST_DIR).exists()

@@ -226,7 +226,7 @@ def test_key_hints_and_help_list_the_new_keys(qtbot, env: dict, monkeypatch) -> 
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: shown.append(a[2]))
     w = _window(qtbot, env)
     w.show_shortcuts()
-    assert "P / K   Chọn" in shown[0] and "Tab" in shown[0] and "ô tìm kiếm" in shown[0]
+    assert "P / K   Giữ" in shown[0] and "Tab" in shown[0] and "ô tìm kiếm" in shown[0]
 
 
 def test_slider_in_short_detail_focus_reaches_the_decoder(qtbot, env: dict) -> None:  # noqa: F811
