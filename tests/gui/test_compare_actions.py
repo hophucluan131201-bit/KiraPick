@@ -71,19 +71,15 @@ ACTIONS = {
     "Q": (lambda w: QTest.keyClick(w, Qt.Key.Key_Q), ("keep", 2, False, "sharp", 0)),
     "W": (lambda w: QTest.keyClick(w, Qt.Key.Key_W), ("keep", 2, False, "soft", 0)),
     "R": (lambda w: QTest.keyClick(w, Qt.Key.Key_R), ("keep", 2, False, "missed", 0)),
-    "detail keep": (lambda w: w.detail.keep_button.click(), ("keep", 2, False, None, 0)),
-    "detail reject": (lambda w: w.detail.reject_button.click(), ("reject", 2, False, None, 0)),
-    "detail clear": (lambda w: w.detail.clear_button.click(), (None, 2, False, None, 0)),
-    "detail 4 stars": (lambda w: w.detail.star_buttons[3].click(), ("keep", 4, False, None, 0)),
-    "detail favorite": (lambda w: w.detail.favorite_button.click(), ("keep", 2, True, None, 0)),
+    "bar favorite": (lambda w: w.bottom_bar.favorite_button.click(), ("keep", 2, True, None, 0)),
     "bar keep": (lambda w: w.bottom_bar.keep_button.click(), ("keep", 2, False, None, 0)),
     "bar reject": (lambda w: w.bottom_bar.reject_button.click(), ("reject", 2, False, None, 0)),
     "bar clear": (lambda w: w.bottom_bar.clear_button.click(), (None, 2, False, None, 0)),
     "bar 3 stars": (lambda w: w.bottom_bar.star_buttons[2].click(), ("keep", 3, False, None, 0)),
     "bar rotate": (lambda w: w.bottom_bar.rotate_button.click(), ("keep", 2, False, None, 1)),
     "menu clear": (lambda w: _menu_action(w, "Bỏ dấu").trigger(), (None, 2, False, None, 0)),
-    "menu rotate": (lambda w: _menu_action(w, "⟳ Xoay xem").trigger(), ("keep", 2, False, None, 1)),
-    "menu 5 stars": (lambda w: _menu_action(w, "★★★★★").trigger(), ("keep", 5, False, None, 0)),
+    "menu rotate": (lambda w: _menu_action(w, "Xoay xem").trigger(), ("keep", 2, False, None, 1)),
+    "menu 5 stars": (lambda w: _menu_action(w, "5 sao").trigger(), ("keep", 5, False, None, 0)),
 }
 
 
@@ -133,21 +129,6 @@ def test_keys_after_leaving_tiles_hit_last_hovered(qtbot, env: dict) -> None:  #
     _key(qtbot, w, Qt.Key.Key_X)
     assert decisions.get(w.project.conn, ids[2]).flag == "reject"
     assert decisions.get(w.project.conn, ids[0]).flag is None
-
-
-def test_panel_button_refused_while_panel_lags(qtbot, env: dict) -> None:  # noqa: F811
-    """Batch 2 must: the panel still shows A while B is active → the panel's button changes nothing."""
-    w, ids = _setup(qtbot, env)
-    _hover(w, ids[0])
-    qtbot.wait(PANEL_DELAY_MS + 80)
-    assert w.detail.shown_id == ids[0]
-    w.compare._on_hovered(ids[2])  # B active, the panel has not followed yet (no leave, no wait)
-    conn = w.project.conn
-    before = {i: _rows(conn, i) for i in ids}
-    for button in (w.detail.reject_button, w.detail.keep_button, w.detail.star_buttons[4], w.detail.favorite_button):
-        button.click()
-        assert w.status.text() == REFUSED
-    assert {i: _rows(conn, i) for i in ids} == before
 
 
 def test_people_menu_acts_on_panel_photo(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811

@@ -45,7 +45,7 @@ def test_photos_without_a_found_person_cannot_be_grouped_and_say_why(qtbot, env:
     seen: dict = {}
     monkeypatch.setattr(w, "_run_menu", _actions(seen))
     w._people_menu_at(None, ids[:2])
-    create = next(v for k, v in seen.items() if k.startswith("➕ Tạo chủ thể mới"))
+    create = next(v for k, v in seen.items() if k.startswith("Tạo chủ thể mới"))
     assert create == (False, mw.NO_PEOPLE_FOUND)
     assert seen["Gán cho chủ thể…"][0] is False
     assert w.project.conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0] == 0  # no empty person made
@@ -63,7 +63,7 @@ def test_found_people_are_grouped_by_hand_and_the_status_is_honest(qtbot, env: d
     ids = [r.id for r in w.model.records() if r.status == "ok"]
     _person(w, ids[0])
     monkeypatch.setattr(mw.QInputDialog, "getText", staticmethod(lambda *a, **k: ("Aki", True)))
-    monkeypatch.setattr(w, "_run_menu", _pick("➕ Tạo chủ thể mới"))
+    monkeypatch.setattr(w, "_run_menu", _pick("Tạo chủ thể mới"))
     w._people_menu_at(None, ids[:2])
     rows = w.project.conn.execute("SELECT asset_id, assignment FROM occurrences WHERE subject_id IS NOT NULL").fetchall()
     assert [tuple(r) for r in rows] == [(ids[0], "manual")]
@@ -77,7 +77,7 @@ def test_grouping_action_log_line_names_no_person(qtbot, env: dict, monkeypatch,
     ids = [r.id for r in w.model.records() if r.status == "ok"]
     _person(w, ids[0])
     monkeypatch.setattr(mw.QInputDialog, "getText", staticmethod(lambda *a, **k: ("Nguyễn Thị Khách", True)))
-    monkeypatch.setattr(w, "_run_menu", _pick("➕ Tạo chủ thể mới"))
+    monkeypatch.setattr(w, "_run_menu", _pick("Tạo chủ thể mới"))
     caplog.set_level(logging.INFO, logger=mw.__name__)
     w._people_menu_at(None, ids[:1])
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("people action")]

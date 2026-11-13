@@ -1,7 +1,7 @@
 """What each KiraPick function runs on (a model weight or a plain rule), and what happens when the weight is off.
 
 Work screens name functions only ("Gom ảnh theo người", "Hợp gu"…). Model names, files, licences and the status in
-this build are shown in one place: ⚙ Tuỳ chọn → ℹ Giới thiệu → Mô hình và giấy phép (app.ui.about_models), built
+this build are shown in one place: Tuỳ chọn → Giới thiệu → Mô hình và giấy phép (app.ui.about_models), built
 from this table, configs/model-policy.json and configs/model-manifest.json.
 """
 
@@ -31,10 +31,10 @@ FEATURES: tuple[Feature, ...] = (
     Feature("Mắt nhắm, biểu cảm", "Chụp cá nhân", ("face_mesh", "face_blendshapes"),
             without="Không cảnh báo mắt nhắm."),
     Feature("Gom ảnh theo người tự động", "Chụp cá nhân", ("face_embedder",),
-            without="Gom tay: chuột phải trên ảnh → ➕ Tạo chủ thể mới / Gán cho chủ thể…; Gộp, Tách, Đổi tên, "
+            without="Gom tay: chuột phải trên ảnh → Tạo chủ thể mới / Gán cho chủ thể…; Gộp, Tách, Đổi tên, "
                     "Hoàn tác như 3.0.0. Ảnh không có người được dò thì không gom được (app báo lý do)."),
     Feature("Hợp gu, dạy gu", "Chụp cá nhân", ("clip_l14_image", "clip_prompts", "laion_aesthetic"),
-            without="Điểm xếp hạng chỉ có phần Kỹ thuật; 🎓 Dạy gu chưa dùng được."),
+            without="Điểm xếp hạng chỉ có phần Kỹ thuật; Dạy gu chưa dùng được."),
     Feature("Gom theo dáng người / trang phục bằng AI (bản 3.0.0)", "—", ("body_reid",),
             without="Không dùng trong bản này; gom tay như trên."),
     Feature("Nhận mặt mạnh (bản 3.0.0)", "—", ("face_embedder_arcface",),

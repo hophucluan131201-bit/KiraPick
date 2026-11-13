@@ -20,6 +20,9 @@ The full licence texts are in `docs\licenses\` (see `INDEX.txt` there). They are
 - OpenVINO edition: ONNX Runtime OpenVINO Execution Provider and Intel OpenVINO — Apache-2.0
 - rawpy — MIT (`rawpy-LICENSE.txt`); LibRaw — LGPL-2.1 or CDDL-1.0 (`LibRaw-LICENSE.txt`, `LGPL-2.1.txt`)
 - NumPy — BSD-3-Clause; Pillow — MIT-CMU (HPND); ExifRead — BSD-3-Clause; PyYAML — MIT
+- Lucide icons 1.72.0 (the app's button and menu icons, `app/assets/icons`) — ISC, Copyright (c) 2026 Lucide
+  Icons and Contributors; the icons derived from Feather (here: aperture, check, info, search, target, trash-2, x) —
+  MIT, Copyright (c) 2013-present Cole Bemis (`Lucide-LICENSE.txt`, both texts)
 - PyInstaller bootloader — GPL-2.0 with the PyInstaller bootloader exception
 - Microsoft Visual C++ runtime DLLs (msvcp140*, vcruntime140_1, concrt140, vcomp140) — redistributed app-locally
   under the Microsoft Visual C++ Redistributable licence terms

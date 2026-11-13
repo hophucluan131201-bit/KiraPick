@@ -116,7 +116,7 @@ class AssetRecord:
     focus: str | None = None  # the user's Q / W / R sharpness label
     uncertain: bool = False  # in a person view: only suggested (no clear face), needs a look
     score: Score | None = None  # of the person shown (person view) or of the main person
-    pick_rank: int | None = None  # chosen by "⭐ Chọn ảnh": 1 = first choice
+    pick_rank: int | None = None  # chosen by "Chọn ảnh": 1 = first choice
     ranked: Ranked | None = None  # technical score blended with the taste score (None = not scored)
     rotation: int = 0  # "Xoay xem": quarter turns clockwise, display only (app.storage.view)
 

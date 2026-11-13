@@ -1,4 +1,4 @@
-"""Right-hand detail panel: preview, Chọn / Loại / Bỏ chọn, stars and ❤, then four tabs.
+"""Right-hand detail panel: the photo's name and marks (read-only), preview, then four tabs.
 
 Tabs: Phân tích AI (score card), Thông tin ảnh (file facts; full EXIF folded away until asked for),
 Ảnh tương tự (photos taken within ±3 s of the same person — a time burst, not a visual comparison),
@@ -16,20 +16,19 @@ from PySide6.QtWidgets import (
 )
 
 from app.learning.taste import TasteStatus
-from app.ui import theme
+from app.ui import icons, theme
 from app.ui.asset_model import AssetRecord
 from app.ui.grid import card_texts
 from app.ui.inspector import Inspector
 from app.ui.score_card import ScoreCard
-from app.ui.score_style import COLORS
 
 TABS = ("Phân tích AI", "Thông tin ảnh", "Ảnh tương tự", "Chủ thể")
 TABS_SHORT = ("AI", "Thông tin", "Tương tự", "Chủ thể")  # narrow panel: full titles in the tooltips
-TABS_ICONS = ("✨ AI", "ℹ", "⧉", "👤")  # narrowest panel
+TABS_ICONS = ("sparkles", "info", "images", "user")  # narrowest panel: Lucide icons only (app.ui.icons)
 BURST_ROW = 72  # one fixed row height in "Ảnh tương tự", with or without the thumbnail yet
 TOP_MAX_W = 300  # SHORT (horizontal) layout: preview and buttons column
 PREVIEW_MIN_H = 80
-PREVIEW_HIDE_H = 40  # SHORT layout: below this the preview is hidden (title, stars, buttons and tabs stay)
+PREVIEW_HIDE_H = 40  # SHORT layout: below this the preview is hidden (title and tabs stay)
 QWIDGETSIZE_MAX = 16777215
 _PLACEHOLDER: QIcon | None = None
 
@@ -42,6 +41,22 @@ def _placeholder() -> QIcon:
         pm.fill(QColor(theme.RAISED))
         _PLACEHOLDER = QIcon(pm)
     return _PLACEHOLDER
+def marks_html(rec: AssetRecord | None) -> str:
+    """"✓ Giữ ★★★ ♥" in the marks' colours; empty for no photo or no mark."""
+    if rec is None:
+        return ""
+    parts = []
+    if rec.flag == "keep":
+        parts.append(f"<span style='color:{theme.KEEP}'>✓ Giữ</span>")
+    elif rec.flag == "reject":
+        parts.append(f"<span style='color:{theme.REJECT_ON_BUTTON}'>✕ Loại</span>")
+    if rec.rating:
+        parts.append(f"<span style='color:{theme.STAR}'>{'★' * rec.rating}</span>")
+    if rec.favorite:
+        parts.append(f"<span style='color:{theme.FAVORITE}'>♥</span>")
+    return " ".join(parts)
+
+
 BURST_HEADER = ("Ảnh chụp liền nhau (±3 giây, cùng chủ thể) — chỉ theo giờ chụp, "
                 "không so sánh dáng hay nội dung ảnh")
 
@@ -69,11 +84,6 @@ def _scroll(widget: QWidget) -> QScrollArea:
 
 
 class DetailPanel(QWidget):
-    keep_clicked = Signal()
-    reject_clicked = Signal()
-    clear_clicked = Signal()
-    rating_clicked = Signal(int)
-    favorite_clicked = Signal()
     neighbour_clicked = Signal(int)  # asset id
     open_loupe = Signal()
     people_menu_requested = Signal(QPoint)  # global position for the people actions menu
@@ -98,40 +108,19 @@ class DetailPanel(QWidget):
         self.preview.clicked.connect(self.open_loupe)
         self.preview.resized.connect(self._fit_preview)
         self._pixmap: QPixmap | None = None
-        stars = QHBoxLayout()
-        self.star_buttons: list[QPushButton] = []
-        for n in range(1, 6):
-            b = QPushButton("☆")
-            b.setFlat(True)
-            b.setFixedWidth(26)
-            b.setToolTip(f"{n} sao (phím {n})")
-            b.clicked.connect(lambda _c=False, n=n: self.rating_clicked.emit(n))
-            stars.addWidget(b)
-            self.star_buttons.append(b)
-        self.favorite_button = QPushButton("♡")
-        self.favorite_button.setFlat(True)
-        self.favorite_button.setFixedWidth(26)
-        self.favorite_button.setToolTip("Yêu thích (F)")
-        self.favorite_button.clicked.connect(self.favorite_clicked)
-        stars.addStretch(1)
-        stars.addWidget(self.favorite_button)
-        actions = QHBoxLayout()
-        self.keep_button = QPushButton("✓ Giữ")  # short labels fit the 240 px minimum width; keys in tooltips
-        self.reject_button = QPushButton("✕ Loại")
-        self.clear_button = QPushButton("Bỏ dấu")
-        self.keep_button.setToolTip("Giữ ảnh này (phím P hoặc K)")
-        self.reject_button.setToolTip("Loại ảnh này (phím X)")
-        self.clear_button.setToolTip("Bỏ dấu Giữ / Loại (phím U)")
-        self.keep_button.setStyleSheet(f"color: {COLORS['good']};")
-        self.reject_button.setStyleSheet(f"color: {theme.REJECT_ON_BUTTON};")
-        for b, sig in ((self.keep_button, self.keep_clicked), (self.reject_button, self.reject_clicked),
-                       (self.clear_button, self.clear_clicked)):
-            b.clicked.connect(sig)
-            actions.addWidget(b)
-        for w in (self.title, self.preview):
-            top_layout.addWidget(w)
-        top_layout.addLayout(stars)
-        top_layout.addLayout(actions)
+        # The photo's marks, read-only: Giữ / Loại, stars and ♥ are set with the keys or the bottom bar (one set of
+        # marking buttons in the window: UX-2, owner approval 2026-11-13)
+        self.marks = QLabel()
+        self.marks.setTextFormat(Qt.TextFormat.RichText)
+        # one line, fixed height: a rich-text label asks for height-for-width, and the block above the tabs then
+        # laid the preview out over them
+        self.marks.setFixedHeight(self.title.sizeHint().height())
+        self.marks.setToolTip("Đánh dấu bằng phím P / X / U, 1–5, F hoặc các nút ở thanh dưới")
+        title_row = QHBoxLayout()
+        title_row.addWidget(self.title, 1)
+        title_row.addWidget(self.marks)
+        top_layout.addLayout(title_row)
+        top_layout.addWidget(self.preview)
         self.top = top
 
         self.tabs = QTabWidget()
@@ -183,22 +172,15 @@ class DetailPanel(QWidget):
         self.title.setText(rec.name if rec is not None else "—")
         self._pixmap = pixmap
         self._fit_preview()
-        for n, b in enumerate(self.star_buttons, 1):
-            b.setText("★" if rec is not None and rec.rating >= n else "☆")
-            b.setStyleSheet(f"color: {theme.STAR if rec is not None and rec.rating >= n else theme.MUTED};")
-        fav = rec is not None and rec.favorite
-        self.favorite_button.setText("♥" if fav else "♡")
-        self.favorite_button.setStyleSheet(f"color: {theme.FAVORITE if fav else theme.MUTED};")
-        for b in (self.keep_button, self.reject_button, self.clear_button, self.favorite_button, *self.star_buttons,
-                  self.people_button):
-            b.setEnabled(rec is not None)
+        self.marks.setText(marks_html(rec))
+        self.people_button.setEnabled(rec is not None)
         self.score_card.show_record(rec, taste, selection)
         self.inspector.show_record(rec)
         shown_id = rec.id if rec is not None else None
         if shown_id != self._shown_id:  # another photo: EXIF folds again; a refresh of the same photo keeps it open
             self.exif_section.set_collapsed(True)
             self._shown_id = shown_id
-        self.people_label.setText(people or ("chưa nhận diện — bấm 🧠 Nhận diện chủ thể" if rec is not None else "—"))
+        self.people_label.setText(people or ("chưa nhận diện — bấm Nhận diện chủ thể" if rec is not None else "—"))
         self.burst.clear()
         for other in neighbours:
             badge, chip = card_texts(other)
@@ -238,9 +220,8 @@ class DetailPanel(QWidget):
         """An explicit preview height, so the block above the tabs always gets the room it needs (nothing in it
         overlaps) and the preview never takes the tabs' room: ≤ 35 % of the panel height, ~3:2 of the width."""
         spacing = max(0, self.top.layout().spacing())
-        rest = (self.title.sizeHint().height() + self.star_buttons[0].sizeHint().height()
-                + self.keep_button.sizeHint().height() + 3 * spacing)  # title, stars and buttons
-        if getattr(self, "_horizontal", False):  # SHORT: very low windows hide the preview, never the buttons
+        rest = self.title.sizeHint().height() + spacing  # the title row
+        if getattr(self, "_horizontal", False):  # SHORT: very low windows hide the preview, never the title
             h = self.height() - rest - 12
             self.preview.setVisible(h >= PREVIEW_HIDE_H)
             self.preview.setFixedHeight(max(PREVIEW_HIDE_H, h))
@@ -253,12 +234,17 @@ class DetailPanel(QWidget):
         bar = self.tabs.tabBar()
         for i, name in enumerate(TABS):
             bar.setTabText(i, name)
+            bar.setTabIcon(i, QIcon())
             bar.setTabToolTip(i, "")
         for titles in (TABS_SHORT, TABS_ICONS):
             if bar.sizeHint().width() <= self.tabs.width():
                 return
             for i, (name, short) in enumerate(zip(TABS, titles, strict=True)):
-                bar.setTabText(i, short)
+                if titles is TABS_ICONS:
+                    bar.setTabIcon(i, icons.icon(short))
+                    bar.setTabText(i, "")
+                else:
+                    bar.setTabText(i, short)
                 bar.setTabToolTip(i, name)
 
     # ------------------------------------------------------------- helpers

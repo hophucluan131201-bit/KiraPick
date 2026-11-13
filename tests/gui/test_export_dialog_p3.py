@@ -160,7 +160,7 @@ def test_ambiguous_confirm_flow(qtbot, fx) -> None:  # noqa: ANN001
     wait_plan(qtbot, dialog)
     (op,) = dialog.plan.operations
     assert op.source == a.resolve() and op.match == "manual"
-    assert "✋ xác nhận tay" in dialog.plan_table.item(0, 1).text()
+    assert "xác nhận tay" in dialog.plan_table.item(0, 1).text()
     assert dialog.copy_button.isEnabled() and dialog.copy_button.text() == "Sao chép 1 file"
     result = copy_and_wait(qtbot, dialog)
     assert result.copied == ["DSC_0004.NEF"] and (fx.dest / "DSC_0004.NEF").read_bytes() == a.read_bytes()

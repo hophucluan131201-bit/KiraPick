@@ -49,21 +49,21 @@ Máy cần Windows 10/11 64-bit.
 
 ### Cách dùng: 4 bước, mỗi bước xong sẽ dừng chờ bạn
 
-1. **📂 Nhập ảnh** — chọn thư mục ảnh của một buổi chụp.
-2. **🧠 Nhận diện chủ thể** — AI gom ảnh theo từng người. Kiểm tra danh sách **CHỦ THỂ** bên trái:
-   tick ô vuông của nhiều người rồi bấm **🔗 Gộp** nếu một người bị tách thành nhiều nhóm (hộp thoại cho chọn chủ thể
+1. **Nhập ảnh** — chọn thư mục ảnh của một buổi chụp.
+2. **Nhận diện chủ thể** — AI gom ảnh theo từng người. Kiểm tra danh sách **CHỦ THỂ** bên trái:
+   tick ô vuông của nhiều người rồi bấm **Gộp chủ thể** nếu một người bị tách thành nhiều nhóm (hộp thoại cho chọn chủ thể
    giữ lại, đặt tên, xem ảnh từng bên; gộp nhầm thì **Ctrl+Z**);
    chuột phải vào ảnh để bỏ ảnh khỏi một chủ thể, gán cho chủ thể khác, hoặc **➕ Tạo chủ thể mới** nếu đó là
    người chưa có trong danh sách. Ô phía trên danh sách đổi cách xếp (theo số, thời gian chụp, nhiều ảnh nhất,
    tên); nhấp phải vào danh sách → **🔢 Đánh số lại** để có số 1, 2, 3… liền nhau.
-3. **📊 Phân tích ảnh** — chấm điểm từng người trong từng ảnh. Mỗi ảnh có hai điểm: **K – Kỹ thuật**
+3. **Phân tích ảnh** — chấm điểm từng người trong từng ảnh. Mỗi ảnh có hai điểm: **K – Kỹ thuật**
    (nét, mắt, mặt, sáng, bố cục, thẩm mỹ TOPIQ + LAION) và **G – Hợp gu bạn** (app tự học từ các lần bạn
    Giữ/Loại/cho sao/❤; chỉ hiện khi đã học đủ ≥ 60 lựa chọn và đoán đúng rõ hơn đoán mò). Bảng bên phải có
    thanh điểm và lý do cho từng tiêu chí; lưới ảnh hiện “K 78 · G 85” và xếp được theo K, G hoặc K + G.
-   🎓 **AI đã học → So sánh ảnh…**: chọn tấm thích hơn trong từng cặp ảnh giống nhau để app học gu nhanh hơn.
-   ⚙ **Tuỳ chọn**: tỷ lệ K/G, **🔄 Cập nhật KiraPick** (cần mạng, chỉ khi bạn bấm).
-4. **⭐ Chọn ảnh** — nhập số ảnh muốn chọn cho mỗi người (xếp theo K + G). Ảnh AI chọn có nhãn **AI** và xếp lên đầu.
-   Duyệt lại bằng **P** (giữ) / **X** (loại) / **U** (bỏ đánh dấu), rồi **⤴ Xuất ảnh → Ảnh đã Giữ**.
+   **Tuỳ chọn → AI đã học → So sánh ảnh…**: chọn tấm thích hơn trong từng cặp ảnh giống nhau để app học gu nhanh hơn.
+   **Tuỳ chọn** (biểu tượng bánh răng): tỷ lệ K/G, **Cập nhật KiraPick** (cần mạng, chỉ khi bạn bấm).
+4. **AI gợi ý** — nhập số ảnh muốn chọn cho mỗi người (xếp theo K + G). Ảnh AI chọn có nhãn **AI** và xếp lên đầu.
+   Duyệt lại bằng **P** (giữ) / **X** (loại) / **U** (bỏ đánh dấu), rồi **Xuất ảnh → Ảnh đã Giữ**.
 
 Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng phím tắt nhỏ luôn hiện dưới khu vực ảnh
 (ẩn/hiện bằng **⌨ Phím tắt**, **F1** xem đầy đủ).
@@ -89,7 +89,7 @@ Nút **▦ Lưới ảnh | 🔍 Xem lớn** để đổi chế độ xem. Bảng
 
 Khi đang gõ trong ô tìm kiếm (hoặc ô tìm chủ thể), các phím chữ và số chỉ để gõ — không chấm ảnh.
 
-**So sánh (C):** đánh dấu 2–4 ảnh rồi bấm C (hoặc ⧉ So sánh). Ảnh dưới con trỏ chuột là ảnh đang chọn (viền
+**So sánh (C):** đánh dấu 2–4 ảnh rồi bấm C (hoặc nút So sánh). Ảnh dưới con trỏ chuột là ảnh đang chọn (viền
 xanh): P / X / U / 1–5 / F / Q / W / R chỉ tác động lên ảnh đó, không tự sang ảnh khác. Mỗi ảnh phóng to riêng.
 I bật / tắt dòng điểm AI trên mọi ảnh (K · G, ⚠, điểm yếu chính; ảnh chưa phân tích ghi "chưa phân tích"); nút
 "Xếp" chọn Tự động / Một hàng / Lưới 2×2 (được nhớ). Esc hoặc G về lưới, giữ nguyên ảnh đang xem, các dấu đánh dấu và vị
@@ -97,12 +97,12 @@ trí cuộn.
 
 **Bố cục tự thích ứng với cửa sổ:** màn hình rộng có cột bộ lọc bên trái và bảng chi tiết bên phải.
 Chia đôi màn hình theo chiều dọc: bộ lọc thu thành dải biểu tượng (bấm để mở ra), bảng chi tiết hiện bên phải
-từ 900 px (hẹp hơn thì trượt ra khi bấm **Tab** / **▤ Chi tiết**). Chia đôi theo chiều ngang (cửa sổ thấp):
+từ 900 px (hẹp hơn thì trượt ra khi bấm **Tab** / **Chi tiết**). Chia đôi theo chiều ngang (cửa sổ thấp):
 lưới chiếm hết chỗ kèm một dòng tóm tắt ảnh, **Tab** để xem chi tiết bên dưới một hàng ảnh. Kéo đổi cỡ cửa sổ
 không làm mất ảnh đang xem, ảnh đang đánh dấu, bộ lọc hay vị trí cuộn. Trên màn hình 150 % / 200 % hoặc khi
 kéo thanh cỡ ảnh lớn, app tự làm ảnh nhỏ nét hơn (đọc ảnh gốc, không sửa).
 
-**Danh sách khách chọn (📋 Khách chọn):** dán tin nhắn khách gửi; app hiểu số, khoảng
+**Danh sách khách chọn (Khách chọn):** dán tin nhắn khách gửi; app hiểu số, khoảng
 (`9657-9660`, `9657 đến 9660`, `9645-50`) và tên file đầy đủ, báo trước những số không tìm thấy.
 
 **Xuất ảnh** chỉ **sao chép** (Giữ, Yêu thích, ≥ N sao, ảnh đang chọn hoặc danh sách khách). Ba lựa
@@ -114,7 +114,7 @@ người vào "Chưa xác định"). Cặp RAW+JPEG luôn cùng tên; không bao
 dung → tên mới " (1)"); file đã có giống hệt được bỏ qua; nút Dừng dừng ngay cả giữa một file lớn (file
 dở dang bị xoá). Danh sách đầy đủ mọi file và lý do bỏ qua (CSV/JSON) luôn được lưu trong dữ liệu của app
 (`%LOCALAPPDATA%\KiraPick\sessions\…\export_records`); chỉ khi tick **Xuất kèm danh sách ảnh đã chọn** (mặc định tắt)
-mới có thêm thư mục con `_kirapick_danh_sach` ở thư mục đích; "Thử lại các file chưa chép" chép phần còn thiếu. Tab **📋 Tên ảnh đã Chọn**
+mới có thêm thư mục con `_kirapick_danh_sach` ở thư mục đích; "Thử lại các file chưa chép" chép phần còn thiếu. Tab **Tên ảnh đã Giữ**
 sao chép tên ảnh (mỗi ảnh một dòng, báo khi có ảnh khác nhau trùng tên) mà không cần thẻ hay thư mục
 đích. Tuỳ chọn cũ "Giữ cấu trúc thư mục con" đã bỏ.
 
@@ -187,21 +187,21 @@ Requires Windows 10/11 64-bit.
 
 ### Use: 4 steps, each one waits for you
 
-1. **📂 Nhập ảnh** (Import) — pick the folder of one shoot.
-2. **🧠 Nhận diện chủ thể** (Find people) — AI groups photos by person. Check the **CHỦ THỂ** (people)
-   list: tick several people and press **🔗 Gộp** (merge; a dialog picks the subject to keep, its name, and shows
+1. **Nhập ảnh** (Import) — pick the folder of one shoot.
+2. **Nhận diện chủ thể** (Find people) — AI groups photos by person. Check the **CHỦ THỂ** (people)
+   list: tick several people and press **Gộp chủ thể** (merge; a dialog picks the subject to keep, its name, and shows
    each side's photos; undo with **Ctrl+Z**) if one person was split; right-click
    photos to remove them from a subject, assign them to another, or **➕ Tạo chủ thể mới** (new subject) for
    someone not in the list yet. The box above the list changes its order (number, capture time, most photos,
    name); right-click the list → **🔢 Đánh số lại** renumbers subjects 1, 2, 3… in shooting order.
-3. **📊 Phân tích ảnh** (Analyse) — scores every person in every photo. Two scores: **K – technical**
+3. **Phân tích ảnh** (Analyse) — scores every person in every photo. Two scores: **K – technical**
    (focus, eyes, face, light, framing, TOPIQ + LAION aesthetics) and **G – fits your taste** (learnt from
    your keeps/rejects/stars/❤; shown only after ≥ 60 decisions and when it predicts clearly better than
    chance). The right panel has a bar and a reason per criterion; the grid shows “K 78 · G 85” and sorts by
-   K, G or K + G. 🎓 → **So sánh ảnh…** asks which of two similar photos you prefer, to learn faster.
-   ⚙ Options: the K/G ratio and **🔄 Cập nhật KiraPick** (app update; needs the Internet, only when you click it).
-4. **⭐ Chọn ảnh** (Pick) — enter how many photos per person (ranked by K + G). AI picks get an **AI** badge and go
-   first. Review with **P** (keep) / **X** (reject) / **U** (clear), then **⤴ Xuất ảnh → Ảnh đã Giữ**
+   K, G or K + G. Tuỳ chọn → AI đã học → **So sánh ảnh…** asks which of two similar photos you prefer, to learn faster.
+   Tuỳ chọn (gear icon): the K/G ratio and **Cập nhật KiraPick** (app update; needs the Internet, only when you click it).
+4. **AI gợi ý** (Pick) — enter how many photos per person (ranked by K + G). AI picks get an **AI** badge and go
+   first. Review with **P** (keep) / **X** (reject) / **U** (clear), then **Xuất ảnh → Ảnh đã Giữ**
    (export kept photos).
 
 The **▦ Lưới ảnh | 🔍 Xem lớn** switch changes between grid and large view. A small cheat sheet of
@@ -227,7 +227,7 @@ keys sits under the photos (toggle with **⌨ Phím tắt**, **F1** shows all).
 
 While typing in the search box (or the people filter), letter and number keys only type — they never mark photos.
 
-**Compare (C):** mark 2–4 photos and press C (or ⧉ So sánh). The photo under the mouse pointer is the active one
+**Compare (C):** mark 2–4 photos and press C (or the So sánh button). The photo under the mouse pointer is the active one
 (blue frame): P / X / U / 1–5 / F / Q / W / R act on it only, with no auto-advance. Each photo zooms on its own.
 I shows / hides the AI line on every photo (K · G, ⚠, main weakness; "chưa phân tích" without analysis); the
 "Xếp" button picks Auto / One row / 2×2 grid (remembered). Esc or G returns to the grid with the current photo, the
@@ -235,12 +235,12 @@ marking and the scroll position unchanged.
 
 **The layout adapts to the window:** wide screens show the filters on the left and the detail panel on the right.
 A side-by-side Snap half folds the filters into an icon rail (click to slide them in) and keeps the details on
-the right from 900 px (narrower: they slide in with **Tab** / **▤ Chi tiết**). A top/bottom Snap half (low
+the right from 900 px (narrower: they slide in with **Tab** / **Chi tiết**). A top/bottom Snap half (low
 window) gives the grid the whole width with a one-line summary; **Tab** shows the details under a single row of
 photos. Resizing keeps the current photo, the marking, the filter and the scroll position. On 150 % / 200 %
 screens or with large cards, sharper thumbnails are made automatically (the photo is only read).
 
-**Client pick lists (📋 Khách chọn):** paste what the client sent; numbers, ranges
+**Client pick lists (Khách chọn):** paste what the client sent; numbers, ranges
 (`9657-9660`, `9657 đến 9660`, `9645-50`) and full file names are understood, and names that match
 no photo are reported before anything is saved.
 
@@ -252,7 +252,7 @@ one folder, or one folder per subject (unknown → "Chưa xác định"). A RAW+
 is overwritten; identical files already there are skipped; Dừng stops even inside a large file (the
 partial file is removed). A full list of every file and every skip reason (CSV/JSON) is always kept in the
 app's data (`%LOCALAPPDATA%\KiraPick\sessions\…\export_records`); only when **Xuất kèm danh sách ảnh đã chọn** is
-ticked (off by default) does the destination also get a `_kirapick_danh_sach` subfolder; "Thử lại các file chưa chép" copies what is missing. The **📋 Tên ảnh đã Chọn** tab
+ticked (off by default) does the destination also get a `_kirapick_danh_sach` subfolder; "Thử lại các file chưa chép" copies what is missing. The **Tên ảnh đã Giữ** tab
 copies the kept photos' names (one line per photo, warns about different photos with the same name)
 without a card or destination. The old "Giữ cấu trúc thư mục con" option was removed.
 

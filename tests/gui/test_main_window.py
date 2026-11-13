@@ -363,7 +363,7 @@ def test_people_recognition_flow_on_real_photos(qtbot, env: dict, tmp_path: Path
     # Step by step: importing does not start the AI; each later step waits for the previous one.
     w.start_import(shoot)
     qtbot.waitUntil(lambda: w.import_thread is None, timeout=60000)
-    assert w.analyze_thread is None and "🧠 Nhận diện chủ thể" in w.status.text()
+    assert w.analyze_thread is None and "Nhận diện chủ thể" in w.status.text()
     assert w.act_analyze.isEnabled() and not w.act_quality.isEnabled() and not w.act_select.isEnabled()
     w.start_analysis("people")
     # No verified face recogniser (SFace pending, LIC-1): people are found, grouping is by hand
@@ -465,7 +465,7 @@ def test_tick_people_and_merge_from_toolbar(qtbot, env: dict, monkeypatch) -> No
     items[1].setCheckState(Qt.CheckState.Checked)
     assert not w.act_merge.isEnabled()  # one ticked person: nothing to merge
     items[3].setCheckState(Qt.CheckState.Checked)
-    assert w.act_merge.isEnabled() and w.act_merge.text() == "🔗 Gộp 2 chủ thể"
+    assert w.act_merge.isEnabled() and w.act_merge.text() == "Gộp 2 chủ thể"
 
     from app.ui.merge_dialog import MergeDialog
 

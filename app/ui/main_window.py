@@ -97,7 +97,7 @@ from app.ui.detail_panel import DetailPanel
 from app.ui.top_bar import CELL_DEFAULT, TopBar
 from app.ui.bottom_bar import BottomBar
 from app.ui.layout_controller import LayoutController
-from app.ui import gc_guard, shutdown, theme
+from app.ui import gc_guard, icons, shutdown, theme
 from app.ui.export_dialog import export_format
 from app.storage.stats import Counts, counts
 from app.storage.workflow import STEPS, StepState, steps
@@ -118,8 +118,8 @@ _FILTERS = [
     (Filter.ERRORS, "Ảnh lỗi"),
 ]
 _RELOAD_DURING_IMPORT_MS = 1500
-EMPTY_PEOPLE_HINT = ("Chưa có chủ thể nào. Không bắt buộc: muốn xem ảnh theo từng người thì bấm 🧠 Nhận diện chủ "
-                     "thể, rồi chuột phải lên ảnh → ➕ Tạo chủ thể mới.")
+EMPTY_PEOPLE_HINT = ("Chưa có chủ thể nào. Không bắt buộc: muốn xem ảnh theo từng người thì bấm Nhận diện chủ "
+                     "thể, rồi chuột phải lên ảnh → Tạo chủ thể mới.")
 # The first screen (no photos yet): what KiraPick does and the three steps, for someone who opens it alone (UX-1).
 WELCOME_HTML = (
     "<div style='line-height:150%'>"
@@ -127,15 +127,15 @@ WELCOME_HTML = (
     "<p>KiraPick giúp bạn xem hết một buổi chụp, <b>giữ</b> ảnh đẹp, <b>loại</b> ảnh hỏng,<br>"
     "rồi chép ảnh đã giữ ra một thư mục riêng.</p>"
     "<table cellpadding='6' style='margin-top:8px'>"
-    "<tr><td style='font-size:18px'>①</td><td><b>Nhập ảnh</b> — bấm “📂 Nhập ảnh” (Ctrl+I) và chọn thư mục ảnh "
+    "<tr><td style='font-size:18px'>①</td><td><b>Nhập ảnh</b> — bấm “Nhập ảnh” (Ctrl+I) và chọn thư mục ảnh "
     "(RAW, JPEG hoặc cả hai).</td></tr>"
     "<tr><td style='font-size:18px'>②</td><td><b>Lọc</b> — <b>P</b> giữ · <b>X</b> loại · <b>1–5</b> sao · "
     "<b>Space</b> xem lớn · <b>C</b> so sánh 2–4 ảnh.<br>Không quen phím thì bấm các nút ở thanh dưới.</td></tr>"
-    "<tr><td style='font-size:18px'>③</td><td><b>Xuất</b> — bấm “⤴ Xuất ảnh” (Ctrl+E): ảnh đã giữ được "
+    "<tr><td style='font-size:18px'>③</td><td><b>Xuất</b> — bấm “Xuất ảnh” (Ctrl+E): ảnh đã giữ được "
     "<b>chép</b> sang thư mục bạn chọn.</td></tr>"
     "</table>"
     "<p style='color:#9aa0a6; margin-top:10px'>Ảnh gốc chỉ được đọc, không bao giờ bị sửa, di chuyển hay xoá.<br>"
-    "Các bước AI (🧠 nhận diện người, 📊 chấm điểm, ⭐ gợi ý) là tuỳ chọn. F1: tất cả phím tắt.</p>"
+    "Các bước AI (nhận diện người, chấm điểm, gợi ý) là tuỳ chọn. F1: tất cả phím tắt.</p>"
     "</div>"
 )
 
@@ -184,7 +184,7 @@ def _long_side(rec: AssetRecord) -> int | None:
 
 
 
-NO_AUTO_GROUPING = ("gom người tự động chưa có trong bản này: chọn ảnh, bấm chuột phải → ➕ Tạo chủ thể mới "
+NO_AUTO_GROUPING = ("gom người tự động chưa có trong bản này: chọn ảnh, bấm chuột phải → Tạo chủ thể mới "
                     "hoặc Gán cho chủ thể…")
 NO_PEOPLE_FOUND = "Ảnh này chưa có người được dò (chưa phân tích, hoặc app không tìm thấy người): chưa gom tay được"
 
@@ -264,7 +264,7 @@ class MainWindow(QMainWindow):
         self._hide_unavailable_features()
 
     def _hide_unavailable_features(self) -> None:
-        """Functions whose models are off in this build (⚙ → ℹ Giới thiệu) are not shown on the work screens."""
+        """Functions whose models are off in this build (Tuỳ chọn → Giới thiệu) are not shown on the work screens."""
         try:
             registry = self._registry_or_default()
             ready = lambda m: m in registry.specs and registry.status(m).state is ModelState.READY  # noqa: E731
@@ -310,32 +310,32 @@ class MainWindow(QMainWindow):
             self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
 
     def _build_toolbar(self) -> None:
-        self.act_import = QAction("📂 Nhập ảnh", self)
+        self.act_import = QAction(icons.icon("folder-input"), "Nhập ảnh", self)
         self.act_import.setToolTip("Nhập một thư mục ảnh (Ctrl+I)")
         self.act_import.setShortcut(QKeySequence("Ctrl+I"))
         self.act_import.triggered.connect(self.choose_and_import)
         # The workflow goes step by step; each step waits for the user (and their corrections).
-        self.act_analyze = QAction("🧠 Nhận diện chủ thể", self)
+        self.act_analyze = QAction(icons.icon("scan-face"), "Nhận diện chủ thể", self)
         self.act_analyze.setToolTip("Bước 2: AI tìm các chủ thể trong ảnh và gom ảnh theo từng chủ thể. Xong thì dừng để bạn "
                                     "kiểm tra, gộp/tách cho đúng.")
         self.act_analyze.triggered.connect(lambda: self.start_analysis("people"))
-        self.act_quality = QAction("📊 Phân tích ảnh", self)
+        self.act_quality = QAction(icons.icon("gauge"), "Phân tích ảnh", self)
         self.act_quality.triggered.connect(lambda: self.start_analysis("quality"))
-        # Not "Làm lại": next to "↶ Hoàn tác" Vietnamese users read that as Redo. This one forgets the marks.
-        self.act_reset = QAction("🗑 Xoá các dấu của thư mục này…", self)
-        self.act_reset.setToolTip("Quên các dấu Giữ/Loại/sao, ❤ và danh sách khách của thư mục đang mở, rồi nhập lại từ "
+        # Not "Làm lại": next to "Hoàn tác" Vietnamese users read that as Redo. This one forgets the marks.
+        self.act_reset = QAction(icons.icon("trash-2"), "Xoá các dấu của thư mục này…", self)
+        self.act_reset.setToolTip("Quên các dấu Giữ/Loại/sao, yêu thích và danh sách khách của thư mục đang mở, rồi nhập lại từ "
                                   "đầu. Ảnh gốc không bị đụng tới.")
         self.act_reset.triggered.connect(self.reset_current_folder)
-        self.act_export = QAction("⤴ Xuất ảnh", self)
+        self.act_export = QAction(icons.icon("folder-output"), "Xuất ảnh", self)
         self.act_export.setToolTip("Sao chép ảnh đã Giữ sang thư mục khác (Ctrl+E)")
         self.act_export.setShortcut(QKeySequence("Ctrl+E"))
         self.act_export.triggered.connect(self.open_export_dialog)
         # View switch: two buttons, the active one stays highlighted.
-        self.act_grid_view = QAction("▦ Lưới ảnh", self)
+        self.act_grid_view = QAction(icons.icon("layout-grid"), "Lưới ảnh", self)
         self.act_grid_view.setToolTip("Xem nhiều ảnh dạng lưới (Esc)")
         self.act_grid_view.setCheckable(True)
         self.act_grid_view.triggered.connect(lambda: self.leave_compare() or self.show_loupe(False))
-        self.act_loupe = QAction("🔍 Xem lớn", self)
+        self.act_loupe = QAction(icons.icon("maximize-2"), "Xem lớn", self)
         self.act_loupe.setToolTip("Xem một ảnh lớn, phóng to tới 800% (Space / Enter)")
         self.act_loupe.setCheckable(True)
         self.act_loupe.triggered.connect(lambda: self.show_loupe(True))
@@ -349,30 +349,30 @@ class MainWindow(QMainWindow):
         self.act_auto_advance.setCheckable(True)
         self.act_auto_advance.setChecked(self.settings.value("auto_advance", False, bool))
         self.act_auto_advance.toggled.connect(lambda on: self.settings.setValue("auto_advance", on))
-        self.act_gpu = QAction("⚡ Dùng card đồ hoạ", self)
+        self.act_gpu = QAction("Dùng card đồ hoạ", self)
         self.act_gpu.setToolTip("Bật: AI chạy trên card đồ hoạ (nhanh hơn). Tắt nếu máy bị giật / “Not responding” "
                                 "hoặc phân tích bị lỗi: AI chạy bằng CPU (chậm hơn nhưng ổn định).")
         self.act_gpu.setCheckable(True)
         self.act_gpu.setChecked(self.settings.value("use_gpu", True, bool))
         self.act_gpu.toggled.connect(lambda on: self.settings.setValue("use_gpu", on))
-        self.act_help = QAction("⌨ Phím tắt", self)
+        self.act_help = QAction("Phím tắt", self)
         self.act_help.setToolTip("Hiện/ẩn bảng phím tắt nhỏ dưới khu vực ảnh (F1: bảng đầy đủ)")
         self.act_help.setCheckable(True)
         self.act_help.setChecked(self.settings.value("show_key_hints", True, bool))
         self.act_help.toggled.connect(self._toggle_key_hints)
-        self.act_client_list = QAction("📋 Khách chọn", self)
+        self.act_client_list = QAction(icons.icon("clipboard-list"), "Khách chọn", self)
         self.act_client_list.setToolTip("Dán danh sách ảnh khách chọn, app tự chọn ảnh theo tên (Ctrl+L)")
         self.act_client_list.setShortcut(QKeySequence("Ctrl+L"))
         self.act_client_list.triggered.connect(self.open_client_list_dialog)
-        self.act_merge = QAction("🔗 Gộp chủ thể", self)
+        self.act_merge = QAction(icons.icon("merge"), "Gộp chủ thể", self)
         self.act_merge.setToolTip("Tick ô vuông cạnh 2 chủ thể trở lên trong danh sách CHỦ THỂ, rồi bấm để gộp thành một chủ thể")
         self.act_merge.setEnabled(False)
         self.act_merge.triggered.connect(lambda: self.merge_selected_people())
-        self.act_select = QAction("⭐ AI gợi ý", self)
+        self.act_select = QAction(icons.icon("sparkles"), "AI gợi ý", self)
         self.act_select.triggered.connect(lambda: self.open_select_dialog())
         # Ctrl+Z: the newest undoable action (subject corrections and photo decisions, one history). A text field
         # with the keyboard keeps its own Ctrl+Z (Qt gives it the shortcut first; undo_last checks too).
-        self.act_undo = QAction("↶ Hoàn tác", self)
+        self.act_undo = QAction(icons.icon("undo-2"), "Hoàn tác", self)
         self.act_undo.setShortcut(QKeySequence(QKeySequence.StandardKey.Undo))
         self.act_undo.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self.act_undo.setEnabled(False)
@@ -383,13 +383,15 @@ class MainWindow(QMainWindow):
         self.edit_menu.addAction(self.act_undo)
         self.edit_button = QToolButton(self)
         self.edit_button.setText("Chỉnh sửa")
+        self.edit_button.setIcon(icons.icon("undo-2"))
+        self.edit_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.edit_button.setToolTip("Hoàn tác thao tác gần nhất (Ctrl+Z)")
         self.edit_button.setMenu(self.edit_menu)
         self.edit_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         for act in (self.act_import, self.act_analyze, self.act_merge, self.act_quality, self.act_select,
                     self.act_client_list, self.act_export, self.act_grid_view, self.act_loupe):
             self.addAction(act)  # keyboard shortcuts work without a toolbar
-        self.act_learning = QAction("🎓 AI đã học", self)
+        self.act_learning = QAction(icons.icon("graduation-cap"), "AI đã học", self)
         self.act_learning.setToolTip("Xem AI đã học gì từ các lần bạn sửa (chỉ trên máy này), hoặc xoá để học lại")
         self.act_learning.triggered.connect(self.show_learning)
         # Everything that is not a workflow step lives in ⚙, so the top bar fits a 1080p screen.
@@ -397,7 +399,7 @@ class MainWindow(QMainWindow):
         options.setToolTipsVisible(True)
         options.addAction(self.act_learning)
         options.addAction(self.act_help)
-        self.act_about_models = QAction("ℹ Giới thiệu — Mô hình và giấy phép…", self)
+        self.act_about_models = QAction(icons.icon("info"), "Giới thiệu — Mô hình và giấy phép…", self)
         self.act_about_models.setToolTip("Mỗi chức năng chạy bằng gì, mô hình nào đang dùng / tắt trong bản này, "
                                          "file, mã SHA-256 và giấy phép")
         self.act_about_models.triggered.connect(lambda: self.show_about_models())
@@ -405,12 +407,12 @@ class MainWindow(QMainWindow):
         options.addSeparator()
         options.addAction(self.act_auto_advance)
         options.addAction(self.act_gpu)
-        self.act_taste_weight = QAction("🎯 Mức ảnh hưởng của gu…", self)
+        self.act_taste_weight = QAction(icons.icon("target"), "Mức ảnh hưởng của gu…", self)
         self.act_taste_weight.setToolTip("Điểm xếp hạng = Kỹ thuật + Hợp gu bạn; chọn tỷ lệ của phần gu")
         self.act_taste_weight.triggered.connect(self.ask_taste_weight)
         options.addAction(self.act_taste_weight)
         options.addSeparator()
-        self.act_update = QAction("🔄 Cập nhật KiraPick… (cần mạng)", self)
+        self.act_update = QAction(icons.icon("refresh-cw"), "Cập nhật KiraPick… (cần mạng)", self)
         self.act_update.setToolTip("Tải bản KiraPick mới nhất từ GitHub (kiểm tra mã SHA-256) rồi mở bộ cài. "
                                    "Chỉ chạy khi bạn bấm; không gửi ảnh hay dữ liệu nào đi.")
         self.act_update.triggered.connect(lambda: self.start_app_update())
@@ -423,12 +425,15 @@ class MainWindow(QMainWindow):
         options.addSeparator()
         options.addAction(self.act_reset)  # last, apart from the rest: it forgets the marks of the folder
         self.options_button = QToolButton(self)
-        self.options_button.setText("⚙ Tuỳ chọn")
+        self.options_button.setText("Tuỳ chọn")
+        self.options_button.setIcon(icons.icon("settings"))
+        self.options_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.options_button.setToolTip("AI đã học, phím tắt, giới thiệu, card đồ hoạ, cập nhật, xoá dấu của thư mục")
         self.options_button.setMenu(options)
         self.options_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("🔎 Tìm tên file (Ctrl+F)")
+        self.search.addAction(icons.icon("search", theme.MUTED), QLineEdit.ActionPosition.LeadingPosition)
+        self.search.setPlaceholderText("Tìm tên file (Ctrl+F)")
         self.search.setToolTip("Gõ một phần tên file. Nhiều số cách nhau bằng dấu cách, vd: 9645 9650")
         self.search.setClearButtonEnabled(True)
         self._search_timer = QTimer(self, singleShot=True, interval=200)
@@ -497,7 +502,7 @@ class MainWindow(QMainWindow):
         self.people.setItemDelegate(PeopleDelegate(self.people))
         self.people.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.people.setToolTip("Bấm để xem ảnh của chủ thể này. Nháy đúp để đặt tên. "
-                               "Tick ô vuông cạnh nhiều chủ thể rồi bấm 🔗 Gộp chủ thể để gộp.")
+                               "Tick ô vuông cạnh nhiều chủ thể rồi bấm Gộp chủ thể để gộp.")
         self.people.itemChanged.connect(lambda _item: self._update_merge_action())
         self.people.itemSelectionChanged.connect(self._update_merge_action)
         self.people.currentRowChanged.connect(self._on_person_changed)
@@ -513,7 +518,7 @@ class MainWindow(QMainWindow):
         self.people_sort.currentIndexChanged.connect(self._on_people_sort_changed)
         self.client_list_button = QToolButton()
         self.client_list_button.setDefaultAction(self.act_client_list)
-        self.client_list_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.client_list_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.client_list_button.setAutoRaise(True)
         filters_box = QWidget()
         filters_layout = QVBoxLayout(filters_box)
@@ -532,7 +537,7 @@ class MainWindow(QMainWindow):
         tools = QVBoxLayout(people_tools)
         tools.setContentsMargins(0, 0, 0, 0)
         tools.setSpacing(2)
-        self.merge_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.merge_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         tools.addWidget(self.people_filter)
         tools.addWidget(self.people_sort)
         tools.addWidget(self.merge_button, 0, Qt.AlignmentFlag.AlignLeft)  # own row: its text never gets cut
@@ -615,17 +620,22 @@ class MainWindow(QMainWindow):
         for act in (self.act_grid_view, self.act_loupe):
             b = QToolButton()
             b.setDefaultAction(act)
+            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             b.setAutoRaise(True)
             view_row.addWidget(b)
         view_row.addStretch(1)
         # Shown when the sidebar is not docked (NARROW / SHORT / TINY): opens it as a drawer over the photos.
         self.drawer_button = QToolButton()
-        self.drawer_button.setText("☰ Bộ lọc")
+        self.drawer_button.setText("Bộ lọc")
+        self.drawer_button.setIcon(icons.icon("list-filter"))
+        self.drawer_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.drawer_button.setToolTip("Thư mục, bộ lọc và chủ thể")
         self.drawer_button.setAutoRaise(True)
         self.drawer_button.clicked.connect(lambda: self.layout_controller.open_drawer())
         self.detail_button = QToolButton()
-        self.detail_button.setText("▤ Chi tiết")
+        self.detail_button.setText("Chi tiết")
+        self.detail_button.setIcon(icons.icon("panel-right"))
+        self.detail_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.detail_button.setToolTip("Hiện / ẩn bảng chi tiết của ảnh")
         self.detail_button.setAutoRaise(True)
         self.detail_button.clicked.connect(lambda: self.layout_controller.toggle_detail())
@@ -651,11 +661,6 @@ class MainWindow(QMainWindow):
         for tile in self.compare.tiles:
             tile.viewer.gate = self._gate
         self.model.modelReset.connect(self._refresh_compare)
-        self.detail.keep_clicked.connect(lambda: self._panel_may_act() and self.set_flag("keep"))
-        self.detail.reject_clicked.connect(lambda: self._panel_may_act() and self.set_flag("reject"))
-        self.detail.clear_clicked.connect(lambda: self._panel_may_act() and self.set_flag(None))
-        self.detail.rating_clicked.connect(lambda n: self._panel_may_act() and self.set_rating(n))
-        self.detail.favorite_clicked.connect(lambda: self._panel_may_act() and self.toggle_favorite())
         self.detail.neighbour_clicked.connect(self.go_to_asset)
         self.detail.open_loupe.connect(lambda: self.show_loupe(True))
         self.detail.people_menu_requested.connect(lambda pos: self._people_menu_for_current(pos))
@@ -678,10 +683,10 @@ class MainWindow(QMainWindow):
         rail_layout = QVBoxLayout(rail)
         rail_layout.setContentsMargins(2, 6, 2, 6)
         rail_layout.setSpacing(4)
-        for icon, tip, section in (("📁", "Thư mục", "folders"), ("▦", "Bộ lọc", "filters"),
-                                   ("👤", "Chủ thể", "people")):
+        for icon, tip, section in (("folder", "Thư mục", "folders"), ("list-filter", "Bộ lọc", "filters"),
+                                   ("user", "Chủ thể", "people")):
             b = QToolButton()
-            b.setText(icon)
+            b.setIcon(icons.icon(icon))
             b.setToolTip(tip)
             b.setAutoRaise(True)
             b.clicked.connect(lambda _c=False, s=section: self.layout_controller.open_drawer(s))
@@ -709,6 +714,7 @@ class MainWindow(QMainWindow):
         b.reject.connect(lambda: self.set_flag("reject"))
         b.clear.connect(lambda: self.set_flag(None))
         b.rating.connect(self.set_rating)
+        b.favorite.connect(self.toggle_favorite)
         b.rotate.connect(self.rotate_view)
         b.exif.connect(self.detail.open_exif)
         b.compare.connect(self.show_compare)
@@ -1023,7 +1029,7 @@ class MainWindow(QMainWindow):
             self.select_row(0)
         self._update_steps()
         if not cancelled and self.project is not None:
-            self.status.setText(self.status.text().rstrip(". ") + ". Bước tiếp theo: bấm 🧠 Nhận diện chủ thể.")
+            self.status.setText(self.status.text().rstrip(". ") + ". Bước tiếp theo: bấm Nhận diện chủ thể.")
 
     def _pause_or_resume(self) -> None:
         running = self.import_thread or self.analyze_thread
@@ -1037,7 +1043,7 @@ class MainWindow(QMainWindow):
             self.start_import(self._last_import_root)
 
     def learning_text(self) -> str:
-        """What this user's corrections taught the app (for the 🎓 dialog)."""
+        """What this user's corrections taught the app (for the dialog)."""
         from app.identity.cluster import SFACE_HSV, session_profile
         from app.learning.tuning import tune
 
@@ -1052,7 +1058,7 @@ class MainWindow(QMainWindow):
             f"Đã ghi {counts['same']} cặp ảnh “cùng chủ thể” và {counts['different']} cặp “khác chủ thể” "
             "từ các lần bạn gộp / tách / bỏ ảnh.",
             tuning.describe() if tuning.applied else tuning.reason,
-            "Áp dụng ở lần bấm 🧠 Nhận diện chủ thể tiếp theo.",
+            "Áp dụng ở lần bấm Nhận diện chủ thể tiếp theo.",
             "",
             "<b>Gu chọn ảnh (Hợp gu bạn)</b>",
             f"Đã ghi {store.culling_count()} ảnh bạn đã Giữ/Loại/cho sao/❤ hoặc khách chọn.",
@@ -1061,7 +1067,7 @@ class MainWindow(QMainWindow):
                                         "rõ hơn đoán mò thì mới hiện điểm Hợp gu."),
             *self.taste.explain(self._prompt_vectors()),
             f"Điểm xếp hạng = {100 - round(self.taste_weight() * 100)}% Kỹ thuật + "
-            f"{round(self.taste_weight() * 100)}% Hợp gu (đổi trong ⚙ Tuỳ chọn).",
+            f"{round(self.taste_weight() * 100)}% Hợp gu (đổi trong Tuỳ chọn).",
             "",
             "<b>Độ nét theo máy + ống kính</b>",
             *self.focus_text(),
@@ -1072,7 +1078,7 @@ class MainWindow(QMainWindow):
         return "<br>".join(lines)
 
     def open_compare(self) -> CompareDialog | None:
-        """🎓 Thích tấm nào hơn?: pairs of similar photos of one subject (needs 📊 with the CLIP model)."""
+        """Thích tấm nào hơn?: pairs of similar photos of one subject (needs Phân tích ảnh with the CLIP model)."""
         if self.project is None or self.teacher.store is None:
             return None
         conn = self.project.conn
@@ -1080,7 +1086,7 @@ class MainWindow(QMainWindow):
             "SELECT asset_id, subject_id FROM occurrences WHERE subject_id IS NOT NULL AND is_main = 1")}
         recs = {r.id: r for r in self.model.records()}
         if not recs or not self.taste.clips:
-            QMessageBox.information(self, "Dạy gu", "Cần chức năng Hợp gu (xem ⚙ → ℹ Giới thiệu) và bấm 📊 Phân tích ảnh trước, "
+            QMessageBox.information(self, "Dạy gu", "Cần chức năng Hợp gu (xem Tuỳ chọn → Giới thiệu) và bấm Phân tích ảnh trước, "
                                                          "và mở danh sách có ảnh.")
             return None
         ranked = {i: r.ranked.value for i, r in recs.items() if r.ranked is not None and r.ranked.value is not None}
@@ -1119,7 +1125,7 @@ class MainWindow(QMainWindow):
             return {}
 
     def show_about_models(self) -> None:
-        """⚙ → ℹ Giới thiệu: the only screen that names models, files and licences (work screens name functions)."""
+        """Tuỳ chọn → Giới thiệu: the only screen that names models, files and licences (work screens name functions)."""
         from app.ui.about_models import ModelsDialog
 
         ModelsDialog(self, self._registry_or_default()).exec()
@@ -1129,7 +1135,7 @@ class MainWindow(QMainWindow):
         box.setWindowTitle("AI đã học")
         box.setTextFormat(Qt.TextFormat.RichText)
         box.setText(self.learning_text())
-        compare = box.addButton("🎓 Dạy gu…", QMessageBox.ButtonRole.ActionRole)
+        compare = box.addButton("Dạy gu…", QMessageBox.ButtonRole.ActionRole)
         compare.setToolTip("Chọn tấm thích hơn trong từng cặp ảnh giống nhau, để app học gu bạn nhanh hơn")
         forget = box.addButton("Xoá dữ liệu học…", QMessageBox.ButtonRole.DestructiveRole)
         box.addButton("Đóng", QMessageBox.ButtonRole.RejectRole)
@@ -1147,7 +1153,7 @@ class MainWindow(QMainWindow):
             "Ảnh và các thư mục đã nhập không bị ảnh hưởng.")
         if sure == QMessageBox.StandardButton.Yes:
             self.teacher.store.forget()
-            self.status.setText("Đã xoá dữ liệu học. Bấm 🧠 Nhận diện chủ thể để gom lại theo mức mặc định.")
+            self.status.setText("Đã xoá dữ liệu học. Bấm Nhận diện chủ thể để gom lại theo mức mặc định.")
 
     @staticmethod
     def _learning_dir() -> Path:
@@ -1271,10 +1277,10 @@ class MainWindow(QMainWindow):
         self.act_select.setEnabled(not busy and scored > 0)
         self.act_quality.setToolTip(
             "Bước 3: chấm điểm từng chủ thể trong ảnh (nét ở mắt, mặt, sáng, bố cục)."
-            + ("" if detected else " Hãy bấm 🧠 Nhận diện chủ thể trước."))
+            + ("" if detected else " Hãy bấm Nhận diện chủ thể trước."))
         self.act_select.setToolTip(
-            "Bước 4: AI gợi ý N ảnh đẹp, khác dáng nhau; bạn xem lại rồi ⤴ Xuất ảnh."
-            + ("" if scored else " Hãy bấm 📊 Phân tích ảnh trước."))
+            "Bước 4: AI gợi ý N ảnh đẹp, khác dáng nhau; bạn xem lại rồi Xuất ảnh."
+            + ("" if scored else " Hãy bấm Phân tích ảnh trước."))
         self.refresh_steps()
 
     def start_analysis(self, mode: str = "people") -> AnalyzeThread | None:
@@ -1359,7 +1365,7 @@ class MainWindow(QMainWindow):
             if summary.get("measure_failed"):
                 parts.append(f"{summary['measure_failed']} ảnh không chấm được ({self._main_error('quality')})")
             note = f" ({summary['fallback_reason']})" if summary.get("fallback_reason") else ""
-            self.status.setText(", ".join(parts) + "." + note + " Bước tiếp theo: bấm ⭐ AI gợi ý, hoặc xếp theo điểm.")
+            self.status.setText(", ".join(parts) + "." + note + " Bước tiếp theo: bấm AI gợi ý, hoặc xếp theo điểm.")
             self.status.setToolTip(summary.get("gpu_check") or "")
             self.taste.load_clips(self.project.conn)  # new CLIP vectors: the taste score can cover them
             self.retrain_taste()
@@ -1383,7 +1389,7 @@ class MainWindow(QMainWindow):
             note += f" {summary['learning']}"
         self.status.setToolTip(summary.get("gpu_check") or "")
         self.status.setText(", ".join(parts) + "." + note
-                            + " Hãy kiểm tra, gộp/tách chủ thể cho đúng, rồi bấm 📊 Phân tích ảnh.")
+                            + " Hãy kiểm tra, gộp/tách chủ thể cho đúng, rồi bấm Phân tích ảnh.")
 
     def _main_error(self, stage: str) -> str:
         """The most frequent error of a stage, shortened, for the status bar (details are in the log)."""
@@ -1392,7 +1398,7 @@ class MainWindow(QMainWindow):
                GROUP BY error ORDER BY 2 DESC LIMIT 1""", (stage,)).fetchone() if self.project else None
         if row is None:
             return "xem file log"
-        hint = " — thử tắt ⚡ Dùng card đồ hoạ rồi bấm lại" if self.act_gpu.isChecked() else ""
+        hint = " — thử tắt Dùng card đồ hoạ rồi bấm lại" if self.act_gpu.isChecked() else ""
         return f"lỗi: {row[0][:120]}{hint}"
 
     def _on_analyze_thread_finished(self) -> None:
@@ -1475,12 +1481,12 @@ class MainWindow(QMainWindow):
             unknown = self.project.conn.execute(
                 f"SELECT COUNT(*) FROM ({actions.UNIDENTIFIED_ASSETS})").fetchone()[0]
             if unknown:
-                item = QListWidgetItem(f"❔ Chưa xác định  ·  {unknown} ảnh")
+                item = QListWidgetItem(f"Chưa xác định  ·  {unknown} ảnh")
                 item.setData(Qt.ItemDataRole.UserRole, ("unidentified", None))
                 self.people.addItem(item)
             review = len(merge_suggestions(self.project.conn))
             if review:
-                item = QListWidgetItem(f"🔎 Cần xem lại  ·  {review} gợi ý")
+                item = QListWidgetItem(f"Cần xem lại  ·  {review} gợi ý")
                 item.setData(Qt.ItemDataRole.UserRole, ("review", None))
                 self.people.addItem(item)
         for i in range(self.people.count()):
@@ -1534,7 +1540,7 @@ class MainWindow(QMainWindow):
     def _update_merge_action(self) -> None:
         n = len(self._people_to_merge())
         self.act_merge.setEnabled(self.project is not None and n >= 2)
-        self.act_merge.setText(f"🔗 Gộp {n} chủ thể" if n >= 2 else "🔗 Gộp chủ thể")
+        self.act_merge.setText(f"Gộp {n} chủ thể" if n >= 2 else "Gộp chủ thể")
 
     def _selected_subjects(self) -> list[int]:
         out = []
@@ -1584,7 +1590,7 @@ class MainWindow(QMainWindow):
                 item.setCheckState(Qt.CheckState.Unchecked)
         self.people.blockSignals(False)
         self._after_people_change()
-        note = " Kết quả ⭐ AI gợi ý cũ cần chạy lại." if picks_stale(self.project.conn) else ""
+        note = " Kết quả AI gợi ý cũ cần chạy lại." if picks_stale(self.project.conn) else ""
         self.status.setText(f"Đã gộp {len(ids)} chủ thể thành {actions.subject_label(self.project.conn, choice.keep)}"
                             f" (Ctrl+Z để hoàn tác).{note}")
 
@@ -1610,7 +1616,7 @@ class MainWindow(QMainWindow):
         merge = menu.addAction(f"Gộp {len(ids)} chủ thể này thành một") if len(ids) >= 2 else None
         different = menu.addAction("Đây là hai chủ thể khác nhau") if len(ids) == 2 else None
         menu.addSeparator()
-        renumber = menu.addAction("🔢 Đánh số lại 1, 2, 3… theo thời gian chụp")
+        renumber = menu.addAction("Đánh số lại 1, 2, 3… theo thời gian chụp")
         chosen = menu.exec(self.people.mapToGlobal(pos))  # type: ignore[arg-type]
         if chosen is None:
             return
@@ -1669,7 +1675,7 @@ class MainWindow(QMainWindow):
             name = actions.subject_label(self.project.conn, target)
             confirm = menu.addAction(f"Đúng là {name}")
             remove = menu.addAction(f"Không phải {name} — bỏ khỏi chủ thể này")
-        new_subject = menu.addAction("➕ Tạo chủ thể mới" + (f" từ {len(assets)} ảnh này" if len(assets) > 1 else " từ ảnh này"))
+        new_subject = menu.addAction("Tạo chủ thể mới" + (f" từ {len(assets)} ảnh này" if len(assets) > 1 else " từ ảnh này"))
         new_subject.setToolTip("Chủ thể này chưa có trong danh sách: tạo một chủ thể riêng cho các ảnh đang chọn")
         assign_menu = menu.addMenu("Gán cho chủ thể…")
         targets = {}
@@ -1745,7 +1751,7 @@ class MainWindow(QMainWindow):
         return subject_id
 
     def _selection_text(self, rec: AssetRecord | None) -> str | None:
-        """Why the last ⭐ selection chose this photo, or did not."""
+        """Why the last selection chose this photo, or did not."""
         if rec is None or self.project is None or rec.score is None:
             return None
         try:
@@ -1890,7 +1896,7 @@ class MainWindow(QMainWindow):
                 header.setFlags(Qt.ItemFlag.NoItemFlags)
                 self.filters.addItem(header)
             for c in collections:
-                item = QListWidgetItem(f"📋 {c['name']} ({c['n']})")
+                item = QListWidgetItem(icons.icon("clipboard-list"), f"{c['name']} ({c['n']})")
                 item.setToolTip("Chuột phải để xoá danh sách (ảnh không bị ảnh hưởng)")
                 item.setData(Qt.ItemDataRole.UserRole, (Filter.COLLECTION, c["id"]))
                 self.filters.addItem(item)
@@ -2060,7 +2066,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _panel_may_act(self) -> bool:
-        """Panel buttons act on the photo the panel shows; in Compare that must be the active photo (the panel
+        """Panel actions (Sửa chủ thể…) act on the photo the panel shows; in Compare that must be the active photo (the panel
         follows 150 ms later): otherwise refuse rather than change another photo."""
         if self.in_compare() and self.detail.shown_id != self.compare.active_id:
             self.status.setText("Bảng chi tiết chưa kịp đổi sang ảnh đang chọn — bấm lại.")
@@ -2299,7 +2305,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("last_update_check", today)
         worker = update_dialog.auto_check_worker(self)
         worker.done.connect(lambda release: release and self.status.setText(
-            f"Có KiraPick {release.version} — vào ⚙ Tuỳ chọn → 🔄 Cập nhật KiraPick để cài."))
+            f"Có KiraPick {release.version} — vào Tuỳ chọn → Cập nhật KiraPick để cài."))
         worker.failed.connect(lambda msg: log.info("automatic update check: %s", msg))  # silent when offline
         self._auto_worker = worker
         worker.start()
@@ -2333,7 +2339,7 @@ class MainWindow(QMainWindow):
         clip = self._registry_or_default().status("clip_l14_image")
         if clip.state is not ModelState.READY:
             self._on_taste_trained(TasteStatus(False, "Chức năng Hợp gu chưa dùng được trong bản này nên chưa học "
-                                                      "được gu (xem ⚙ Tuỳ chọn → ℹ Giới thiệu)"))
+                                                      "được gu (xem Tuỳ chọn → Giới thiệu)"))
             return
         try:
             examples = store.taste_examples(CLIP_VERSION)
@@ -2397,7 +2403,7 @@ class MainWindow(QMainWindow):
         self._refresh_compare([r.id for r in targets])
         self._show_inspector(self.view_record())
         if new is not None and unmeasured:
-            self.status.setText(f"{unmeasured} ảnh chưa được 📊 Phân tích nên chưa dùng để học độ nét "
+            self.status.setText(f"{unmeasured} ảnh chưa được Phân tích nên chưa dùng để học độ nét "
                                 "(nhãn vẫn được lưu).")
         self._focus_labels_since_training += len(targets)
         if self._focus_labels_since_training >= FOCUS_RETRAIN_EVERY:
@@ -2451,7 +2457,7 @@ class MainWindow(QMainWindow):
             return
         label = self.undo.next_label() if getattr(self, "undo", None) is not None else None
         self.act_undo.setEnabled(label is not None)
-        self.act_undo.setText(f"↶ Hoàn tác {label}" if label else "↶ Hoàn tác")
+        self.act_undo.setText(f"Hoàn tác {label}" if label else "Hoàn tác")
         self.act_undo.setToolTip(f"Hoàn tác: {label} (Ctrl+Z)" if label else "Chưa có gì để hoàn tác")
 
     def undo_last(self) -> None:
@@ -2579,7 +2585,7 @@ class MainWindow(QMainWindow):
         persons = len({p.subject_id for p in picks if p.subject_id is not None})
         self.status.setText(f"AI đã gợi ý {chosen} ảnh" + (f" cho {persons} chủ thể" if per_person else "")
                             + (f", đánh dấu Giữ {marked} ảnh" if marked else "")
-                            + ". Ảnh AI gợi ý ở đầu danh sách (nhãn AI) — hãy xem lại, rồi ⤴ Xuất ảnh.")
+                            + ". Ảnh AI gợi ý ở đầu danh sách (nhãn AI) — hãy xem lại, rồi Xuất ảnh.")
         self.grid.scrollToTop()
         return dialog
 
@@ -2596,7 +2602,7 @@ class MainWindow(QMainWindow):
             lists = list_collections(self.project.conn)
             if not lists:
                 QMessageBox.information(self, "Xuất theo danh sách khách",
-                                        "Chưa có danh sách khách nào. Bấm 📋 Khách chọn để dán danh sách của khách trước.")
+                                        "Chưa có danh sách khách nào. Bấm Khách chọn để dán danh sách của khách trước.")
                 return None
             names = [f"{c['name']} ({c['n']} ảnh)" for c in lists]
             name, ok = QInputDialog.getItem(self, "Xuất theo danh sách khách", "Danh sách:", names, 0, False)
@@ -2688,7 +2694,7 @@ def export_stop_text(doing: str) -> str:
 def session_too_new_text() -> str:
     """A folder last opened by a newer KiraPick: its session database is never touched by this one."""
     return ("Thư mục này đã được mở bằng một phiên bản KiraPick mới hơn, nên bản này không mở được phần đã nhớ "
-            "(lựa chọn, sao, kết quả AI).\n\nHãy cập nhật KiraPick (⚙ Tuỳ chọn → Cập nhật KiraPick).\n"
+            "(lựa chọn, sao, kết quả AI).\n\nHãy cập nhật KiraPick (Tuỳ chọn → Cập nhật KiraPick).\n"
             "Ảnh gốc và dữ liệu đã nhớ không bị thay đổi.")
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-STALE_KEY = "picks_stale"  # the last ⭐ selection was made before subjects changed (merge): ask to select again
+STALE_KEY = "picks_stale"  # the last selection was made before subjects changed (merge): ask to select again
 
 
 def read_config(conn: sqlite3.Connection) -> dict:

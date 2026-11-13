@@ -95,8 +95,8 @@ def _rec(value: float | None, **kw) -> AssetRecord:  # noqa: ANN003
 def test_badge_shows_ranking_value_and_chip() -> None:
     assert card_texts(_rec(74.5)) == ("75", None)
     assert card_texts(_rec(None)) == ("—", None)
-    assert card_texts(_rec(74.5, flag="keep"))[1] == "✅ Giữ"
-    assert card_texts(_rec(74.5, pick_rank=1))[1] == "⭐ Đề xuất"
+    assert card_texts(_rec(74.5, flag="keep"))[1] == "✓ Giữ"
+    assert card_texts(_rec(74.5, pick_rank=1))[1] == "★ Đề xuất"
     blurred = _rec(20.0)
     blurred.score = score({"eye_sharp": 0.05, "blink": 0.05})
     assert card_texts(blurred) == ("⚠ 20", "⚠ Xem lại")

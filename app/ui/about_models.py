@@ -1,4 +1,4 @@
-"""⚙ Tuỳ chọn → ℹ Giới thiệu → Mô hình và giấy phép: the only screen that names models, files and licences.
+"""Tuỳ chọn → Giới thiệu → Mô hình và giấy phép: the only screen that names models, files and licences.
 
 Two tabs built from app.ai.features: what each function runs on and what the user gets without it; every weight with
 its file, SHA-256, source, licence and status in this build. The installer still carries the full notices

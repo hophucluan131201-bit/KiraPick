@@ -5,7 +5,8 @@ QT_SCALE_FACTOR 1.25 / 1.5 / 2 (pre-beta review); here it runs offscreen with th
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QAbstractButton, QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QAbstractButton, QApplication, QToolButton
 
 from app.ui.layout_modes import Mode
 from tests.gui.platform_checks import skip_unless_fits, skip_without_real_fonts
@@ -28,6 +29,8 @@ def clipped_buttons(window) -> list[str]:  # noqa: ANN001
     for b in window.findChildren(QAbstractButton):
         if not (b.isVisibleTo(window) and b.text()):
             continue
+        if isinstance(b, QToolButton) and b.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonIconOnly:
+            continue  # the name is in the tooltip (compact top bar)
         need = b.fontMetrics().horizontalAdvance(b.text().replace("&", ""))
         if not b.icon().isNull():
             need += b.iconSize().width() + 4

@@ -235,7 +235,7 @@ class ScoreCard(QWidget):
 
     def set_available(self, aesthetic: bool, taste: bool) -> None:
         """Hide what this build can never fill: the aesthetic row needs an aesthetic model, the taste line needs the
-        image-embedding model (⚙ → ℹ Giới thiệu says which are off). A row that always shows "—" reads as unfinished."""
+        image-embedding model (Tuỳ chọn → Giới thiệu says which are off). A row that always shows "—" reads as unfinished."""
         row = self.rows.get("aesthetic")
         if row is not None:
             for w in (row.name, row.value, row.bar, row.reason):
@@ -249,15 +249,15 @@ class ScoreCard(QWidget):
         self.ring.set(self.value_text, self.ring_color, (value or 0) / 100)
         self.histogram.request(rec.id if rec else None, rec.thumb_file if rec else None)
         chip = chip_for(rec.flag, rec.pick_rank is not None, rec.score, rec.ranked, rec.uncertain) if rec else None
-        self.suggestion.setText({"suggested": "⭐ Đề xuất giữ", "review": "⚠ Xem lại", "keep": "✅ Bạn đã Giữ",
-                                 "reject": "❌ Bạn đã Loại"}.get(chip.kind, "") if chip else "")
+        self.suggestion.setText({"suggested": "★ Đề xuất giữ", "review": "⚠ Xem lại", "keep": "✓ Bạn đã Giữ",
+                                 "reject": "✕ Bạn đã Loại"}.get(chip.kind, "") if chip else "")
         self.suggestion.setStyleSheet(f"color: {chip.color}; font-weight: bold;" if chip else "")
         r = rec.ranked if rec is not None else None
         self.subtitle.setText(f"Kỹ thuật {shown(r.tech)} · Hợp gu {shown(r.taste)}"
                               if r is not None and r.taste is not None and r.tech is not None else "")
         s = rec.score if rec is not None else None
         if s is None:
-            self.summary.setText("Chưa chấm — bấm 📊 Phân tích AI" if rec is not None else "")
+            self.summary.setText("Chưa chấm — bấm Phân tích AI" if rec is not None else "")
         else:
             self.summary.setText(s.weaknesses[0].capitalize() if s.weaknesses else
                                  (s.strengths[0].capitalize() if s.strengths else ""))
@@ -284,7 +284,7 @@ class ScoreCard(QWidget):
         if selection:
             notes.append(f"<i>{escape(selection)}</i>")
         if r is not None and r.artistic:
-            notes.append("🎨 ngoại lệ nghệ thuật: ảnh cố ý mềm/tối và hợp gu bạn nên không bị trừ điểm")
+            notes.append("ngoại lệ nghệ thuật: ảnh cố ý mềm/tối và hợp gu bạn nên không bị trừ điểm")
         elif r is not None and r.capped:
             notes.append("Lỗi nặng (mắt nhắm / thiếu nét) nên điểm xếp hạng không vượt điểm kỹ thuật")
         if s is not None and s.not_rated:

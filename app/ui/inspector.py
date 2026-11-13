@@ -56,7 +56,7 @@ def explain_html(score: Score, ranked: Ranked | None = None, taste: TasteStatus 
         gu = f"Hợp gu bạn: chưa có – {escape(taste.reason)}" if taste is not None else "Hợp gu bạn: chưa có"
     head = f"{tech} · {gu}"
     if pick_rank is not None:
-        head += f"<br>⭐ AI gợi ý (thứ {pick_rank})"
+        head += f"<br>AI gợi ý (thứ {pick_rank})"
     if selection:
         head += f"<br><i>{escape(selection)}</i>"
     rows = []  # plain wrapped lines (no table): readable in a narrow, half-screen window
@@ -72,7 +72,7 @@ def explain_html(score: Score, ranked: Ranked | None = None, taste: TasteStatus 
     if ranked is not None and ranked.taste is not None and taste is not None:
         body += f"<br><span style='color:{theme.MUTED}'>Hợp gu: {escape(taste.reason)}</span>"
     if ranked is not None and ranked.artistic:
-        body += "<br>🎨 ngoại lệ nghệ thuật: ảnh cố ý mềm/tối và hợp gu bạn nên không bị trừ điểm"
+        body += "<br>ngoại lệ nghệ thuật: ảnh cố ý mềm/tối và hợp gu bạn nên không bị trừ điểm"
     elif ranked is not None and ranked.capped:
         body += "<br>Lỗi nặng (mắt nhắm / thiếu nét) nên điểm xếp hạng không vượt điểm kỹ thuật"
     if score.weaknesses:

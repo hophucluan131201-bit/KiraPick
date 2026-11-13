@@ -85,7 +85,7 @@ def test_step_buttons_run_the_same_actions(qtbot, env: dict, monkeypatch) -> Non
 def test_options_menu_has_moved_actions(qtbot, env: dict) -> None:  # noqa: F811
     w = _window(qtbot, env)
     texts = [a.text() for a in w.top_bar.options_button.menu().actions()]
-    for wanted in ("🗑 Xoá các dấu của thư mục này…", "🎓 AI đã học", "⌨ Phím tắt"):
+    for wanted in ("Xoá các dấu của thư mục này…", "AI đã học", "Phím tắt"):
         assert any(t.startswith(wanted) for t in texts), wanted
     assert w.act_gpu in w.top_bar.options_button.menu().actions()
     from PySide6.QtWidgets import QToolBar

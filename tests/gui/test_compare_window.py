@@ -149,7 +149,7 @@ def test_teach_taste_wording() -> None:
     import pathlib
 
     sources = "".join(p.read_text(encoding="utf-8") for p in pathlib.Path("app/ui").glob("*.py"))
-    assert "🎓 Dạy gu…" in sources and "So sánh ảnh…" not in sources
+    assert "Dạy gu…" in sources and "So sánh ảnh…" not in sources
 
 
 def test_compare_button_in_bottom_bar(qtbot, env: dict) -> None:  # noqa: F811
@@ -165,7 +165,7 @@ def test_compare_button_in_bottom_bar(qtbot, env: dict) -> None:  # noqa: F811
     w.bottom_bar.set_compact(True)  # narrow windows: the same command in "⋯"
     assert not button.isVisible() or not w.bottom_bar.isVisible()
     texts = [a.text() for a in w.bottom_bar.more_button.menu().actions()]
-    assert "⧉ So sánh" in texts
+    assert "So sánh" in texts
 
 
 def test_key_hints_in_compare(qtbot, env: dict) -> None:  # noqa: F811

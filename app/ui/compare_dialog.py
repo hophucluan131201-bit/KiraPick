@@ -1,6 +1,6 @@
-"""🎓 "Thích tấm nào hơn?": two similar photos of one subject; the answer teaches the taste model.
+"""'Thích tấm nào hơn?': two similar photos of one subject; the answer teaches the taste model.
 
-Never pops up by itself: the owner opens it from 🎓 AI đã học. ← / → choose, Space skips, Esc closes.
+Never pops up by itself: the owner opens it from AI đã học. ← / → choose, Space skips, Esc closes.
 """
 
 from __future__ import annotations

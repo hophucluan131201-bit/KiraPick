@@ -143,7 +143,7 @@ class MergeDialog(QDialog):
         marks = ",".join("?" * len(others))
         if others and self.conn.execute(f"SELECT 1 FROM picks WHERE subject_id IN ({marks}) LIMIT 1",
                                         others).fetchone():
-            lines.append("ⓘ Kết quả ⭐ AI gợi ý cũ sẽ được đánh dấu “cần chạy lại”.")
+            lines.append("ⓘ Kết quả AI gợi ý cũ sẽ được đánh dấu “cần chạy lại”.")
         lines.append("✓ Giữ/Loại, sao và yêu thích của các ảnh không thay đổi. Có thể hoàn tác (Ctrl+Z).")
         self.warnings.setText("\n".join(lines))
         self.ok.setEnabled(not self.conflicts or self.unmark.isChecked())

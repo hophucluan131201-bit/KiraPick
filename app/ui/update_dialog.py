@@ -1,4 +1,4 @@
-"""⚙ Tuỳ chọn → Cập nhật KiraPick: the only place KiraPick goes online, and only when asked.
+"""Tuỳ chọn → Cập nhật KiraPick: the only place KiraPick goes online, and only when asked.
 
 All network work runs in a QThread; the window never waits on it.
 """

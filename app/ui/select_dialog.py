@@ -1,4 +1,4 @@
-"""'⭐ Chọn ảnh': let the AI pick N good, varied photos; the user then reviews them."""
+"""'Chọn ảnh': let the AI pick N good, varied photos; the user then reviews them."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class SelectDialog(QDialog):
         intro.setWordWrap(True)
         layout.addWidget(intro)
         if scored == 0:
-            warn = QLabel("⚠ Chưa có ảnh nào được chấm điểm. Hãy bấm 📊 Phân tích ảnh trước.")
+            warn = QLabel("⚠ Chưa có ảnh nào được chấm điểm. Hãy bấm Phân tích ảnh trước.")
             warn.setWordWrap(True)
             layout.addWidget(warn)
         self.per_person = QRadioButton(f"Mỗi chủ thể một số ảnh — tất cả {people} chủ thể trong thư mục")

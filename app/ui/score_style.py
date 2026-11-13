@@ -38,9 +38,9 @@ class Chip:
 
 
 _CHIPS = {
-    "keep": Chip("keep", "✅ Giữ", COLORS["good"]),
-    "reject": Chip("reject", "❌ Loại", COLORS["poor"]),
-    "suggested": Chip("suggested", "⭐ Đề xuất", COLORS["suggestion"]),
+    "keep": Chip("keep", "✓ Giữ", COLORS["good"]),
+    "reject": Chip("reject", "✕ Loại", COLORS["poor"]),
+    "suggested": Chip("suggested", "★ Đề xuất", COLORS["suggestion"]),
     "review": Chip("review", "⚠ Xem lại", COLORS["fair"]),
 }
 
@@ -92,7 +92,7 @@ def chip_for(flag: str | None, suggested: bool, score: Score | None, ranked: Ran
     """One chip per photo; the user's decision always wins over AI hints, and the AI never rejects.
 
     ``suggested``: the photo is in the picks table. That table only ever holds the newest
-    "⭐ Chọn ảnh" run (app.quality.select.save_run deletes older runs), so callers pass
+    "Chọn ảnh" run (app.quality.select.save_run deletes older runs), so callers pass
     ``asset_id in picks`` and never an older suggestion."""
     if flag == "keep":
         return _CHIPS["keep"]

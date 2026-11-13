@@ -1,5 +1,5 @@
-"""Top bar: the workflow as five steps (✓ done, ◐ partly done, the next one highlighted), then search,
-thumbnail size and ⚙. Each step button runs the window's existing action, so shortcuts, enabling rules and
+"""Top bar: the workflow as five steps (✓ done, ◐ partly done, the next one filled in the accent colour), then
+search, thumbnail size, Chỉnh sửa and Tuỳ chọn. Each step button runs the window's existing action, so shortcuts, enabling rules and
 tooltips stay in one place (the QAction)."""
 
 from __future__ import annotations
@@ -9,11 +9,15 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QSlider, QToolButton, QWidget
 
 from app.storage.workflow import STEPS, StepState
-from app.ui import theme
-from app.ui.score_style import COLORS
+from app.ui import icons, theme
 
-STEP_LABELS = {"import": ("📂", "Nhập ảnh"), "people": ("🧠", "Nhận diện chủ thể"), "quality": ("📊", "Phân tích AI"),
-               "pick": ("⭐", "AI gợi ý"), "export": ("⤴", "Xuất ảnh")}
+# (Lucide icon, name); app.ui.icons
+STEP_LABELS = {"import": ("folder-input", "Nhập ảnh"), "people": ("scan-face", "Nhận diện chủ thể"),
+               "quality": ("gauge", "Phân tích AI"), "pick": ("sparkles", "AI gợi ý"), "export": ("folder-output", "Xuất ảnh")}
+NEXT_STYLE = (f"QToolButton#step {{ background: {theme.ACCENT}; color: #ffffff; border: 1px solid {theme.ACCENT}; "
+              f"border-radius: 6px; font-weight: bold; padding: 5px 12px; }} "
+              f"QToolButton#step:hover {{ background: #6aa1ff; }} "
+              f"QToolButton#step:focus {{ border: 2px solid #ffffff; }}")
 assert tuple(STEP_LABELS) == STEPS
 CELL_MIN, CELL_MAX, CELL_DEFAULT = 140, 340, 220  # grid card size (logical px)
 
@@ -35,13 +39,13 @@ class TopBar(QWidget):
         for key in STEPS:
             b = QToolButton()
             b.setObjectName("step")
-            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             b.clicked.connect(lambda _c=False, k=key: self.step_clicked.emit(k))
             row.addWidget(b)
             self.buttons[key] = b
         row.addStretch(1)
         search.setMaximumWidth(260)
-        search.setMinimumWidth(180)  # the hint "🔎 Tìm tên file (Ctrl+F)" fits (UX-1: it was cut at 125 px)
+        search.setMinimumWidth(180)  # the hint "Tìm tên file (Ctrl+F)" fits (UX-1: it was cut at 125 px)
         row.addWidget(search)
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(CELL_MIN, CELL_MAX)
@@ -75,6 +79,11 @@ class TopBar(QWidget):
         """Narrow or low windows: icons only (names in tooltips) and a lower bar."""
         self._compact = on
         self.setFixedHeight(36 if on else 48)
+        for b in (self.edit_button, self.options_button):  # Chỉnh sửa / Tuỳ chọn: the icon only, the name in the tooltip
+            if b is not None:
+                b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly if on
+                                     else Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                b.setAccessibleName(b.text())
         for key in STEPS:
             self._sync(key)
 
@@ -84,7 +93,12 @@ class TopBar(QWidget):
         mark = "✓ " if state.done else "◐ " if state.partial else ""
         extra = f" {state.partial}" if state.partial and not self._compact else ""
         b = self.buttons[key]
-        b.setText(f"{mark}{icon}" if self._compact else f"{mark}{icon} {name}{extra}")
+        is_next = key == self.next_step
+        b.setIcon(icons.icon(icon, "#ffffff" if is_next else None))
+        b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly if self._compact and not mark
+                             else Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        b.setText(mark.strip() if self._compact else f"{mark}{name}{extra}")
+        b.setAccessibleName(name)
         action = self._actions.get(key)
         tip = action.toolTip() if action is not None else name
         if key == "import":
@@ -93,8 +107,6 @@ class TopBar(QWidget):
             tip += f"\nĐang dở: {state.partial}"
         b.setToolTip(f"{name}: {tip}" if self._compact else tip)
         b.setEnabled(action.isEnabled() if action is not None else True)
-        is_next = key == self.next_step
-        # the next step stands out; with the keyboard focus its border thickens, so the focus stays visible (UX-1)
-        b.setStyleSheet(f"QToolButton#step {{ border: 1px solid {COLORS['accent']}; border-radius: 6px; "
-                        f"font-weight: bold; }} QToolButton#step:focus {{ border: 2px solid {theme.ACCENT}; }}"
-                        if is_next else "")
+        # the next step is filled in the accent colour with a white icon (UX-2); with the keyboard focus a white
+        # border shows on it (UX-1)
+        b.setStyleSheet(NEXT_STYLE if is_next else "")

@@ -43,6 +43,8 @@ a = Analysis(
         (str(ROOT / "configs" / "model-manifest.json"), "configs"),
         (str(ROOT / "configs" / "model-policy.json"), "configs"),  # the allow-list (LIC-1): read at every start
         (str(ROOT / "packaging" / "kirapick.png"), "assets"),
+        # Lucide line icons (ISC; Feather-derived ones MIT), licence text alongside: app/ui/icons.py (UX-2)
+        (str(ROOT / "app" / "assets" / "icons"), "app/assets/icons"),
     ],
     hiddenimports=["app.selftest"] + (["openvino", "onnxruntime.tools.add_openvino_win_libs"]
                                       if EDITION == "openvino" else []),

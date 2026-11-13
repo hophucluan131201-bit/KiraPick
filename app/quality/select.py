@@ -163,7 +163,7 @@ def why_not_picked(conn: sqlite3.Connection, asset_id: int) -> str | None:
     if run is None or conn.execute("SELECT 1 FROM picks WHERE asset_id = ?", (asset_id,)).fetchone():
         return None
     if picks_stale(conn):
-        return "Lần ⭐ AI gợi ý trước được làm trước khi gộp chủ thể: hãy chạy lại để có kết quả theo chủ thể mới."
+        return "Lần AI gợi ý trước được làm trước khi gộp chủ thể: hãy chạy lại để có kết quả theo chủ thể mới."
     params = json.loads(run[0])
     subjects = [r[0] for r in conn.execute(
         "SELECT DISTINCT subject_id FROM occurrences WHERE asset_id = ? AND subject_id IS NOT NULL", (asset_id,))]

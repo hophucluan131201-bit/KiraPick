@@ -3,7 +3,7 @@
     python scripts/collect_licenses.py --dest dist/installer-notes/licenses --edition directml|cuda|openvino
 
 Copies packaging/licenses/* (texts kept in the repository: Apache-2.0, GPL-3.0 + LGPL-3.0 for Qt, LGPL-2.1, CC BY 4.0
-for eDifFIQA, MIT and BSD-3 for YuNet, the DirectML terms) and, from the packages installed in the build
+for eDifFIQA, MIT and BSD-3 for YuNet, Lucide's ISC + MIT for the icons, the DirectML terms) and, from the packages installed in the build
 environment, the texts that must match the shipped version exactly: ONNX Runtime LICENSE + ThirdPartyNotices,
 opencv-python LICENSE + LICENSE-3RD-PARTY, rawpy + LibRaw, the Python licence, NVIDIA's licence of every CUDA / cuDNN
 wheel (CUDA edition), and a table of every Python package with its declared licence. Exit 1 if a required text is
@@ -29,6 +29,7 @@ REQUIRED_STATIC = {
     "LGPL-3.0.txt": "Qt 6 / PySide6 (with GPL-3.0, which it supplements)",
     "GPL-3.0.txt": "referenced by LGPL-3.0",
     "LGPL-2.1.txt": "LibRaw (in rawpy)",
+    "Lucide-LICENSE.txt": "Lucide icons 1.72.0 (ISC; the Feather-derived icons MIT, Cole Bemis)",
 }
 EDITION_STATIC = {"directml": ["DirectML-LICENSE.txt", "DirectML-ThirdPartyNotices.txt"], "cuda": [], "openvino": []}
 

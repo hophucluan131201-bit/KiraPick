@@ -1,5 +1,5 @@
 """UX-1 (tester feedback 2026-11-13: "too complex for someone opening it the first time"): the first screen says what
-KiraPick does in three steps; one word per meaning (P = Giữ, "chọn" = selecting cards, ⭐ = AI gợi ý); the reset is
+KiraPick does in three steps; one word per meaning (P = Giữ, "chọn" = selecting cards, AI gợi ý); the reset is
 not called "Làm lại" (= Redo), sits last in ⚙ and defaults to No; an empty people list says what to do next;
 functions whose models are off are not shown; a keyboard focus is visible; the search hint is not cut."""
 
@@ -23,10 +23,9 @@ def test_first_screen_explains_the_app_in_three_steps(qtbot, env: dict) -> None:
 def test_one_word_per_meaning(qtbot, env: dict) -> None:  # noqa: F811
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
-    assert w.bottom_bar.keep_button.text() == "✓ Giữ" and w.detail.keep_button.text() == "✓ Giữ"
-    assert w.bottom_bar.clear_button.text() == "Bỏ dấu" and w.detail.clear_button.text() == "Bỏ dấu"
+    assert w.bottom_bar.keep_button.text() == "Giữ" and w.bottom_bar.clear_button.text() == "Bỏ dấu"
     assert w.bottom_bar.kept.text().startswith("Đã giữ ") and w.bottom_bar.undecided.text().startswith("Chưa xét ")
-    assert w.act_select.text() == "⭐ AI gợi ý" and w.top_bar.buttons["pick"].text().endswith("AI gợi ý")
+    assert w.act_select.text() == "AI gợi ý" and w.top_bar.buttons["pick"].text().endswith("AI gợi ý")
     labels = [w.filters.item(i).text() for i in range(w.filters.count())]
     assert "Chưa xét" in labels and "Giữ ✓" in labels
 
@@ -52,7 +51,7 @@ def test_empty_people_list_says_what_to_do_next(qtbot, env: dict) -> None:  # no
     w = _window(qtbot, env)
     _import(qtbot, w, env["photos"])
     assert w.people.count() == 0 and w.people_hint.isVisible() and w.people_hint.wordWrap()
-    assert "🧠 Nhận diện chủ thể" in w.people_hint.text()
+    assert "bấm Nhận diện chủ thể" in w.people_hint.text()
 
 
 def test_functions_whose_models_are_off_are_hidden(qtbot, env: dict) -> None:  # noqa: F811

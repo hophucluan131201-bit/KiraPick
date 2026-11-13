@@ -61,7 +61,7 @@ from app.export.sources import MANIFEST_DIR, Candidate, ExternalIndex, SourceSpe
 from app.selection.client_list import list_collections
 from app.storage import exports
 from app.storage.project import Project
-from app.ui import theme
+from app.ui import icons, theme
 from app.ui.jobs import ExportPlanThread, ExportThread, PlanRequest
 from app.ui.shutdown import Gate
 
@@ -82,7 +82,7 @@ LAYOUT_LABELS = {Layout.SINGLE: "Tất cả vào một thư mục", Layout.SUBJE
 MIGRATION_NOTICE = ("Trước đây bạn tắt 'Kèm JPEG của cặp RAW+JPEG'. Bản mới mặc định chép RAW + JPEG — chọn 'Chỉ RAW' "
                     "nếu chỉ muốn file RAW (ảnh chỉ có JPEG khi đó sẽ được báo thiếu).")
 MATCH_LABELS = {"imported": "", "content": "giống hệt nội dung", "time": "khớp theo giờ chụp",
-                "manual": "✋ xác nhận tay"}
+                "manual": "xác nhận tay"}
 ISSUE_LABELS = {
     IssueStatus.MISSING: "Thiếu", IssueStatus.MISSING_FORMAT: "Thiếu định dạng", IssueStatus.NOT_MATCHED: "Không khớp",
     IssueStatus.CONTENT_DIFFERS: "Khác nội dung", IssueStatus.AMBIGUOUS: "Không chắc",
@@ -361,12 +361,12 @@ class ExportDialog(QDialog):
         self.names_list = QPlainTextEdit()
         self.names_list.setReadOnly(True)
         nbox.addWidget(self.names_list, 1)
-        self.copy_names_button = QPushButton("📋 Sao chép tên ảnh")
+        self.copy_names_button = QPushButton(icons.icon("clipboard-list"), "Sao chép tên ảnh")
         self.copy_names_button.clicked.connect(self.copy_names)
         nbox.addWidget(self.copy_names_button)
         self.names_status = QLabel()
         nbox.addWidget(self.names_status)
-        self.tabs.addTab(self.names_tab, "📋 Tên ảnh đã Giữ")
+        self.tabs.addTab(self.names_tab, icons.icon("clipboard-list"), "Tên ảnh đã Giữ")
         self._names: list[str] = []
         self._names_ids: list[int] = []
         self._names_dirty = True  # computed when the tab is shown (database only, but 10 000 photos take ~0.3 s)

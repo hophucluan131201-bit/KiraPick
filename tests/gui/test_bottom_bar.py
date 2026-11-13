@@ -58,7 +58,7 @@ def test_compact_keeps_keep_reject_export_visible(qtbot) -> None:  # noqa: ANN00
     for b in (*bar.star_buttons, bar.rotate_button, bar.exif_button):
         assert not b.isVisibleTo(bar)
     texts = [a.text() for a in bar.more_button.menu().actions()]
-    assert any("Xoay xem" in t for t in texts) and any("EXIF" in t for t in texts) and any("★" in t for t in texts)
+    assert any("Xoay xem" in t for t in texts) and any("EXIF" in t for t in texts) and any("sao" in t for t in texts) and any("Yêu thích" in t for t in texts)
     bar.set_compact(False)
     assert bar.rotate_button.isVisibleTo(bar) and not bar.more_button.isVisibleTo(bar)
 

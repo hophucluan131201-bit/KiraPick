@@ -8,13 +8,13 @@ The bar only shows and asks; the window does the work.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMenu, QProgressBar, QPushButton, QSizePolicy, QToolButton, QWidget
 
 from app.export.formats import ExportFormat
 from app.storage.stats import Counts
-from app.ui import theme
+from app.ui import icons, theme
 from app.ui.score_style import COLORS
 
 SIZE_TIP = ("Số ảnh: một cặp RAW+JPEG tính là 1 ảnh.\n"
@@ -35,6 +35,7 @@ class BottomBar(QWidget):
     reject = Signal()
     clear = Signal()
     rating = Signal(int)
+    favorite = Signal()
     compare = Signal()
     rotate = Signal()
     exif = Signal()
@@ -70,47 +71,62 @@ class BottomBar(QWidget):
         row.addWidget(self.progress_bar)
         row.addWidget(self.pause_button)
 
-        def button(text: str, tip: str, signal: Signal) -> QPushButton:
+        def button(text: str, tip: str, signal: Signal, icon: str | None = None) -> QPushButton:
             b = QPushButton(text)
+            if icon:
+                b.setIcon(icons.icon(icon))
             b.setToolTip(tip)
             b.clicked.connect(signal)
             row.addWidget(b)
             return b
 
-        self.keep_button = button("✓ Giữ", "Giữ ảnh (P hoặc K)", self.keep)
+        self.keep_button = button("Giữ", "Giữ ảnh (P hoặc K)", self.keep, "check")
         self.keep_button.setStyleSheet(f"color: {COLORS['good']};")
-        self.reject_button = button("✕ Loại", "Loại (X)", self.reject)
+        self.reject_button = button("Loại", "Loại (X)", self.reject, "x")
         self.reject_button.setStyleSheet(f"color: {theme.REJECT_ON_BUTTON};")
-        self.clear_button = button("Bỏ dấu", "Bỏ dấu Giữ / Loại (U)", self.clear)
+        self.clear_button = button("Bỏ dấu", "Bỏ dấu Giữ / Loại (U)", self.clear, "eraser")
         self.star_buttons: list[QPushButton] = []
         for n in range(1, 6):
-            b = QPushButton("★")
+            b = QPushButton()
+            b.setIcon(icons.icon("star"))
+            b.setAccessibleName(f"{n} sao")
             b.setFlat(True)
-            b.setFixedWidth(22)
+            b.setFixedWidth(26)
             b.setToolTip(f"{n} sao (phím {n})")
-            b.setStyleSheet(f"color: {theme.STAR};")
             b.clicked.connect(lambda _c=False, n=n: self.rating.emit(n))
             row.addWidget(b)
             self.star_buttons.append(b)
-        self.compare_button = button("⧉ So sánh", "So sánh 2–4 ảnh đã đánh dấu cạnh nhau (phím C) — "
-                                     "Ctrl+click để đánh dấu", self.compare)
-        self.rotate_button = button("⟳ Xoay xem", "Xoay ảnh 90° để xem (file gốc không đổi)", self.rotate)
-        self.exif_button = button("Xem EXIF", "Mở thông số EXIF của ảnh", self.exif)
+        self.favorite_button = QPushButton()
+        self.favorite_button.setIcon(icons.icon("heart"))
+        self.favorite_button.setAccessibleName("Yêu thích")
+        self.favorite_button.setFlat(True)
+        self.favorite_button.setFixedWidth(26)
+        self.favorite_button.setToolTip("Yêu thích / bỏ yêu thích (phím F)")
+        self.favorite_button.clicked.connect(self.favorite)
+        row.addWidget(self.favorite_button)
+        self.compare_button = button("So sánh", "So sánh 2–4 ảnh đã đánh dấu cạnh nhau (phím C) — "
+                                     "Ctrl+click để đánh dấu", self.compare, "columns-2")
+        self.rotate_button = button("Xoay xem", "Xoay ảnh 90° để xem (file gốc không đổi)", self.rotate, "rotate-cw")
+        self.exif_button = button("Xem EXIF", "Mở thông số EXIF của ảnh", self.exif, "aperture")
         self.more_button = QToolButton()
-        self.more_button.setText("⋯")
+        self.more_button.setIcon(icons.icon("ellipsis"))
+        self.more_button.setAccessibleName("Thêm thao tác")
         self.more_button.setToolTip("Thêm thao tác")
         self.more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         more = QMenu(self)
         for n in range(1, 6):
-            more.addAction(QAction("★" * n, self, triggered=lambda _c=False, n=n: self.rating.emit(n)))
-        more.addAction(QAction("Bỏ dấu", self, triggered=lambda _c=False: self.clear.emit()))  # hidden from the bar in compact mode
-        more.addAction(QAction("⧉ So sánh", self, triggered=lambda _c=False: self.compare.emit()))
-        more.addAction(QAction("⟳ Xoay xem", self, triggered=lambda _c=False: self.rotate.emit()))
-        more.addAction(QAction("Xem EXIF", self, triggered=lambda _c=False: self.exif.emit()))
+            more.addAction(QAction(icons.icon("star"), f"{n} sao", self, triggered=lambda _c=False, n=n: self.rating.emit(n)))
+        more.addAction(QAction(icons.icon("heart"), "Yêu thích", self, triggered=lambda _c=False: self.favorite.emit()))
+        more.addAction(QAction(icons.icon("eraser"), "Bỏ dấu", self, triggered=lambda _c=False: self.clear.emit()))  # hidden from the bar in compact mode
+        more.addAction(QAction(icons.icon("columns-2"), "So sánh", self, triggered=lambda _c=False: self.compare.emit()))
+        more.addAction(QAction(icons.icon("rotate-cw"), "Xoay xem", self, triggered=lambda _c=False: self.rotate.emit()))
+        more.addAction(QAction(icons.icon("aperture"), "Xem EXIF", self, triggered=lambda _c=False: self.exif.emit()))
         self.more_button.setMenu(more)
         row.addWidget(self.more_button)
         self.export_button = QToolButton()
-        self.export_button.setText("⤴ Xuất bản sao")
+        self.export_button.setText("Xuất ảnh đã giữ")
+        self.export_button.setIcon(icons.icon("folder-output", "#ffffff"))
+        self.export_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.export_button.setToolTip("Sao chép ảnh đã Giữ sang thư mục khác (Ctrl+E); ảnh gốc không đổi")
         self.export_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.export_button.setStyleSheet(f"QToolButton {{ background: {COLORS['accent']}; color: #ffffff; "
@@ -133,9 +149,9 @@ class BottomBar(QWidget):
         self._render()
 
     def set_compact(self, on: bool) -> None:
-        """Narrow windows: short counts; ★, Xoay xem and EXIF move into "⋯"; Chọn / Loại / Xuất always stay."""
+        """Narrow windows: short counts; stars, ♥, So sánh, Xoay xem, EXIF and Bỏ dấu move into "⋯"; Chọn / Loại / Xuất always stay."""
         self._compact = on
-        for b in (*self.star_buttons, self.compare_button, self.rotate_button, self.exif_button, self.clear_button):
+        for b in (*self.star_buttons, self.favorite_button, self.compare_button, self.rotate_button, self.exif_button, self.clear_button):
             b.setVisible(not on)
         self.more_button.setVisible(on)
         self.rejected.setVisible(not on)

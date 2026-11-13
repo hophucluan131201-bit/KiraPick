@@ -204,10 +204,10 @@ def test_detail_tabs_fit(qtbot, env: dict, size: tuple[int, int]) -> None:  # no
     d = w.detail
     assert d.tabs.tabBar().sizeHint().width() <= d.tabs.width(), [d.tabs.tabText(i) for i in range(4)]
     preview_bottom = d.preview.mapTo(d, d.preview.rect().bottomLeft()).y()
-    for below in (d.star_buttons[0], d.keep_button):
-        assert below.mapTo(d, below.rect().topLeft()).y() >= preview_bottom
+    assert d.title.mapTo(d, d.title.rect().bottomLeft()).y() <= d.preview.mapTo(d, d.preview.rect().topLeft()).y()
     if d.tabs.geometry().left() < d.top.geometry().right():  # tabs below the preview (not beside it)
         assert d.tabs.geometry().top() >= d.top.geometry().bottom()
+        assert d.tabs.geometry().top() >= preview_bottom
 
 
 def test_detail_tab_kept_on_refresh_and_mode_change(qtbot, env: dict) -> None:  # noqa: F811

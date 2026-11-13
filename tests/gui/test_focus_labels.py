@@ -42,7 +42,7 @@ def test_q_w_r_label_the_photo_and_feed_the_focus_model(qtbot, env: dict) -> Non
     w.select_row(1)  # not analysed: the label is kept, nothing to learn from
     _key(qtbot, w, Qt.Key.Key_W)
     assert decisions.get(conn, w.current_record().id).focus == "soft"
-    assert w.teacher.store.focus_examples() == [] and "chưa được 📊 Phân tích" in w.status.text()
+    assert w.teacher.store.focus_examples() == [] and "chưa được Phân tích" in w.status.text()
 
     w.retrain_focus(wait=True)
     assert "Chưa có ảnh nào được chấm nét" in " ".join(w.focus_text())

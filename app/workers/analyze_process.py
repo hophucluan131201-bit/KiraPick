@@ -51,7 +51,7 @@ def _child(folder: str, mode: str, learning_dir: str | None, prefer_gpu: bool,
             out.put(("done", asdict(summary)))
         except ModelUnavailableError as exc:
             logging.getLogger("app.ai").warning("analysis stopped: %s", exc.status.spec.id)
-            out.put(("failed", "Thiếu hoặc hỏng một thành phần AI của bước phân tích này (xem ⚙ Tuỳ chọn → ℹ Giới "
+            out.put(("failed", "Thiếu hoặc hỏng một thành phần AI của bước phân tích này (xem Tuỳ chọn → ℹ Giới "
                                "thiệu → Mô hình và giấy phép).\n\nCài lại ứng dụng, hoặc (bản mã nguồn) chạy một lần:\n"
                                ".\\.venv\\Scripts\\python .\\scripts\\fetch_models.py"))
     except Exception as exc:  # noqa: BLE001 - reported to the window
@@ -81,7 +81,7 @@ def run_in_child(folder: Path, mode: str, learning_dir: Path | None, prefer_gpu:
                     except queue_mod.Empty:
                         raise RuntimeError(
                             f"Tiến trình AI dừng đột ngột (mã {child.exitcode}). Có thể do driver card đồ hoạ: "
-                            "thử tắt ⚡ Dùng card đồ hoạ rồi bấm lại; phần đã xong được giữ.") from None
+                            "thử tắt Dùng card đồ hoạ rồi bấm lại; phần đã xong được giữ.") from None
                 else:
                     continue
             if msg[0] == "progress":

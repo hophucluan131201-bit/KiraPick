@@ -10,7 +10,7 @@ from app.identity import actions
 from app.identity.cluster import Suggestion, merge_suggestions
 from app.learning.teacher import Teacher
 from app.storage.project import Project
-from app.ui import theme
+from app.ui import icons, theme
 
 AVATAR = 180
 
@@ -59,8 +59,8 @@ class ReviewDialog(QDialog):
         layout.addWidget(self.similarity)
 
         buttons = QHBoxLayout()
-        self.same = QPushButton("✓ Cùng một chủ thể")
-        self.different = QPushButton("✗ Hai chủ thể khác nhau")
+        self.same = QPushButton(icons.icon("check"), "Cùng một chủ thể")
+        self.different = QPushButton(icons.icon("x"), "Hai chủ thể khác nhau")
         self.skip = QPushButton("Bỏ qua")
         close = QPushButton("Đóng")
         self.same.clicked.connect(self.answer_same)

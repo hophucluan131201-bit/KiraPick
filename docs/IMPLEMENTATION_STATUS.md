@@ -6,6 +6,22 @@ Windows laptop" unless stated.
 
 Last update: 2026-10-27 (release 2.0.0 = beta 0.3.0b4 merged into main) — dev container: Linux x86-64, Python 3.13.17, no GPU, no display. First Windows field test received (see raw-support-matrix.md).
 
+## First-use UI/UX (tester feedback 2026-11-13: "too complex for someone opening it the first time") — status: tested offscreen (Linux); Windows look not yet checked
+
+- **UX-1 (`744ce43`) — tested:** one word per meaning (P = Giữ, U = Bỏ dấu, unmarked = Chưa xét, AI gợi ý); the
+  folder reset renamed "Xoá các dấu của thư mục này…", last in Tuỳ chọn, default No; a welcome screen with the three
+  steps; an empty people list says what to do; functions whose models are off are hidden; a visible keyboard focus;
+  the search hint fits. Tests: `tests/gui/test_first_use.py`.
+- **UX-2 — tested (owner approved the icon sheet and mockup B, 2026-11-13):** Lucide line icons (1.72.0, ISC; the
+  Feather-derived ones MIT) replace the emoji on every button, menu item and step, recoloured from SVG by
+  `app/ui/icons.py`; only the icons used are in `app/assets/icons/` (with `LICENSE.txt`; copied into the package by
+  `packaging/kirapick.spec`; licence text `packaging/licenses/Lucide-LICENSE.txt`, listed in `THIRD_PARTY_NOTICES.md`).
+  The next step is filled in the accent colour with a white icon. One set of marking buttons: the bottom bar (Giữ,
+  Loại, Bỏ dấu, 1–5 sao and a new ♥ button); the detail panel shows the photo's marks read-only next to its name.
+  Prose names buttons without emoji. On/off menu items (Phím tắt, Dùng card đồ hoạ…) keep their tick box, no icon.
+  Compact top bar: Chỉnh sửa / Tuỳ chọn icon-only. Tests: `tests/gui/test_icons.py` (+ updated GUI tests);
+  1265 passed offscreen. Not done: a Windows screenshot check; the status line is still cut at 1366 px (known).
+
 ## Media sự kiện — REMOVED (owner decision 2026-11-12)
 
 The owner judged the event mode not worth it after the REG-1…REG-3 rounds and chose to delete it. Commit `942b02e`:

@@ -65,7 +65,7 @@ def test_suggestion_and_review_are_named_in_the_panel(qtbot) -> None:  # noqa: A
     panel = DetailPanel()
     qtbot.addWidget(panel)
     panel.show_record(_rec(pick_rank=1), taste=NO_TASTE, people=None, neighbours=[])
-    assert panel.score_card.suggestion.text() == "⭐ Đề xuất giữ"
+    assert panel.score_card.suggestion.text() == "★ Đề xuất giữ"
     blurred = _rec(value=20.0, values={"eye_sharp": 0.05, "blink": 0.05})
     panel.show_record(blurred, taste=NO_TASTE, people=None, neighbours=[])
     assert panel.score_card.suggestion.text() == "⚠ Xem lại"
@@ -76,14 +76,17 @@ def test_buttons_change_the_current_photo(qtbot, env: dict) -> None:  # noqa: F8
     _import(qtbot, w, env["photos"])
     w.select_row(0)
     rec = w.current_record()
-    w.detail.keep_button.click()
-    assert decisions.get(w.project.conn, rec.id).flag == "keep"
-    w.detail.reject_button.click()
-    assert decisions.get(w.project.conn, rec.id).flag == "reject"
-    w.detail.clear_button.click()
+    bar = w.bottom_bar  # the window's one set of marking buttons (UX-2); the panel shows the marks only
+    bar.keep_button.click()
+    assert decisions.get(w.project.conn, rec.id).flag == "keep" and "Giữ" in w.detail.marks.text()
+    bar.reject_button.click()
+    assert decisions.get(w.project.conn, rec.id).flag == "reject" and "Loại" in w.detail.marks.text()
+    bar.clear_button.click()
     assert decisions.get(w.project.conn, rec.id).flag is None
-    w.detail.star_buttons[3].click()
-    assert decisions.get(w.project.conn, rec.id).rating == 4
+    bar.star_buttons[3].click()
+    assert decisions.get(w.project.conn, rec.id).rating == 4 and "★★★★<" in w.detail.marks.text()
+    bar.favorite_button.click()
+    assert decisions.get(w.project.conn, rec.id).favorite and "♥" in w.detail.marks.text()
 
 
 def test_exif_hidden_until_opened(qtbot, env: dict) -> None:  # noqa: F811
@@ -143,9 +146,9 @@ def test_people_tab_opens_the_same_actions_as_the_grid_menu(qtbot, env: dict) ->
 
 
 def _choose_new_subject(monkeypatch, w) -> None:  # noqa: ANN001
-    """Make the people menu pick "➕ Tạo chủ thể mới…" instead of waiting for a click."""
+    """Make the people menu pick "Tạo chủ thể mới…" instead of waiting for a click."""
     monkeypatch.setattr(w, "_run_menu", lambda menu, _pos: next(
-        a for a in menu.actions() if a.text().startswith("➕")))
+        a for a in menu.actions() if a.text().startswith("Tạo chủ thể mới")))
 
 
 def test_people_button_acts_on_the_current_photo_only(qtbot, env: dict, monkeypatch) -> None:  # noqa: F811
@@ -175,9 +178,9 @@ def test_exif_stays_open_while_the_photo_is_the_same(qtbot, env: dict) -> None: 
     _import(qtbot, w, env["photos"])
     w.select_row(0)
     w.detail.open_exif()
-    w.detail.keep_button.click()
-    w.detail.star_buttons[2].click()
-    w.detail.favorite_button.click()
+    w.bottom_bar.keep_button.click()
+    w.bottom_bar.star_buttons[2].click()
+    w.bottom_bar.favorite_button.click()
     assert not w.detail.exif_section.collapsed
     assert w.detail.tabs.currentIndex() == TABS.index("Thông tin ảnh")  # the tab is kept too
     w.select_row(1)
