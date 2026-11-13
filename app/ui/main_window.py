@@ -1853,7 +1853,8 @@ class MainWindow(QMainWindow):
     def _on_current_changed(self, current: QModelIndex, _prev: QModelIndex) -> None:
         rec = self.model.record(current)
         self._show_inspector(rec)
-        if rec is not None and self.center.currentIndex() == 2:
+        # The same photo again (the grid reloads every 1.5 s while photos are imported): keep zoom and position
+        if rec is not None and self.center.currentIndex() == 2 and not self.viewer.shows(rec.path, rec.rotation):
             self.viewer.show_photo(rec.path, self.model.pixmap(rec), _long_side(rec), rec.rotation)
 
     def _on_source_changed(self, row: int) -> None:

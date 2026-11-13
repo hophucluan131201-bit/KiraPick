@@ -209,6 +209,10 @@ class ImageViewer(QGraphicsView):
         self._apply_zoom(focus)
         self._emit_zoom()
 
+    def shows(self, path: Path | None, rotation: int) -> bool:
+        """This photo, turned this way, is the one shown (or being loaded) now."""
+        return path is not None and self._path == path and self._rotation == rotation % 4
+
     def zoom_percent(self) -> int | None:
         return None if self.zoom is None else round(self.zoom * 100)
 
