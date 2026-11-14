@@ -118,8 +118,10 @@ def _demosaic_checked(
     return info, image
 
 
-def _load_raw(path: Path, max_long_side: int | None, min_long_side: int, with_metadata: bool) -> LoadedImage:
-    info, embedded = raw_decode.read_raw(path, draft_size=_draft_box(max_long_side))
+def _load_raw(path: Path, max_long_side: int | None, min_long_side: int, with_metadata: bool,
+              from_start: bool = False) -> LoadedImage:
+    info, embedded = raw_decode.read_raw(path, draft_size=_draft_box(max_long_side),
+                                         from_start_min=min_long_side if from_start else None)
     metadata = None
     if with_metadata:
         metadata = read_metadata(path, embedded_jpeg=embedded.jpeg_bytes if embedded else None)
@@ -150,6 +152,7 @@ def load_image(
     max_long_side: int | None = None,
     min_long_side: int = 0,
     with_metadata: bool = False,
+    from_start: bool = False,
 ) -> LoadedImage:
     """Load a display-oriented RGB image, preferring the fastest adequate source.
 
@@ -158,14 +161,14 @@ def load_image(
     that is still large enough). The result is downscaled to ``max_long_side``.
 
     Typical calls: grid thumbnail ``(max=320, min=320)``; analysis preview
-    ``(max=1600, min=1600)``.
+    ``(max=1600, min=1600)``. ``from_start`` (import thumbnails): see ``raw_decode.read_raw(from_start_min=...)``.
     """
     info = format_for(path)
     if info is None:
         raise UnsupportedFormatError(path, f"extension {path.suffix or '(none)'} not supported")
     if info.kind is MediaKind.RASTER:
         return _load_raster(path, max_long_side, with_metadata)
-    return _load_raw(path, max_long_side, min_long_side, with_metadata)
+    return _load_raw(path, max_long_side, min_long_side, with_metadata, from_start)
 
 
 def load_full_resolution(path: Path, *, allow_embedded: bool = True) -> LoadedImage:

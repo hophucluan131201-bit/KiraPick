@@ -69,6 +69,23 @@ Found during this work: a stripped DNG decoded *successfully* when it followed r
 same process — LibRaw left a stale/uninitialised buffer. Regression test:
 `test_stripped_file_rejected_even_after_decoding_real_files`.
 
+## Import reads only what the grid needs (2026-11-14)
+
+Owner's report: 706 files, RAW+JPEG on an external USB drive, ~1 min 55 s. Measured per pair (NEF 26 MB + JPEG
+14 MB): the JPEG half of a pair, never shown (the grid shows the RAW), was read and decoded in full (14 MB); on Windows
+a folder name with accents made LibRaw take the whole NEF (26 MB) instead of its header and preview (~2-4 MB).
+
+- The JPEG beside a same-name RAW: EXIF and header size only; a JPEG left on its own after pairing gets its
+  thumbnail afterwards (`app/workers/import_job.py`).
+- Accented path on Windows, import thumbnail only: the first 4 / 8 / 16 MB are read; LibRaw gets them followed by
+  zeros, then by 0xFF bytes, up to the real size; the result is used only when both give the same geometry and preview
+  bytes and the preview is at least 400 px (`raw_decode.read_raw(from_start_min=...)`). Checked on every RAW sample of
+  `tests/fixtures/raw_samples.json` (`tests/integration/test_raw_from_start.py`): same sizes and orientation as
+  opening the path, same preview except Pentax K-1 (large preview at the end of the file: a smaller embedded preview
+  is used for the grid thumbnail). The large view, 100 % zoom and the analysis read as before.
+- Linux container, 26 pairs, files in the page cache, accented path simulated: 1087 MB read / 1.45 s before,
+  126 MB / 0.66 s after. Not yet measured on the owner's external drive.
+
 ## Known limits / to verify on Windows
 
 - **Unicode paths on Windows**: LibRaw takes a narrow `char*` path; for non-ASCII paths we pass a

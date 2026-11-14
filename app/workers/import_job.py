@@ -7,8 +7,11 @@ Phases:
 2. **ingest** (thread pool): decode the preview, write the thumbnail into the
    project cache, read metadata. Results are committed one by one, so killing
    the app loses at most the in-flight files; the next run resumes from
-   ``stage_status``.
+   ``stage_status``. A JPEG with a same-name RAW next to it is shown through
+   its RAW, so only its metadata and header are read (no decode, no thumbnail).
 3. **pair**: rebuild RAW+JPEG pairs for the source from capture times.
+4. **thumbnails** of the JPEGs read without one that are shown on their own
+   after all (capture times too far apart, RAW unreadable or gone).
 
 Source photos are only ever opened for reading.
 """
@@ -29,8 +32,10 @@ from app.core.errors import ImageReadError
 from app.ingest.fingerprint import quick_fingerprint
 from app.ingest.formats import MediaKind, format_for
 from app.ingest.metadata import read_metadata
-from app.ingest.preview import load_image
+from app.ingest.preview import header_size, load_image
+from app.ingest.raw_decode import oriented_size
 from app.ingest.scanner import PairStatus, ScanEntry, classify_pair, find_pair_candidates, scan_folder
+from app.storage.stats import SHOWN_PHOTO_SQL
 from app.storage.project import Project, utc_now
 
 log = logging.getLogger(__name__)
@@ -125,10 +130,16 @@ class ImportJob:
             self._register(source_id, report.entries, summary, progress, should_cancel)
             if summary.cancelled:
                 return self._finish(summary, cancelled=True)
-            self._ingest(source_id, summary, progress, should_cancel)
+            # the JPEG half of a likely RAW+JPEG pair: its RAW gives the thumbnail (owner, 2026-11-13: importing
+            # from an external drive read every 14 MB JPEG in full for a thumbnail never shown)
+            beside_raw = {c.jpeg.relative_path for c in find_pair_candidates(report.entries)}
+            self._ingest(source_id, summary, progress, should_cancel, beside_raw)
             if summary.cancelled:
                 return self._finish(summary, cancelled=True)
             self._pair(source_id, report.entries, summary, progress)
+            self._thumbnails_of_lone_jpegs(source_id, summary, progress, should_cancel)
+            if summary.cancelled:
+                return self._finish(summary, cancelled=True)
             conn.execute("UPDATE sources SET last_scan_at = ? WHERE id = ?", (utc_now(), source_id))
             return self._finish(summary, cancelled=False)
         except Exception as exc:
@@ -252,7 +263,7 @@ class ImportJob:
         )
 
     # ------------------------------------------------------------- ingest
-    def _pending(self, source_id: int) -> list[tuple[int, Path]]:
+    def _pending(self, source_id: int) -> list[tuple[int, str]]:
         rows = self.project.conn.execute(
             """SELECT a.id, a.relative_path FROM stage_status st JOIN assets a ON a.id = st.asset_id
                WHERE a.source_id = ? AND st.stage = ? AND a.status NOT IN ('missing', 'duplicate')
@@ -261,10 +272,29 @@ class ImportJob:
                ORDER BY a.relative_path""",
             (source_id, STAGE, STAGE_VERSION, MAX_ATTEMPTS),
         ).fetchall()
-        return [(int(r["id"]), self.root / Path(r["relative_path"])) for r in rows]
+        return [(int(r["id"]), r["relative_path"]) for r in rows]
 
-    def _ingest(self, source_id: int, summary: ImportSummary, progress: ProgressFn, should_cancel: CancelFn) -> None:
-        todo = self._pending(source_id)
+    def _ingest(self, source_id: int, summary: ImportSummary, progress: ProgressFn, should_cancel: CancelFn,
+                beside_raw: frozenset[str] | set[str] = frozenset()) -> None:
+        todo = [(asset_id, self.root / Path(rel), rel in beside_raw) for asset_id, rel in self._pending(source_id)]
+        todo.sort(key=lambda t: t[2])  # photos shown in the grid first; the JPEGs beside a RAW are quick anyway
+        self._run(todo, summary, progress, should_cancel)
+
+    def _thumbnails_of_lone_jpegs(self, source_id: int, summary: ImportSummary, progress: ProgressFn,
+                                  should_cancel: CancelFn) -> None:
+        """A JPEG read without a thumbnail that is shown on its own after pairing gets its thumbnail now. Also catches
+        up an import stopped between the ingest and the pairing."""
+        rows = self.project.conn.execute(
+            f"""SELECT a.id, a.relative_path FROM assets a LEFT JOIN previews p ON p.asset_id = a.id AND p.kind = 'thumb'
+               WHERE a.source_id = ? AND a.status = 'ok' AND a.media_kind = 'raster' AND p.asset_id IS NULL
+                 AND {SHOWN_PHOTO_SQL} ORDER BY a.relative_path""",
+            (source_id,),
+        ).fetchall()
+        todo = [(int(r["id"]), self.root / Path(r["relative_path"]), False) for r in rows]
+        self._run(todo, summary, progress, should_cancel, again=True)
+
+    def _run(self, todo: list[tuple[int, Path, bool]], summary: ImportSummary, progress: ProgressFn,
+             should_cancel: CancelFn, again: bool = False) -> None:
         total = len(todo)
         if not total:
             return
@@ -282,19 +312,32 @@ class ImportJob:
                     item = next(queue, None)
                     if item is None:
                         break
-                    in_flight.add(pool.submit(self._ingest_one, *item))
+                    asset_id, path, metadata_only = item
+                    work = self._metadata_only if metadata_only else self._ingest_one
+                    in_flight.add(pool.submit(work, asset_id, path))
                 if not in_flight:
                     break
                 finished, in_flight = wait(in_flight, return_when=FIRST_COMPLETED)
                 for fut in finished:
-                    self._store(fut.result(), summary)
+                    self._store(fut.result(), summary, again=again)
                     done += 1
                 progress(ImportProgress("ingest", done, total))
+
+    def _metadata_only(self, asset_id: int, path: Path) -> _IngestResult:
+        """Runs in a worker thread: the JPEG beside a RAW. EXIF (capture time to confirm the pair, camera, lens) and
+        the size from the header: a few KB of a ~14 MB file. Anything unusual takes the full path."""
+        size = header_size(path)
+        if size is None:
+            return self._ingest_one(asset_id, path)
+        meta = read_metadata(path)
+        oriented = oriented_size(*size, meta.orientation or 1)
+        return _IngestResult(asset_id, None, None, None, oriented, meta.to_json_dict(), None)
 
     def _ingest_one(self, asset_id: int, path: Path) -> _IngestResult:
         """Runs in a worker thread: no database access here."""
         try:
-            loaded = load_image(path, max_long_side=THUMB_LONG_SIDE, min_long_side=THUMB_LONG_SIDE, with_metadata=True)
+            loaded = load_image(path, max_long_side=THUMB_LONG_SIDE, min_long_side=THUMB_LONG_SIDE, with_metadata=True,
+                                from_start=True)
         except ImageReadError as exc:
             # Metadata is still useful for a file whose pixels cannot be decoded.
             meta = read_metadata(path).to_json_dict() if format_for(path) else None
@@ -311,7 +354,8 @@ class ImportJob:
         meta = loaded.metadata.to_json_dict() if loaded.metadata else None
         return _IngestResult(asset_id, name, loaded.image.size, loaded.source.value, loaded.full_size, meta, None)
 
-    def _store(self, r: _IngestResult, summary: ImportSummary) -> None:
+    def _store(self, r: _IngestResult, summary: ImportSummary, again: bool = False) -> None:
+        """``again``: a JPEG already counted as read gets its thumbnail; only a failure changes the counts."""
         now = utc_now()
         meta = r.metadata or {}
         with self.project.transaction() as tx:
@@ -340,7 +384,11 @@ class ImportJob:
                    WHERE asset_id = ? AND stage = ?""",
                 ("failed" if r.error else "done", STAGE_VERSION, r.error, now, r.asset_id, STAGE),
             )
-        if r.error:
+        if again:
+            if r.error:
+                summary.failed += 1
+                summary.ingested -= 1
+        elif r.error:
             summary.failed += 1
         else:
             summary.ingested += 1

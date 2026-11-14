@@ -22,6 +22,17 @@ Last update: 2026-10-27 (release 2.0.0 = beta 0.3.0b4 merged into main) — dev 
   Compact top bar: Chỉnh sửa / Tuỳ chọn icon-only. Tests: `tests/gui/test_icons.py` (+ updated GUI tests);
   1265 passed offscreen. Not done: a Windows screenshot check; the status line is still cut at 1366 px (known).
 
+## Import speed on external drives (owner's report 2026-11-13) — status: tested offscreen (Linux); owner's drive not yet measured
+
+- Large view kept its zoom and position lost every 1.5 s while photos were still coming in: fixed (`e20c8d1`,
+  `tests/gui/test_loupe_during_import.py`).
+- Import reads only what the grid needs: the JPEG half of a RAW+JPEG pair is not decoded; on Windows an accented
+  folder path no longer makes the whole RAW be read for its thumbnail. Details and measurements:
+  `docs/raw-support-matrix.md` ("Import reads only what the grid needs"). Tests: `tests/integration/test_import_job.py`,
+  `tests/integration/test_raw_from_start.py`.
+- Noticed, not changed: the AI analysis also processes the hidden JPEG half of each pair (twice the work on RAW+JPEG
+  shoots); `refresh_outfits` skips photos without a thumbnail (now those JPEG halves).
+
 ## Media sự kiện — REMOVED (owner decision 2026-11-12)
 
 The owner judged the event mode not worth it after the REG-1…REG-3 rounds and chose to delete it. Commit `942b02e`:

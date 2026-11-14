@@ -227,3 +227,70 @@ def test_killed_process_resumes_without_losing_work(tmp_path: Path) -> None:
         assert s.new == 0 and s.ingested == 30 - done_before, "finished work was redone or lost"
         assert set(_status(p).values()) == {"ok"}
         assert time.perf_counter() - start < 30
+
+
+def _thumbs(p: Project) -> set[str]:
+    return {r[0] for r in p.conn.execute(
+        "SELECT a.relative_path FROM assets a JOIN previews p ON p.asset_id = a.id AND p.kind = 'thumb'")}
+
+
+def test_jpeg_beside_its_raw_is_not_decoded(project: Project, tmp_path: Path, public_nef: Path,
+                                            monkeypatch) -> None:  # noqa: ANN001
+    """Owner, 2026-11-13 (706 photos RAW+JPEG on an external drive, ~2 min): the JPEG half of a pair is shown through
+    its RAW, so it was decoded for nothing. Now: EXIF and header size only; a JPEG left on its own after pairing
+    (another shot with a reused number, or a RAW that is a duplicate) gets its thumbnail afterwards."""
+    from app.workers import import_job
+
+    root = tmp_path / "pairs"
+    root.mkdir()
+    shutil.copy2(public_nef, root / "ISS.NEF")
+    _photo(root / "ISS.JPG", 1, size=(1200, 800), orientation=6, taken="2012:03:04 17:20:59")
+    shutil.copy2(public_nef, root / "OTHER.NEF")  # byte-identical: a duplicate, so OTHER.jpg ends up alone
+    _photo(root / "OTHER.jpg", 2, taken="2019:01:01 10:00:00")
+    _photo(root / "SOLO.jpg", 3)
+    decoded = []
+    real = import_job.load_image
+    monkeypatch.setattr(import_job, "load_image", lambda path, **k: decoded.append(path.name) or real(path, **k))
+    s = ImportJob(project, root).run()
+    assert "ISS.JPG" not in decoded and decoded.count("OTHER.jpg") == 1
+    assert (s.pairs, s.ingested, s.failed) == (1, 4, 0)
+    assert _thumbs(project) == {"ISS.NEF", "OTHER.jpg", "SOLO.jpg"}
+    row = project.conn.execute(
+        "SELECT status, width, height, capture_time FROM assets WHERE relative_path = 'ISS.JPG'").fetchone()
+    assert tuple(row) == ("ok", 800, 1200, "2012-03-04T17:20:59")  # orientation 6: portrait, as a decode gives
+    shown = {r[0] for r in project.conn.execute(
+        f"SELECT a.relative_path FROM assets a WHERE {import_job.SHOWN_PHOTO_SQL}")}
+    assert shown == {"ISS.NEF", "OTHER.jpg", "SOLO.jpg"}  # every photo shown has its thumbnail
+    decoded.clear()
+    assert ImportJob(project, root).run().unchanged == 5 and decoded == []  # nothing again on the next import
+
+
+def test_jpeg_left_alone_when_its_raw_goes_gets_a_thumbnail(project: Project, tmp_path: Path,
+                                                            public_nef: Path) -> None:
+    root = tmp_path / "pairs"
+    root.mkdir()
+    shutil.copy2(public_nef, root / "ISS.NEF")
+    _photo(root / "ISS.JPG", 1, taken="2012:03:04 17:20:59")
+    ImportJob(project, root).run()
+    assert "ISS.JPG" not in _thumbs(project)
+    (root / "ISS.NEF").unlink()  # the photographer removed the RAW from the card copy
+    s = ImportJob(project, root).run()
+    assert (s.missing, s.pairs) == (1, 0) and "ISS.JPG" in _thumbs(project)
+
+
+def test_import_stopped_before_pairing_catches_up(project: Project, tmp_path: Path, public_nef: Path,
+                                                  monkeypatch) -> None:  # noqa: ANN001
+    root = tmp_path / "pairs"
+    root.mkdir()
+    shutil.copy2(public_nef, root / "ISS.NEF")
+    _photo(root / "ISS.JPG", 1, taken="2019:01:01 10:00:00")  # will not pair: another shot
+    calls = {"n": 0}
+
+    def cancel_after_ingest() -> bool:
+        calls["n"] += 1
+        return project.conn.execute("SELECT COUNT(*) FROM stage_status WHERE state = 'done'").fetchone()[0] == 2
+
+    first = ImportJob(project, root).run(should_cancel=cancel_after_ingest)
+    assert first.cancelled and "ISS.JPG" not in _thumbs(project)
+    ImportJob(project, root).run()
+    assert "ISS.JPG" in _thumbs(project)
